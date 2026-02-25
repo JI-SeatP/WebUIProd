@@ -28,3 +28,7 @@ src/old/
 
 # Claude Code local settings
 .claude/
+
+# Mock data CSV files (may contain production data)
+src/mocks/data/*.csv
+src/mocks/data/*.xlsx
