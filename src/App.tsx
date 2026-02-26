@@ -6,6 +6,7 @@ import { AppLayout } from "@/components/shared/AppLayout";
 import { LoginPage } from "@/features/login/LoginPage";
 import { WorkOrderListPage } from "@/features/work-orders/WorkOrderListPage";
 import { OperationDetailsPage } from "@/features/operation/OperationDetailsPage";
+import { QuestionnairePage } from "@/features/questionnaire/QuestionnairePage";
 
 function App() {
   return (
@@ -22,7 +23,7 @@ function App() {
               />
               <Route
                 path="/orders/:transac/questionnaire/:type"
-                element={<PlaceholderPage title="Questionnaire" />}
+                element={<QuestionnairePage />}
               />
               <Route path="/time-tracking" element={<PlaceholderPage title="Time Tracking" />} />
               <Route path="/inventory" element={<PlaceholderPage title="Inventory" />} />
