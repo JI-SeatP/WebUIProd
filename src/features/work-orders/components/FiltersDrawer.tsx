@@ -38,7 +38,7 @@ const DATE_PRESETS = [
 ];
 
 const OPERATION_TYPES = [
-  { value: "", label: "All" },
+  { value: "__all__", label: "All" },
   { value: "PRESS", label: "Press" },
   { value: "CNC", label: "CNC" },
   { value: "TableSaw", label: "Table Saw / VCUT" },
@@ -98,7 +98,7 @@ export function FiltersDrawer({ filters, onFiltersChange }: FiltersDrawerProps) 
   };
 
   const handleOperationTypeChange = (value: string) => {
-    onFiltersChange({ ...filters, operationType: value || undefined });
+    onFiltersChange({ ...filters, operationType: value === "__all__" ? undefined : value });
   };
 
   const handleDatePresetChange = (value: string) => {

@@ -55,6 +55,10 @@ Always read the relevant skill from `ai/skills/` BEFORE doing work:
 5. **Git commits** — use `feat(S001-02-F001): description` format. One commit per feature. One branch per screen.
 6. **Testing** — every migrated feature must pass Vitest tests before it can be approved.
 
+## Browser Testing
+- **Do NOT** use Playwright MCP or BrowserTools MCP unless the user explicitly asks you to open the browser.
+- The user will test UI changes themselves. Only use browser tools when the user requests it.
+
 ## ColdFusion Notes
 - The CF server is shared with the existing WebUI project
 - .cfm endpoint files go in `queries/` and are manually deployed

@@ -7,6 +7,9 @@ import { LoginPage } from "@/features/login/LoginPage";
 import { WorkOrderListPage } from "@/features/work-orders/WorkOrderListPage";
 import { OperationDetailsPage } from "@/features/operation/OperationDetailsPage";
 import { QuestionnairePage } from "@/features/questionnaire/QuestionnairePage";
+import { TimeTrackingPage } from "@/features/time-tracking/TimeTrackingPage";
+import { InventoryPage } from "@/features/inventory/InventoryPage";
+import { CorrectionsPage } from "@/features/corrections/CorrectionsPage";
 
 function App() {
   return (
@@ -25,9 +28,9 @@ function App() {
                 path="/orders/:transac/questionnaire/:type"
                 element={<QuestionnairePage />}
               />
-              <Route path="/time-tracking" element={<PlaceholderPage title="Time Tracking" />} />
-              <Route path="/inventory" element={<PlaceholderPage title="Inventory" />} />
-              <Route path="/corrections/:tjseq" element={<PlaceholderPage title="Corrections" />} />
+              <Route path="/time-tracking" element={<TimeTrackingPage />} />
+              <Route path="/inventory" element={<InventoryPage />} />
+              <Route path="/corrections/:tjseq" element={<CorrectionsPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
@@ -35,14 +38,6 @@ function App() {
         <Toaster />
       </TooltipProvider>
     </SessionProvider>
-  );
-}
-
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="flex items-center justify-center h-full">
-      <p className="text-2xl text-muted-foreground">{title} — Coming Soon</p>
-    </div>
   );
 }
 

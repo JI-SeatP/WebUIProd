@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { apiGet } from "@/api/client";
+import { statusCodeToEnum } from "@/components/shared/StatusBadge";
 import type { WorkOrder } from "@/types/workOrder";
 
 export type SortField =
@@ -19,8 +20,9 @@ export interface WorkOrderFilters {
   departement?: number;
   machines?: number[];
   search?: string;
-  statuses?: number[];
+  statuses?: string[];
   operationType?: string;
+  operationTypes?: string[];
   datePreset?: string;
   dateStart?: string;
   dateEnd?: string;
@@ -40,7 +42,6 @@ export function useWorkOrders(filters: WorkOrderFilters) {
       const params = new URLSearchParams();
       if (filters.departement) params.set("departement", String(filters.departement));
       if (filters.search) params.set("search", filters.search);
-      if (filters.statuses?.length) params.set("status", filters.statuses.join(","));
 
       const query = params.toString();
       const endpoint = query ? `getWorkOrders.cfm?${query}` : "getWorkOrders.cfm";
@@ -56,7 +57,7 @@ export function useWorkOrders(filters: WorkOrderFilters) {
     } finally {
       setLoading(false);
     }
-  }, [filters.departement, filters.search, filters.statuses]);
+  }, [filters.departement, filters.search]);
 
   useEffect(() => {
     fetchOrders();
@@ -77,13 +78,25 @@ export function useWorkOrders(filters: WorkOrderFilters) {
   const filteredAndSorted = useMemo(() => {
     let result = [...orders];
 
+    // Client-side status filter (uses statusCodeToEnum to handle both text and numeric codes)
+    if (filters.statuses?.length) {
+      result = result.filter((wo) =>
+        filters.statuses!.includes(statusCodeToEnum(wo.STATUT_CODE))
+      );
+    }
+
     // Client-side machine filter
     if (filters.machines?.length) {
       result = result.filter((wo) => filters.machines!.includes(wo.MACHINE));
     }
 
-    // Client-side operation type filter
-    if (filters.operationType) {
+    // Client-side operation type filter (single or multi)
+    if (filters.operationTypes?.length) {
+      const opTypes = filters.operationTypes.map((t) => t.toUpperCase());
+      result = result.filter((wo) =>
+        opTypes.some((ot) => wo.FMCODE?.toUpperCase().includes(ot))
+      );
+    } else if (filters.operationType) {
       const opType = filters.operationType.toUpperCase();
       result = result.filter((wo) => wo.FMCODE?.toUpperCase().includes(opType));
     }
@@ -111,7 +124,7 @@ export function useWorkOrders(filters: WorkOrderFilters) {
     });
 
     return result;
-  }, [orders, filters.machines, filters.operationType, sortField, sortDirection]);
+  }, [orders, filters.statuses, filters.machines, filters.operationType, filters.operationTypes, sortField, sortDirection]);
 
   return {
     orders: filteredAndSorted,
