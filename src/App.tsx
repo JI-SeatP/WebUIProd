@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { AppLayout } from "@/components/shared/AppLayout";
 import { LoginPage } from "@/features/login/LoginPage";
+import { WorkOrderListPage } from "@/features/work-orders/WorkOrderListPage";
 
 function App() {
   return (
@@ -13,7 +14,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route element={<AppLayout />}>
-              <Route path="/orders" element={<PlaceholderPage title="Work Orders" />} />
+              <Route path="/orders" element={<WorkOrderListPage />} />
               <Route
                 path="/orders/:transac/operation/:copmachine"
                 element={<PlaceholderPage title="Operation Details" />}
