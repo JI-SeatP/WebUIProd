@@ -49,7 +49,7 @@ export interface WorkOrder {
   QTE_RESTANTE: number | null;
   QTE_FORCEE: number | null;
   QTY_REQ: number | null;
-  STATUT_CODE: number;
+  STATUT_CODE: number | string;
   STATUT_P: string | null;
   STATUT_S: string | null;
   DCPRIORITE: number;

@@ -26,7 +26,7 @@ export function InfoBar() {
   });
 
   return (
-    <div className="flex items-center gap-4 px-3 py-1 bg-muted/50 border-b text-sm shrink-0">
+    <div className="flex items-center gap-3 text-sm ml-3">
       <span className="font-semibold">{employee.EMNOM}</span>
       {teamName && (
         <span className="text-muted-foreground">
@@ -37,7 +37,6 @@ export function InfoBar() {
         <span className="text-muted-foreground">{functionName}</span>
       )}
       <span className="text-muted-foreground">{shiftHours}</span>
-      <div className="flex-1" />
       <span className="font-mono tabular-nums">{timeStr}</span>
     </div>
   );

@@ -11,11 +11,11 @@ export const W_WORK_ORDERS = {
   rowNumber:   "w-[50px]",
   actions:     "w-[70px]",
   orderNumber: "w-[160px]",
-  client:      "w-[180px]",
+  client:      "w-[260px]",
   product:     "w-[200px]",
-  group:       "w-[100px]",
+  group:       "w-[60px]",
   panel:       "w-[100px]",
-  mold:        "w-[120px]",
+  mold:        "w-[80px]",
   qtyTotal:    "w-[90px]",
   qtyProduced: "w-[90px]",
   qtyRemaining:"w-[90px]",
@@ -42,21 +42,49 @@ export const W_OPERATION_HEADER = {
 } as const;
 
 // ───────────────────────────────────────
+// WIDTH - PANEL_DETAILS_TABLE (S003 Press)
+// ───────────────────────────────────────
+export const W_PANEL_DETAILS = {
+  item:        "w-[160px]",
+  panneau:     "w-[140px]",
+  description: "w-[320px]",
+  version:     "w-[60px]",
+  type:        "w-[120px]",
+  weight:      "w-[80px]",
+} as const;
+
+// ───────────────────────────────────────
 // WIDTH - PANEL_LAYERS_TABLE (S003 Press)
 // ───────────────────────────────────────
 export const W_PANEL_LAYERS = {
   seq:       "w-[50px]",
-  length:    "w-[70px]",
-  width:     "w-[70px]",
-  species:   "w-[120px]",
-  grade:     "w-[80px]",
-  cut:       "w-[80px]",
-  thickness: "w-[80px]",
+  length:    "w-[55px]",
+  width:     "w-[55px]",
+  species:   "w-[380px]",
+  grade:     "w-[55px]",
+  cut:       "w-[70px]",
+  thickness: "w-[65px]",
   grain:     "w-[70px]",
-  pLam:      "w-[60px]",
-  glue:      "w-[80px]",
-  tape:      "w-[60px]",
-  sand:      "w-[60px]",
+  pLam:      "w-[70px]",
+  glue:      "w-[50px]",
+  tape:      "w-[50px]",
+  sand:      "w-[55px]",
+} as const;
+
+// ───────────────────────────────────────
+// WIDTH - DRAWING PANEL (S003 right column)
+// ───────────────────────────────────────
+export const W_DRAWING_PANEL = {
+  container: "w-[760px] shrink-0",
+} as const;
+
+// ───────────────────────────────────────
+// WIDTH - PRESS_SECTION (S003 Press)
+// ───────────────────────────────────────
+export const W_PRESS_SECTION = {
+  materialsCard: "w-[150px]",
+  machineCard:   "w-[228px]",
+  moldCard:      "w-[460px]",
 } as const;
 
 // ───────────────────────────────────────

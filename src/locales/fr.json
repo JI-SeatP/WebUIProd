@@ -11,6 +11,7 @@
     "qtyRemaining": "Reste",
     "qtyPressed": "Qté pressée",
     "qtyMachined": "Qté machinée",
+    "qtyDefect": "QTÉ DEFECT",
     "qtyUsed": "Qté utilisée",
     "qtyForced": "Qté forcée",
     "qtyRequired": "Qté requise",
@@ -53,16 +54,25 @@
     "inPlace": "En place"
   },
   "panel": {
-    "seq": "Séq",
-    "length": "Long.",
-    "width": "Larg.",
+    "seq": "Séq.",
+    "length": "Lo",
+    "width": "La",
     "species": "Espèce",
-    "grade": "Grade",
+    "grade": "GR",
     "cut": "Coupe",
+    "thickness": "Épais.",
     "grain": "Grain",
-    "glue": "Colle",
-    "tape": "Ruban",
-    "sand": "Sablage"
+    "pLam": "P-Lam",
+    "glue": "CO",
+    "tape": "Rub",
+    "sand": "Sabl",
+    "item": "Item",
+    "panneau": "Panneau",
+    "description": "Description",
+    "version": "Ver.",
+    "type": "Type",
+    "weight": "Poids",
+    "construction": "Construction du panneau"
   },
   "material": {
     "rawMaterial": "Matière première",
@@ -108,7 +118,8 @@
     "pause": "Pause",
     "complete": "Compléter",
     "hold": "Mettre en attente",
-    "resetReady": "Remettre prêt"
+    "resetReady": "Remettre prêt",
+    "title": "Actions"
   },
   "questionnaire": {
     "exitSurvey": "Questionnaire de sortie",

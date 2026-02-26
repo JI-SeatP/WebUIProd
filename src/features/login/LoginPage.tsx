@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { NumPad } from "@/components/shared/NumPad";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import type { Employee } from "@/types/employee";
-import { LogIn } from "lucide-react";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -46,9 +45,7 @@ export function LoginPage() {
     <div className="flex items-center justify-center min-h-screen bg-muted/30 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center pb-2">
-          <div className="text-3xl font-bold tracking-tight mb-1">
-            WebUI<span className="text-primary/60">Prod</span>
-          </div>
+          <img src="/logo-seatply.png" alt="SeatPly" className="h-16 mx-auto mb-1" />
           <CardTitle className="text-xl">{t("actions.login")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-4">
@@ -56,11 +53,14 @@ export function LoginPage() {
             <LoadingSpinner />
           ) : (
             <>
+              <div className="bg-muted rounded-md px-4 py-3 w-full text-right text-2xl font-mono tabular-nums min-h-[52px] flex items-center justify-end">
+                {code || "0"}
+              </div>
               <NumPad
                 value={code}
                 onChange={setCode}
-                onSubmit={handleLogin}
-                onClose={() => setCode("")}
+                showDisplay={false}
+                showActions={false}
                 className="shadow-none border-0 w-full"
               />
               {error && (
@@ -68,11 +68,10 @@ export function LoginPage() {
               )}
               <Button
                 size="lg"
-                className="w-full min-h-[48px] text-lg"
+                className="w-full min-h-[48px] text-lg bg-action text-action-foreground hover:bg-action/90 uppercase font-bold"
                 onClick={handleLogin}
                 disabled={!code}
               >
-                <LogIn size={20} className="mr-2" />
                 {t("actions.login")}
               </Button>
             </>

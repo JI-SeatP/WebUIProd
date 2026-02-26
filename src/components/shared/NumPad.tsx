@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Delete, X, CornerDownLeft } from "lucide-react";
@@ -7,8 +7,10 @@ interface NumPadProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit?: () => void;
-  onClose: () => void;
+  onClose?: () => void;
   allowDecimal?: boolean;
+  showDisplay?: boolean;
+  showActions?: boolean;
   className?: string;
 }
 
@@ -18,6 +20,8 @@ export function NumPad({
   onSubmit,
   onClose,
   allowDecimal = false,
+  showDisplay = true,
+  showActions = true,
   className,
 }: NumPadProps) {
   const handleKey = useCallback(
@@ -37,7 +41,7 @@ export function NumPad({
     [value, onChange, allowDecimal]
   );
 
-  const numKeys = ["7", "8", "9", "4", "5", "6", "1", "2", "3"];
+  const numKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
   return (
     <div
@@ -47,74 +51,71 @@ export function NumPad({
       )}
     >
       {/* Display */}
-      <div className="bg-muted rounded-md px-4 py-3 mb-3 text-right text-2xl font-mono tabular-nums min-h-[52px] flex items-center justify-end">
-        {value || "0"}
-      </div>
+      {showDisplay && (
+        <div className="bg-muted rounded-md px-4 py-3 mb-3 text-right text-2xl font-mono tabular-nums min-h-[52px] flex items-center justify-end">
+          {value || "0"}
+        </div>
+      )}
 
-      {/* Key grid */}
-      <div className="grid grid-cols-4 gap-2">
+      {/* Key grid — 3 columns, standard phone layout */}
+      <div className="grid grid-cols-3 gap-2">
         {numKeys.map((key) => (
           <Button
             key={key}
             variant="outline"
-            className="touch-target text-xl font-semibold"
+            className="touch-target h-[58px] text-xl font-semibold"
             onClick={() => handleKey(key)}
           >
             {key}
           </Button>
         ))}
 
-        {/* Bottom row */}
+        {/* Bottom row: backspace, 0, clear */}
         <Button
           variant="outline"
-          className="touch-target text-xl font-semibold"
-          onClick={() => handleKey(allowDecimal ? "." : "0")}
-        >
-          {allowDecimal ? "." : ""}
-        </Button>
-        <Button
-          variant="outline"
-          className="touch-target text-xl font-semibold"
-          onClick={() => handleKey("0")}
-        >
-          0
-        </Button>
-        <Button
-          variant="ghost"
-          className="touch-target"
+          className="touch-target h-[58px]"
           onClick={() => handleKey("backspace")}
         >
           <Delete size={22} />
         </Button>
         <Button
-          variant="ghost"
-          className="touch-target text-destructive"
+          variant="outline"
+          className="touch-target h-[58px] text-xl font-semibold"
+          onClick={() => handleKey("0")}
+        >
+          0
+        </Button>
+        <Button
+          variant="outline"
+          className="touch-target h-[58px]"
           onClick={() => handleKey("clear")}
         >
           <X size={22} />
         </Button>
       </div>
 
-      {/* Action row */}
-      <div className="flex gap-2 mt-2">
-        <Button
-          variant="outline"
-          className="flex-1 touch-target text-lg"
-          onClick={onClose}
-        >
-          <X size={18} className="mr-1" />
-          Close
-        </Button>
-        {onSubmit && (
+      {/* Action row (optional — used in popover mode) */}
+      {showActions && onClose && (
+        <div className="flex gap-2 mt-2">
           <Button
+            variant="outline"
             className="flex-1 touch-target text-lg"
-            onClick={onSubmit}
+            onClick={onClose}
           >
-            <CornerDownLeft size={18} className="mr-1" />
-            OK
+            <X size={18} className="mr-1" />
+            Close
           </Button>
-        )}
-      </div>
+          {onSubmit && (
+            <Button
+              className="flex-1 touch-target text-lg"
+              onClick={onSubmit}
+            >
+              <CornerDownLeft size={18} className="mr-1" />
+              OK
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

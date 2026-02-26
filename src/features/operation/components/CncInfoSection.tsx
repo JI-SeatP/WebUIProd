@@ -17,9 +17,9 @@ export function CncInfoSection({ operation, language }: CncInfoSectionProps) {
   return (
     <div className="space-y-3">
       {/* Next Step */}
-      <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-base">{t("operation.nextStep")}</CardTitle>
+      <Card className="py-0 gap-0">
+        <CardHeader className="py-2 px-4">
+          <CardTitle className="text-[0.8rem]">{t("operation.nextStep")}</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-3">
           <div className="text-sm text-muted-foreground">
@@ -36,9 +36,9 @@ export function CncInfoSection({ operation, language }: CncInfoSectionProps) {
       </Card>
 
       {/* Components placeholder — will be populated with real CNC component data */}
-      <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-base">Components</CardTitle>
+      <Card className="py-0 gap-0">
+        <CardHeader className="py-2 px-4">
+          <CardTitle className="text-[0.8rem]">Components</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-3 text-sm text-muted-foreground">
           Component details will be loaded from CNC operation data.
@@ -46,9 +46,9 @@ export function CncInfoSection({ operation, language }: CncInfoSectionProps) {
       </Card>
 
       {/* Operation Steps placeholder */}
-      <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-base">Operation Steps</CardTitle>
+      <Card className="py-0 gap-0">
+        <CardHeader className="py-2 px-4">
+          <CardTitle className="text-[0.8rem]">Operation Steps</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-3 text-sm text-muted-foreground">
           Operation steps will be loaded from CNC operation data.

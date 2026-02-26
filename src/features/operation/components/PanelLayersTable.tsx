@@ -7,7 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { W_PANEL_LAYERS } from "@/constants/widths";
 
@@ -18,7 +18,7 @@ export interface PanelLayer {
   SPECIES: string;
   GRADE: string;
   CUT: string;
-  THICKNESS: number;
+  THICKNESS: string;
   GRAIN: string;
   P_LAM: string;
   GLUE: string;
@@ -28,19 +28,19 @@ export interface PanelLayer {
 
 interface PanelLayersTableProps {
   layers: PanelLayer[];
+  groupHeader?: string;
 }
 
-export function PanelLayersTable({ layers }: PanelLayersTableProps) {
+export function PanelLayersTable({ layers, groupHeader }: PanelLayersTableProps) {
   const { t } = useTranslation();
 
   if (layers.length === 0) return null;
 
+  const colCount = 12;
+
   return (
-    <Card>
-      <CardHeader className="py-3 px-4">
-        <CardTitle className="text-base">{t("press.panel")} Layers</CardTitle>
-      </CardHeader>
-      <CardContent className="px-4 pb-3">
+    <Card className="py-0 gap-0">
+      <CardContent className="px-4 pt-3 pb-3">
         <Table>
           <TableHeader>
             <TableRow>
@@ -50,17 +50,33 @@ export function PanelLayersTable({ layers }: PanelLayersTableProps) {
               <TableHead className={W_PANEL_LAYERS.species}>{t("panel.species")}</TableHead>
               <TableHead className={W_PANEL_LAYERS.grade}>{t("panel.grade")}</TableHead>
               <TableHead className={W_PANEL_LAYERS.cut}>{t("panel.cut")}</TableHead>
-              <TableHead className={cn(W_PANEL_LAYERS.thickness, "text-right")}>{t("press.thickness")}</TableHead>
+              <TableHead className={cn(W_PANEL_LAYERS.thickness, "text-right")}>{t("panel.thickness")}</TableHead>
               <TableHead className={W_PANEL_LAYERS.grain}>{t("panel.grain")}</TableHead>
-              <TableHead className={W_PANEL_LAYERS.glue}>{t("panel.glue")}</TableHead>
-              <TableHead className={W_PANEL_LAYERS.tape}>{t("panel.tape")}</TableHead>
-              <TableHead className={W_PANEL_LAYERS.sand}>{t("panel.sand")}</TableHead>
+              <TableHead className={W_PANEL_LAYERS.pLam}>{t("panel.pLam")}</TableHead>
+              <TableHead className={cn(W_PANEL_LAYERS.glue, "text-center")}>{t("panel.glue")}</TableHead>
+              <TableHead className={cn(W_PANEL_LAYERS.tape, "text-center")}>{t("panel.tape")}</TableHead>
+              <TableHead className={cn(W_PANEL_LAYERS.sand, "text-center")}>{t("panel.sand")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {layers.map((layer, idx) => (
-              <TableRow key={idx} className="h-10">
-                <TableCell className={W_PANEL_LAYERS.seq}>{layer.NIRANG}</TableCell>
+            {groupHeader && (
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableCell colSpan={colCount} className="py-1.5 px-3 text-sm font-semibold text-foreground">
+                  {groupHeader}
+                </TableCell>
+              </TableRow>
+            )}
+            {layers.map((layer, idx) => {
+              const isPlyRow = /\d+-PLY/i.test(
+                [layer.SPECIES, layer.GRADE, layer.CUT, layer.THICKNESS, layer.GRAIN, layer.P_LAM].join(" ")
+              );
+              return (
+              <TableRow
+                key={idx}
+                className="h-7 [&_td]:py-1"
+                style={isPlyRow ? { backgroundColor: "#FFFAD9" } : undefined}
+              >
+                <TableCell className={cn(W_PANEL_LAYERS.seq)} style={{ color: "#89DE71" }}>{layer.NIRANG}</TableCell>
                 <TableCell className={cn(W_PANEL_LAYERS.length, "text-right tabular-nums")}>{layer.NILONGUEUR}</TableCell>
                 <TableCell className={cn(W_PANEL_LAYERS.width, "text-right tabular-nums")}>{layer.NILARGEUR}</TableCell>
                 <TableCell className={W_PANEL_LAYERS.species}>{layer.SPECIES}</TableCell>
@@ -68,11 +84,13 @@ export function PanelLayersTable({ layers }: PanelLayersTableProps) {
                 <TableCell className={W_PANEL_LAYERS.cut}>{layer.CUT}</TableCell>
                 <TableCell className={cn(W_PANEL_LAYERS.thickness, "text-right tabular-nums")}>{layer.THICKNESS}</TableCell>
                 <TableCell className={W_PANEL_LAYERS.grain}>{layer.GRAIN}</TableCell>
-                <TableCell className={W_PANEL_LAYERS.glue}>{layer.GLUE}</TableCell>
-                <TableCell className={W_PANEL_LAYERS.tape}>{layer.TAPE}</TableCell>
-                <TableCell className={W_PANEL_LAYERS.sand}>{layer.SAND}</TableCell>
+                <TableCell className={W_PANEL_LAYERS.pLam}>{layer.P_LAM}</TableCell>
+                <TableCell className={cn(W_PANEL_LAYERS.glue, "text-center")}>{layer.GLUE}</TableCell>
+                <TableCell className={cn(W_PANEL_LAYERS.tape, "text-center")}>{layer.TAPE}</TableCell>
+                <TableCell className={cn(W_PANEL_LAYERS.sand, "text-center")}>{layer.SAND}</TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </CardContent>

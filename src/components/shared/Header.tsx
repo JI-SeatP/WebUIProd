@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import type { Department } from "@/types/department";
 import { apiGet } from "@/api/client";
 import { useEffect, useState } from "react";
+import { InfoBar } from "./InfoBar";
 
 interface HeaderAction {
   icon: React.ReactNode;
@@ -83,24 +84,22 @@ export function Header() {
   };
 
   const actions: HeaderAction[] = [
-    { icon: <Clock size={20} />, label: t("timeTracking.title"), onClick: () => navigate("/time-tracking") },
-    { icon: <List size={20} />, label: t("header.machineSelection"), onClick: () => {} },
-    { icon: <Maximize size={20} />, label: t("header.fullscreen"), onClick: handleFullscreen },
-    { icon: <RefreshCw size={20} />, label: t("actions.refresh"), onClick: () => window.location.reload() },
-    { icon: <ScanBarcode size={20} />, label: t("header.skidScan"), onClick: () => {} },
-    { icon: <Tag size={20} />, label: t("header.labelPrint"), onClick: () => {} },
-    { icon: <Send size={20} />, label: t("header.sendMessage"), onClick: () => {} },
-    { icon: <ArrowLeftRight size={20} />, label: t("actions.transfer"), onClick: () => {}, visible: isOnOperation },
-    { icon: <ClipboardList size={20} />, label: t("inventory.title"), onClick: () => navigate("/inventory") },
-    { icon: <LogOut size={20} />, label: t("actions.logout"), onClick: handleLogout },
+    { icon: <Clock size={25} />, label: t("timeTracking.title"), onClick: () => navigate("/time-tracking") },
+    { icon: <List size={25} />, label: t("header.machineSelection"), onClick: () => {} },
+    { icon: <Maximize size={25} />, label: t("header.fullscreen"), onClick: handleFullscreen },
+    { icon: <RefreshCw size={25} />, label: t("actions.refresh"), onClick: () => window.location.reload() },
+    { icon: <ScanBarcode size={25} />, label: t("header.skidScan"), onClick: () => {} },
+    { icon: <Tag size={25} />, label: t("header.labelPrint"), onClick: () => {} },
+    { icon: <Send size={25} />, label: t("header.sendMessage"), onClick: () => {} },
+    { icon: <ArrowLeftRight size={25} />, label: t("actions.transfer"), onClick: () => {}, visible: isOnOperation },
+    { icon: <ClipboardList size={25} />, label: t("inventory.title"), onClick: () => navigate("/inventory") },
+    { icon: <LogOut size={25} />, label: t("actions.logout"), onClick: handleLogout },
   ];
 
   return (
-    <header className="flex items-center gap-2 px-3 py-1.5 border-b bg-background shrink-0">
+    <header className="flex items-center gap-2 px-3 py-[3px] border-b bg-background shrink-0">
       {/* Logo */}
-      <div className="font-bold text-lg tracking-tight shrink-0">
-        WebUI<span className="text-primary/60">Prod</span>
-      </div>
+      <img src="/logo-seatply.png" alt="SeatPly" className="h-12 shrink-0" />
 
       {/* Nav buttons */}
       <div className="flex items-center gap-1 ml-2">
@@ -112,7 +111,7 @@ export function Header() {
               className="touch-target"
               onClick={() => navigate(-1)}
             >
-              <ChevronLeft size={20} />
+              <ChevronLeft size={25} />
             </Button>
           </TooltipTrigger>
           <TooltipContent>{t("actions.back")}</TooltipContent>
@@ -125,7 +124,7 @@ export function Header() {
               className="touch-target"
               onClick={() => navigate("/orders")}
             >
-              <LayoutGrid size={20} />
+              <LayoutGrid size={25} />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Orders</TooltipContent>
@@ -138,7 +137,7 @@ export function Header() {
               className="touch-target"
               onClick={() => navigate(1)}
             >
-              <ChevronRight size={20} />
+              <ChevronRight size={25} />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Forward</TooltipContent>
@@ -161,6 +160,12 @@ export function Header() {
           ))}
         </SelectContent>
       </Select>
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* User / Plant / Time info */}
+      <InfoBar />
 
       {/* Spacer */}
       <div className="flex-1" />

@@ -1,13 +1,12 @@
 import { useTranslation } from "react-i18next";
+import { useRef, useState } from "react";
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { W_WORK_ORDERS } from "@/constants/widths";
 import {
@@ -76,6 +75,8 @@ export function WorkOrderTable({
   language,
 }: WorkOrderTableProps) {
   const { t } = useTranslation();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isScrolled, setIsScrolled] = useState(false);
 
   const getLocalizedText = (fr: string | null, en: string | null) => {
     const text = language === "fr" ? fr : en;
@@ -83,9 +84,16 @@ export function WorkOrderTable({
   };
 
   return (
-    <ScrollArea className="flex-1">
-      <Table>
-        <TableHeader>
+    <div
+      ref={scrollRef}
+      className="flex-1 min-h-0 overflow-y-auto overflow-x-auto"
+      onScroll={(e) => setIsScrolled((e.currentTarget as HTMLDivElement).scrollTop > 0)}
+    >
+      <table className="w-full caption-bottom text-sm">
+        <TableHeader className={cn(
+          "sticky top-0 z-10 bg-background transition-shadow duration-200",
+          isScrolled ? "shadow-[0_2px_6px_0_rgba(0,0,0,0.12)]" : ""
+        )}>
           <TableRow>
             <TableHead className={W_WORK_ORDERS.rowNumber}>#</TableHead>
             <TableHead className={W_WORK_ORDERS.actions}>
@@ -204,7 +212,7 @@ export function WorkOrderTable({
                       {hasComments && <OrderCommentsPopover comments={[]} />}
                     </div>
                   </TableCell>
-                  <TableCell className={cn(W_WORK_ORDERS.orderNumber, "font-semibold")}>
+                  <TableCell className={cn(W_WORK_ORDERS.orderNumber, "font-semibold text-xl")}>
                     {order.NO_PROD}
                   </TableCell>
                   <TableCell className={W_WORK_ORDERS.client}>
@@ -216,10 +224,15 @@ export function WorkOrderTable({
                     )}
                   </TableCell>
                   <TableCell className={W_WORK_ORDERS.product}>
-                    <div className="truncate">
+                    <div className="truncate font-semibold">
+                      {order.NO_INVENTAIRE === "VCUT"
+                        ? order.NO_INVENTAIRE
+                        : order.PRODUIT_CODE || "—"}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
                       {order.NO_INVENTAIRE === "VCUT"
                         ? getLocalizedText(order.INVENTAIRE_P, order.INVENTAIRE_S)
-                        : getLocalizedText(order.PRODUIT_P, order.PRODUIT_S) || "—"}
+                        : getLocalizedText(order.PRODUIT_P, order.PRODUIT_S)}
                     </div>
                   </TableCell>
                   <TableCell className={W_WORK_ORDERS.group}>
@@ -231,13 +244,13 @@ export function WorkOrderTable({
                   <TableCell className={W_WORK_ORDERS.mold}>
                     {order.MOULE_CODE ?? "—"}
                   </TableCell>
-                  <TableCell className={cn(W_WORK_ORDERS.qtyTotal, "text-right tabular-nums")}>
+                  <TableCell className={cn(W_WORK_ORDERS.qtyTotal, "text-right tabular-nums text-base")}>
                     {order.QTE_A_FAB}
                   </TableCell>
-                  <TableCell className={cn(W_WORK_ORDERS.qtyProduced, "text-right tabular-nums")}>
+                  <TableCell className={cn(W_WORK_ORDERS.qtyProduced, "text-right tabular-nums text-base")}>
                     {order.QTE_PRODUITE ?? 0}
                   </TableCell>
-                  <TableCell className={cn(W_WORK_ORDERS.qtyRemaining, "text-right tabular-nums font-semibold")}>
+                  <TableCell className={cn(W_WORK_ORDERS.qtyRemaining, "text-right tabular-nums text-base font-semibold")}>
                     {order.QTE_RESTANTE ?? "—"}
                   </TableCell>
                   <TableCell className={W_WORK_ORDERS.operation}>
@@ -256,7 +269,7 @@ export function WorkOrderTable({
             })
           )}
         </TableBody>
-      </Table>
-    </ScrollArea>
+      </table>
+    </div>
   );
 }

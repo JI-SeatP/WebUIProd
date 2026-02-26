@@ -11,6 +11,7 @@
     "qtyRemaining": "Remaining",
     "qtyPressed": "Qty Pressed",
     "qtyMachined": "Qty Machined",
+    "qtyDefect": "QTY DEFECT",
     "qtyUsed": "Qty Used",
     "qtyForced": "Qty Forced",
     "qtyRequired": "Qty Required",
@@ -57,12 +58,21 @@
     "length": "L",
     "width": "W",
     "species": "Species",
-    "grade": "Grade",
+    "grade": "Gr",
     "cut": "Cut",
+    "thickness": "Thick.",
     "grain": "Grain",
-    "glue": "Glue",
-    "tape": "Tape",
-    "sand": "Sand"
+    "pLam": "P-Lam",
+    "glue": "Co",
+    "tape": "Rub",
+    "sand": "Sand",
+    "item": "Item",
+    "panneau": "Panel",
+    "description": "Description",
+    "version": "Ver.",
+    "type": "Type",
+    "weight": "Weight",
+    "construction": "Panel Construction"
   },
   "material": {
     "rawMaterial": "Raw Material",
@@ -108,7 +118,8 @@
     "pause": "Pause",
     "complete": "Complete",
     "hold": "On Hold",
-    "resetReady": "Reset to Ready"
+    "resetReady": "Reset to Ready",
+    "title": "Actions"
   },
   "questionnaire": {
     "exitSurvey": "Exit Survey",

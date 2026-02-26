@@ -1,11 +1,10 @@
 import { useTranslation } from "react-i18next";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { OperationData } from "../hooks/useOperation";
 
 interface MachineInfoPanelProps {
   operation: OperationData;
-  language: "fr" | "en";
 }
 
 function InfoRow({ label, value, className }: { label: string; value: React.ReactNode; className?: string }) {
@@ -17,12 +16,23 @@ function InfoRow({ label, value, className }: { label: string; value: React.Reac
   );
 }
 
-export function MachineInfoPanel({ operation, language }: MachineInfoPanelProps) {
+function DateField({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs text-muted-foreground uppercase tracking-wide">{label}</span>
+      <span
+        className="text-sm font-medium px-2 py-1 rounded"
+        style={{ backgroundColor: "#F2F2F2" }}
+      >
+        {value ?? "—"}
+      </span>
+    </div>
+  );
+}
+
+export function MachineInfoPanel({ operation }: MachineInfoPanelProps) {
   const { t } = useTranslation();
   const op = operation as Record<string, unknown>;
-
-  const loc = (fr: string | null | undefined, en: string | null | undefined) =>
-    (language === "fr" ? fr : en) ?? fr ?? "—";
 
   // Notes field varies by machine family
   const getNotes = (): string => {
@@ -34,44 +44,22 @@ export function MachineInfoPanel({ operation, language }: MachineInfoPanelProps)
   const notes = getNotes();
 
   return (
-    <Card className="h-full">
-      <CardHeader className="py-3 px-4">
-        <CardTitle className="text-base">{t("operation.machine")}</CardTitle>
-      </CardHeader>
-      <CardContent className="px-4 pb-3 space-y-1">
-        {/* Dates */}
-        <InfoRow
-          label={t("dates.scheduledStart")}
-          value={operation.DATE_DEBUT_PREVU ?? "—"}
-        />
-        <InfoRow
-          label={t("dates.scheduledEnd")}
-          value={operation.DATE_FIN_PREVU ?? "—"}
-        />
-
-        {/* Machine */}
-        <InfoRow
-          label={t("dates.assigned")}
-          value={loc(operation.MACHINE_P, operation.MACHINE_S)}
-        />
-
-        {/* Type & Group */}
-        <InfoRow label={t("production.type")} value={operation.FMCODE} />
-        <InfoRow label={t("order.group")} value={operation.GROUPE} />
-
-        {/* Department */}
-        <InfoRow
-          label={t("operation.department")}
-          value={loc(operation.DeDescription_P, operation.DeDescription_S)}
-        />
-
-        {/* Warehouse */}
-        {operation.ENTREPOT_CODE && (
-          <InfoRow
-            label={t("production.warehouse")}
-            value={loc(operation.ENTREPOT_P, operation.ENTREPOT_S)}
+    <Card className="h-full py-0 gap-0">
+      <CardContent className="px-4 pt-3 pb-3 space-y-3">
+        {/* Dates — side by side */}
+        <div className="flex gap-4">
+          <DateField
+            label={t("dates.scheduledStart")}
+            value={operation.DATE_DEBUT_PREVU ?? "—"}
           />
-        )}
+          <DateField
+            label={t("dates.scheduledEnd")}
+            value={operation.DATE_FIN_PREVU ?? "—"}
+          />
+        </div>
+
+        {/* Group */}
+        <InfoRow label={t("order.group")} value={operation.GROUPE} />
 
         {/* Notes */}
         {notes && (

@@ -16,9 +16,9 @@ export function VcutInfoSection({ operation, language }: VcutInfoSectionProps) {
   return (
     <div className="space-y-3">
       {/* Big Sheet Info */}
-      <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-base">
+      <Card className="py-0 gap-0">
+        <CardHeader className="py-2 px-4">
+          <CardTitle className="text-[0.8rem]">
             {loc("Grande feuille", "Big Sheet")}
           </CardTitle>
         </CardHeader>
@@ -37,9 +37,9 @@ export function VcutInfoSection({ operation, language }: VcutInfoSectionProps) {
       </Card>
 
       {/* Products Table placeholder */}
-      <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-base">{t("order.product")}</CardTitle>
+      <Card className="py-0 gap-0">
+        <CardHeader className="py-2 px-4">
+          <CardTitle className="text-[0.8rem]">{t("order.product")}</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-3">
           {operation.PRODUIT_CODE ? (
@@ -60,9 +60,9 @@ export function VcutInfoSection({ operation, language }: VcutInfoSectionProps) {
       </Card>
 
       {/* Containers Table placeholder */}
-      <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-base">{t("inventory.container")}</CardTitle>
+      <Card className="py-0 gap-0">
+        <CardHeader className="py-2 px-4">
+          <CardTitle className="text-[0.8rem]">{t("inventory.container")}</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-3 text-sm text-muted-foreground">
           Container/SKID data will be loaded from operation details.
