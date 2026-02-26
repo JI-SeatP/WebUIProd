@@ -1,0 +1,186 @@
+{
+  "order": {
+    "title": "Order",
+    "number": "Order No.",
+    "client": "Client",
+    "clientPO": "Client PO",
+    "product": "Product",
+    "quantity": "Quantity",
+    "qtyToMake": "Qty to Make",
+    "qtyProduced": "Qty Produced",
+    "qtyRemaining": "Remaining",
+    "qtyPressed": "Qty Pressed",
+    "qtyMachined": "Qty Machined",
+    "qtyUsed": "Qty Used",
+    "qtyForced": "Qty Forced",
+    "qtyRequired": "Qty Required",
+    "defect": "Defect",
+    "group": "Group",
+    "revision": "Revision",
+    "priority": "Priority",
+    "comments": "Comments"
+  },
+  "operation": {
+    "title": "Operation",
+    "machine": "Machine",
+    "status": "Status",
+    "department": "Department",
+    "family": "Machine Family",
+    "nextStep": "Next Step"
+  },
+  "status": {
+    "ready": "Ready",
+    "setup": "Setup",
+    "production": "In Production",
+    "pause": "Paused",
+    "stopped": "Stopped",
+    "completed": "Completed",
+    "onHold": "On Hold",
+    "done": "Done"
+  },
+  "press": {
+    "mold": "Mold",
+    "moldType": "Mold Type",
+    "moldCode": "Mold Code",
+    "piecesPerCavity": "Pieces/Cavity",
+    "cavitiesPerMold": "Cavities/Mold",
+    "thickness": "Thickness",
+    "cookTime": "Cook Time",
+    "coolTime": "Cool Time",
+    "gap": "Gap",
+    "panel": "Panel",
+    "materialsReady": "Materials Ready",
+    "inPlace": "In Place"
+  },
+  "panel": {
+    "seq": "Seq",
+    "length": "L",
+    "width": "W",
+    "species": "Species",
+    "grade": "Grade",
+    "cut": "Cut",
+    "grain": "Grain",
+    "glue": "Glue",
+    "tape": "Tape",
+    "sand": "Sand"
+  },
+  "material": {
+    "rawMaterial": "Raw Material",
+    "consumesMaterial": "Consumes Material",
+    "createsInventory": "Creates Inventory",
+    "inventory": "Inventory"
+  },
+  "production": {
+    "seq": "Seq",
+    "type": "Type",
+    "note": "Note",
+    "skid": "SKID",
+    "warehouse": "Warehouse",
+    "description": "Description"
+  },
+  "dates": {
+    "scheduledStart": "Sched. Start",
+    "scheduledEnd": "Sched. End",
+    "actualStart": "Actual Start",
+    "available": "Available",
+    "assigned": "Assigned",
+    "at": "at"
+  },
+  "actions": {
+    "view": "View",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "submit": "Submit",
+    "back": "Back",
+    "search": "Search",
+    "filter": "Filter",
+    "refresh": "Refresh",
+    "print": "Print",
+    "transfer": "Transfer",
+    "logout": "Logout",
+    "login": "Login",
+    "setup": "Setup",
+    "start": "Start",
+    "stop": "Stop",
+    "pause": "Pause",
+    "complete": "Complete",
+    "hold": "On Hold",
+    "resetReady": "Reset to Ready"
+  },
+  "questionnaire": {
+    "exitSurvey": "Exit Survey",
+    "stopCause": "Stop Cause",
+    "primaryCause": "Primary Cause",
+    "secondaryCause": "Secondary Cause",
+    "otherSpecify": "Other (specify)",
+    "keepMold": "Keep the mold",
+    "uninstallMold": "Uninstall mold",
+    "moldAction": "Mold Action",
+    "goodQuantity": "Good Quantity",
+    "defectQuantity": "Defect Quantity",
+    "defectType": "Defect Type",
+    "finishedProducts": "Finished Products",
+    "materialOutput": "Material Output"
+  },
+  "dialogs": {
+    "loading": "Please wait...",
+    "error": "Error",
+    "warning": "Warning",
+    "confirmation": "Confirmation",
+    "supervisorApproval": "Supervisor Approval"
+  },
+  "messages": {
+    "cuttingNotRequired": "Cutting not required",
+    "doNotPress": "DO NOT PRESS",
+    "noContainer": "No container",
+    "underPPAP": "Under PPAP"
+  },
+  "filters": {
+    "dateRange": "Date Range",
+    "today": "Today",
+    "thisWeek": "This Week",
+    "thisMonth": "This Month",
+    "customDates": "Custom Dates",
+    "startDate": "Start Date",
+    "endDate": "End Date",
+    "operationType": "Operation Type",
+    "allStatuses": "All Statuses",
+    "allMachines": "All Machines",
+    "allDepartments": "All Departments"
+  },
+  "timeTracking": {
+    "title": "Time Tracking",
+    "productionTime": "Production Time",
+    "addHours": "Add Hours",
+    "search": "Search",
+    "shift": "Shift",
+    "employee": "Employee",
+    "employeeCode": "Employee Code",
+    "duration": "Duration"
+  },
+  "inventory": {
+    "title": "Inventory",
+    "estimatedQty": "Estimated Qty",
+    "actualQty": "Actual Qty",
+    "unit": "Unit",
+    "container": "Container"
+  },
+  "common": {
+    "yes": "Yes",
+    "no": "No",
+    "actions": "Actions",
+    "noResults": "No results",
+    "poweredBy": "Powered by"
+  },
+  "header": {
+    "machineSelection": "Machine Selection",
+    "fullscreen": "Fullscreen",
+    "sendMessage": "Send Message",
+    "labelPrint": "Print Label",
+    "skidScan": "Scan SKID",
+    "language": "Language"
+  }
+}

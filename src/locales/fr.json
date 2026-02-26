@@ -1,0 +1,186 @@
+{
+  "order": {
+    "title": "Commande",
+    "number": "No. commande",
+    "client": "Client",
+    "clientPO": "PO Client",
+    "product": "Produit",
+    "quantity": "Quantité",
+    "qtyToMake": "Qté à fabriquer",
+    "qtyProduced": "Qté produite",
+    "qtyRemaining": "Reste",
+    "qtyPressed": "Qté pressée",
+    "qtyMachined": "Qté machinée",
+    "qtyUsed": "Qté utilisée",
+    "qtyForced": "Qté forcée",
+    "qtyRequired": "Qté requise",
+    "defect": "Défectueux",
+    "group": "Groupe",
+    "revision": "Révision",
+    "priority": "Priorité",
+    "comments": "Commentaires"
+  },
+  "operation": {
+    "title": "Opération",
+    "machine": "Machine",
+    "status": "Statut",
+    "department": "Département",
+    "family": "Famille machine",
+    "nextStep": "Prochaine étape"
+  },
+  "status": {
+    "ready": "Prêt",
+    "setup": "Mise en course",
+    "production": "En production",
+    "pause": "En pause",
+    "stopped": "Arrêt",
+    "completed": "Terminé",
+    "onHold": "En attente",
+    "done": "Complété"
+  },
+  "press": {
+    "mold": "Moule",
+    "moldType": "Type moule",
+    "moldCode": "Code moule",
+    "piecesPerCavity": "Pièces/Cavité",
+    "cavitiesPerMold": "Cavités/Moule",
+    "thickness": "Épaisseur",
+    "cookTime": "Temps cuisson",
+    "coolTime": "Temps refroidir",
+    "gap": "Écart",
+    "panel": "Panneau",
+    "materialsReady": "Matériaux prêts",
+    "inPlace": "En place"
+  },
+  "panel": {
+    "seq": "Séq",
+    "length": "Long.",
+    "width": "Larg.",
+    "species": "Espèce",
+    "grade": "Grade",
+    "cut": "Coupe",
+    "grain": "Grain",
+    "glue": "Colle",
+    "tape": "Ruban",
+    "sand": "Sablage"
+  },
+  "material": {
+    "rawMaterial": "Matière première",
+    "consumesMaterial": "Consomme matériel",
+    "createsInventory": "Crée inventaire",
+    "inventory": "Inventaire"
+  },
+  "production": {
+    "seq": "Séq",
+    "type": "Type",
+    "note": "Note",
+    "skid": "SKID",
+    "warehouse": "Entrepôt",
+    "description": "Description"
+  },
+  "dates": {
+    "scheduledStart": "Début prog.",
+    "scheduledEnd": "Fin prog.",
+    "actualStart": "Début réel",
+    "available": "Disponible",
+    "assigned": "Assignée",
+    "at": "à"
+  },
+  "actions": {
+    "view": "Consulter",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "submit": "Soumettre",
+    "back": "Retour",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "refresh": "Actualiser",
+    "print": "Imprimer",
+    "transfer": "Transférer",
+    "logout": "Déconnexion",
+    "login": "Connexion",
+    "setup": "Mise en course",
+    "start": "Démarrer",
+    "stop": "Arrêt",
+    "pause": "Pause",
+    "complete": "Compléter",
+    "hold": "Mettre en attente",
+    "resetReady": "Remettre prêt"
+  },
+  "questionnaire": {
+    "exitSurvey": "Questionnaire de sortie",
+    "stopCause": "Cause d'arrêt",
+    "primaryCause": "Cause principale",
+    "secondaryCause": "Cause secondaire",
+    "otherSpecify": "Autre (préciser)",
+    "keepMold": "Conserver le moule",
+    "uninstallMold": "Désinstaller le moule",
+    "moldAction": "Action moule",
+    "goodQuantity": "Quantité bonne",
+    "defectQuantity": "Quantité défectueuse",
+    "defectType": "Type de défaut",
+    "finishedProducts": "Produits finis",
+    "materialOutput": "Sortie matériel"
+  },
+  "dialogs": {
+    "loading": "Veuillez patienter...",
+    "error": "Erreur",
+    "warning": "Avertissement",
+    "confirmation": "Confirmation",
+    "supervisorApproval": "Approbation superviseur"
+  },
+  "messages": {
+    "cuttingNotRequired": "Découpage non requis",
+    "doNotPress": "NE PAS PRESSER",
+    "noContainer": "Aucun contenant",
+    "underPPAP": "Sous PPAP"
+  },
+  "filters": {
+    "dateRange": "Période",
+    "today": "Aujourd'hui",
+    "thisWeek": "Cette semaine",
+    "thisMonth": "Ce mois",
+    "customDates": "Dates personnalisées",
+    "startDate": "Date de début",
+    "endDate": "Date de fin",
+    "operationType": "Type d'opération",
+    "allStatuses": "Tous les statuts",
+    "allMachines": "Toutes les machines",
+    "allDepartments": "Tous les départements"
+  },
+  "timeTracking": {
+    "title": "Suivi du temps",
+    "productionTime": "Temps de production",
+    "addHours": "Ajouter des heures",
+    "search": "Recherche",
+    "shift": "Quart",
+    "employee": "Employé",
+    "employeeCode": "Code employé",
+    "duration": "Durée"
+  },
+  "inventory": {
+    "title": "Inventaire",
+    "estimatedQty": "Qté estimée",
+    "actualQty": "Qté réelle",
+    "unit": "Unité",
+    "container": "Contenant"
+  },
+  "common": {
+    "yes": "Oui",
+    "no": "Non",
+    "actions": "Actions",
+    "noResults": "Aucun résultat",
+    "poweredBy": "Propulsé par"
+  },
+  "header": {
+    "machineSelection": "Sélection machine",
+    "fullscreen": "Plein écran",
+    "sendMessage": "Envoyer message",
+    "labelPrint": "Impression étiquette",
+    "skidScan": "Scanner SKID",
+    "language": "Langue"
+  }
+}
