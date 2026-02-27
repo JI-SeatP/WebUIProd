@@ -12,7 +12,7 @@ export function AppLayout() {
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       <Header />
-      <main className="flex-1 overflow-hidden p-3">
+      <main className="flex-1 overflow-hidden px-3 pt-[7px] pb-3 bg-[#C5E0D4]">
         <Outlet />
       </main>
     </div>

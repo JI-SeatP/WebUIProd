@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
 import { Input } from "@/components/ui/input";
 import { MultiSelectFilter, type FilterOption } from "@/components/shared/MultiSelectFilter";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { statusCodeToEnum } from "@/components/shared/StatusBadge";
 import type { WorkOrder } from "@/types/workOrder";
 import type { WorkOrderFilters } from "../hooks/useWorkOrders";
@@ -176,13 +176,25 @@ export function FilterBar({ filters, onFiltersChange, allOrders }: FilterBarProp
           className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
         />
         <Input
-          className="h-[48px] pl-9 text-base w-[330px]"
+          className="h-[48px] pl-9 pr-9 text-base w-[330px] bg-white"
           placeholder={t("actions.search")}
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           onKeyDown={handleSearchKeyDown}
           onBlur={handleSearchBlur}
         />
+        {searchInput && (
+          <button
+            type="button"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              setSearchInput("");
+              onFiltersChange({ ...filters, search: undefined });
+            }}
+          >
+            <X size={16} />
+          </button>
+        )}
       </div>
 
       {/* Machine */}
@@ -191,9 +203,9 @@ export function FilterBar({ filters, onFiltersChange, allOrders }: FilterBarProp
         options={machineOptions}
         selected={(filters.machines ?? []).map(String)}
         onChange={handleMachinesChange}
-        className="w-[300px]"
+        className="w-[330px]"
         searchable
-        popoverWidth="w-[300px]"
+        popoverWidth="w-[330px]"
       />
     </div>
   );

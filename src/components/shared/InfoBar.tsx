@@ -22,21 +22,20 @@ export function InfoBar() {
   const timeStr = clock.toLocaleTimeString(state.language === "fr" ? "fr-CA" : "en-CA", {
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
   });
 
   return (
-    <div className="flex items-center gap-3 text-sm ml-3">
+    <div className="flex items-center gap-3 text-[1.05rem] ml-3 text-white">
       <span className="font-semibold">{employee.EMNOM}</span>
       {teamName && (
-        <span className="text-muted-foreground">
+        <span className="text-gray-400">
           {t("timeTracking.shift")}: {teamName}
         </span>
       )}
       {functionName && (
-        <span className="text-muted-foreground">{functionName}</span>
+        <span className="text-gray-400">{functionName}</span>
       )}
-      <span className="text-muted-foreground">{shiftHours}</span>
+      <span className="text-gray-400">{shiftHours}</span>
       <span className="font-mono tabular-nums">{timeStr}</span>
     </div>
   );

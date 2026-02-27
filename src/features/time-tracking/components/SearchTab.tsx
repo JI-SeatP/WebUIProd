@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { searchTimeEntries } from "@/api/timeTracking";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { W_TIME_TRACKING } from "@/constants/widths";
@@ -26,7 +26,7 @@ function formatDuration(minutes: number): string {
   return `${h}h${m.toString().padStart(2, "0")}`;
 }
 
-export function SearchTab() {
+export function SearchTab({ tabsList }: { tabsList?: React.ReactNode }) {
   const { t } = useTranslation();
   const { state } = useSession();
   const lang = state.language;
@@ -67,7 +67,8 @@ export function SearchTab() {
   return (
     <div className="space-y-3">
       {/* Filters */}
-      <div className="flex items-end gap-3 flex-wrap">
+      <div className="flex items-end gap-3 flex-wrap bg-white rounded-lg p-2">
+        {tabsList}
         <div className="flex flex-col gap-1">
           <Label className="text-sm text-muted-foreground">{t("timeTracking.dateStart")}</Label>
           <Input
@@ -88,30 +89,51 @@ export function SearchTab() {
         </div>
         <div className="flex flex-col gap-1">
           <Label className="text-sm text-muted-foreground">{t("operation.department")}</Label>
-          <Input
-            value={filters.department}
-            onChange={(e) => updateFilter("department", e.target.value)}
-            placeholder={t("filters.allDepartments")}
-            className="touch-target"
-          />
+          <div className="relative">
+            <Input
+              value={filters.department}
+              onChange={(e) => updateFilter("department", e.target.value)}
+              placeholder={t("filters.allDepartments")}
+              className="touch-target pr-9"
+            />
+            {filters.department && (
+              <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { updateFilter("department", ""); setTimeout(handleSearch, 0); }}>
+                <X size={16} />
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex flex-col gap-1">
           <Label className="text-sm text-muted-foreground">{t("operation.machine")}</Label>
-          <Input
-            value={filters.machine}
-            onChange={(e) => updateFilter("machine", e.target.value)}
-            placeholder={t("filters.allMachines")}
-            className="touch-target"
-          />
+          <div className="relative">
+            <Input
+              value={filters.machine}
+              onChange={(e) => updateFilter("machine", e.target.value)}
+              placeholder={t("filters.allMachines")}
+              className="touch-target pr-9"
+            />
+            {filters.machine && (
+              <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { updateFilter("machine", ""); setTimeout(handleSearch, 0); }}>
+                <X size={16} />
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex flex-col gap-1">
           <Label className="text-sm text-muted-foreground">{t("timeTracking.employee")}</Label>
-          <Input
-            value={filters.employee}
-            onChange={(e) => updateFilter("employee", e.target.value)}
-            placeholder={t("timeTracking.employee")}
-            className="touch-target"
-          />
+          <div className="relative">
+            <Input
+              value={filters.employee}
+              onChange={(e) => updateFilter("employee", e.target.value)}
+              placeholder={t("timeTracking.employee")}
+              className="touch-target pr-9"
+            />
+            {filters.employee && (
+              <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { updateFilter("employee", ""); setTimeout(handleSearch, 0); }}>
+                <X size={16} />
+              </button>
+            )}
+          </div>
         </div>
         <Button className="touch-target gap-2" onClick={handleSearch}>
           <Search size={18} />
@@ -123,7 +145,7 @@ export function SearchTab() {
       {loading ? (
         <LoadingSpinner />
       ) : (
-        <div className="border rounded-md overflow-auto">
+        <div className="bg-white rounded-lg p-1.5 overflow-auto">
           <Table>
             <TableHeader>
               <TableRow className="h-[56px]">
@@ -155,8 +177,8 @@ export function SearchTab() {
                     <TableCell>{entry.NO_PROD}</TableCell>
                     <TableCell>{entry.SM_EPF}</TableCell>
                     <TableCell>{entry.DECODE}/{entry.MACODE}</TableCell>
-                    <TableCell className="font-mono">{entry.QTE_BONNE}</TableCell>
-                    <TableCell className="font-mono">{entry.QTE_DEFAUT}</TableCell>
+                    <TableCell className="font-mono text-lg font-bold">{entry.QTE_BONNE}</TableCell>
+                    <TableCell className="font-mono text-lg font-bold text-red-600">{entry.QTE_DEFAUT}</TableCell>
                   </TableRow>
                 ))
               )}

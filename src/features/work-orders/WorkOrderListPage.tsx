@@ -28,7 +28,7 @@ export function WorkOrderListPage() {
   return (
     <div className="flex flex-col h-full gap-3">
       {/* Toolbar */}
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex items-center gap-3 shrink-0 bg-white rounded-lg p-2">
         <h1 className="text-2xl font-bold shrink-0">{t("order.title")}</h1>
         <span className="text-muted-foreground text-base shrink-0">
           ({orders.length})
@@ -47,13 +47,15 @@ export function WorkOrderListPage() {
           </div>
         </div>
       ) : (
-        <WorkOrderTable
-          orders={orders}
-          sortField={sortField}
-          sortDirection={sortDirection}
-          onSort={handleSort}
-          language={state.language}
-        />
+        <div className="bg-white rounded-lg p-1.5 flex-1 min-h-0">
+          <WorkOrderTable
+            orders={orders}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSort={handleSort}
+            language={state.language}
+          />
+        </div>
       )}
     </div>
   );

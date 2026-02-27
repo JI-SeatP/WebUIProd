@@ -13,6 +13,10 @@ export function searchLabels(search: string) {
   return apiGet<LabelInfo[]>(`searchLabels.cfm?search=${encodeURIComponent(search)}`);
 }
 
+export function getOrderLabels(transac: number) {
+  return apiGet<LabelInfo[]>(`getOrderLabels.cfm?transac=${transac}`);
+}
+
 export function printLabel(transac: number, qtyPerSkid: number) {
   return apiPost<{ success: boolean }>("printLabel.cfm", { transac, qtyPerSkid });
 }

@@ -1,3 +1,4 @@
+import React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +23,8 @@ import { type StatusAction, useStatusChange } from "../hooks/useStatusChange";
 interface StatusActionBarProps {
   transac: number;
   copmachine: number | null;
-  statusCode: number;
+  statusCode: number | string;
+  onStatusChanged?: (newStatus: string) => void;
 }
 
 interface ActionItem {
@@ -44,42 +46,42 @@ function getAllActions(status: OperationStatus, t: (key: string) => string): Act
   return [
     {
       action: "SETUP",
-      icon: <Wrench size={18} />,
+      icon: <Wrench className="size-[24px]" />,
       label: t("actions.setup"),
       bgColor: "#9333ea",
       active: notStarted || stopped,
     },
     {
       action: "PROD",
-      icon: <Play size={18} />,
+      icon: <Play className="size-[24px]" />,
       label: t("actions.start"),
       bgColor: "#16a34a",
       active: inSetup || paused || stopped,
     },
     {
       action: "PAUSE",
-      icon: <Pause size={18} />,
+      icon: <Pause className="size-[24px]" />,
       label: t("actions.pause"),
       bgColor: "#d97706",
       active: inProd,
     },
     {
       action: "STOP",
-      icon: <Square size={18} />,
+      icon: <Square className="size-[24px]" />,
       label: t("actions.stop"),
       bgColor: "#dc2626",
       active: inProd,
     },
     {
       action: "ON_HOLD",
-      icon: <AlertTriangle size={18} />,
+      icon: <AlertTriangle className="size-[24px]" />,
       label: t("actions.hold"),
       bgColor: "#ea580c",
       active: inProd,
     },
     {
       action: "COMP",
-      icon: <SkipForward size={18} />,
+      icon: <SkipForward className="size-[24px]" />,
       label: t("actions.complete"),
       bgColor: "#2563eb",
       active: inProd,
@@ -98,10 +100,10 @@ const STATUS_DISPLAY: Record<OperationStatus, { labelKey: string; bgColor: strin
   DONE:    { labelKey: "status.done",       bgColor: "#059669" },
 };
 
-export function StatusActionBar({ transac, copmachine, statusCode }: StatusActionBarProps) {
+export function StatusActionBar({ transac, copmachine, statusCode, onStatusChanged }: StatusActionBarProps) {
   const { t } = useTranslation();
   const status = statusCodeToEnum(statusCode);
-  const { loading, confirmAction, requestChange, cancelChange, executeChange } = useStatusChange(transac, copmachine);
+  const { loading, confirmAction, requestChange, cancelChange, executeChange } = useStatusChange(transac, copmachine, onStatusChanged);
 
   const actions = getAllActions(status, t);
 
@@ -134,7 +136,7 @@ export function StatusActionBar({ transac, copmachine, statusCode }: StatusActio
               }}
               disabled={loading}
             >
-              <ChevronUp size={18} />
+              <ChevronUp className="size-[24px]" />
               {t(STATUS_DISPLAY[status].labelKey)}
             </Button>
           </DropdownMenuTrigger>
@@ -143,26 +145,29 @@ export function StatusActionBar({ transac, copmachine, statusCode }: StatusActio
             align="start"
             className="w-[220px] p-1"
           >
-            {actions.map((action) => (
-              <DropdownMenuItem
-                key={action.action}
-                onClick={() => action.active && requestChange(action.action)}
-                className="gap-3 text-base py-3 px-4 rounded-md mb-0.5 last:mb-0 font-medium border-2"
-                style={
-                  action.active
-                    ? { backgroundColor: action.bgColor, color: "#ffffff", borderColor: "rgba(255,255,255,0.6)", cursor: "pointer" }
-                    : { backgroundColor: "#f3f4f6", color: "#374151", borderColor: "#e5e7eb", cursor: "not-allowed", opacity: 0.7 }
-                }
-              >
-                <span
-                  className="shrink-0"
-                  style={action.active ? undefined : { opacity: 0.4 }}
+            {actions.map((action) => {
+              const iconColor = action.active ? "#ffffff" : "#374151";
+              return (
+                <DropdownMenuItem
+                  key={action.action}
+                  onClick={() => action.active && requestChange(action.action)}
+                  className="gap-3 text-base py-3 px-4 rounded-md mb-0.5 last:mb-0 font-medium border-2"
+                  style={
+                    action.active
+                      ? { backgroundColor: action.bgColor, color: "#ffffff", borderColor: "rgba(255,255,255,0.6)", cursor: "pointer" }
+                      : { backgroundColor: "#f3f4f6", color: "#374151", borderColor: "#e5e7eb", cursor: "not-allowed", opacity: 0.7 }
+                  }
                 >
-                  {action.icon}
-                </span>
-                <span>{action.label}</span>
-              </DropdownMenuItem>
-            ))}
+                  <span className="shrink-0">
+                    {React.cloneElement(action.icon as React.ReactElement<any>, {
+                      strokeWidth: 2,
+                      style: { color: iconColor, stroke: iconColor },
+                    })}
+                  </span>
+                  <span>{action.label}</span>
+                </DropdownMenuItem>
+              );
+            })}
           </DropdownMenuContent>
         </DropdownMenu>
 

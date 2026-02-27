@@ -15,9 +15,6 @@ export function useProductionTime() {
       const res = await getProductionTime({
         startDate: filters.startDate,
         endDate: filters.endDate,
-        orderSearch: filters.orderSearch,
-        department: filters.department,
-        machine: filters.machine,
       });
       if (res.success) {
         setEntries(res.data);

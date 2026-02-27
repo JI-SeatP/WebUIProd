@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { W_PRESS_SECTION } from "@/constants/widths";
@@ -71,7 +71,7 @@ export function PressInfoSection({ operation }: PressInfoSectionProps) {
         {/* Mold Info */}
         <Card className={cn(W_PRESS_SECTION.moldCard, "py-0 gap-0")}>
           <CardContent className="px-4 pt-3 pb-3">
-            <div className="flex gap-6">
+            <div className="grid grid-cols-[29%_27%_22%_22%]">
               {/* Col 1: Code + Type */}
               <div className="space-y-2 min-w-0">
                 <div className="space-y-0.5">

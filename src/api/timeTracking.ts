@@ -1,5 +1,5 @@
 import { apiGet, apiPost } from "./client";
-import type { TimeEntry } from "@/types/timeTracking";
+import type { TimeEntry, EmployeeHoursEntry, UpdateTimeEntryPayload } from "@/types/timeTracking";
 
 export function getProductionTime(params: {
   startDate?: string;
@@ -32,6 +32,45 @@ export function addHours(payload: {
   effortRate: number;
 }) {
   return apiPost<{ success: boolean }>("addHours.cfm", payload);
+}
+
+export function getEmployeeProductionTime(params: {
+  employeeCode: number;
+  date: string;
+}) {
+  const query = new URLSearchParams();
+  query.set("employeeCode", String(params.employeeCode));
+  query.set("date", params.date);
+  return apiGet<TimeEntry[]>(`getEmployeeProductionTime.cfm?${query}`);
+}
+
+export function updateTimeEntry(payload: UpdateTimeEntryPayload) {
+  return apiPost<{ TJSEQ: number }>("updateTimeEntry.cfm", payload as Record<string, unknown>);
+}
+
+export function getEmployeeHours(params: {
+  employeeCode: number;
+  date: string;
+}) {
+  const query = new URLSearchParams();
+  query.set("employeeCode", String(params.employeeCode));
+  query.set("date", params.date);
+  return apiGet<EmployeeHoursEntry[]>(`getEmployeeHours.cfm?${query}`);
+}
+
+export function deleteEmployeeHours(ehseq: number) {
+  return apiPost<{ EHSEQ: number }>("deleteEmployeeHours.cfm", { ehseq });
+}
+
+export function updateEmployeeHours(payload: {
+  ehseq: number;
+  startTime: string;
+  endTime: string;
+  department: number;
+  machine: number;
+  effortRate: number;
+}) {
+  return apiPost<{ EHSEQ: number }>("updateEmployeeHours.cfm", payload);
 }
 
 export function searchTimeEntries(params: {

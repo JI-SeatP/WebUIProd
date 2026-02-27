@@ -11,6 +11,7 @@ interface NumPadProps {
   allowDecimal?: boolean;
   showDisplay?: boolean;
   showActions?: boolean;
+  displayValue?: string;
   className?: string;
 }
 
@@ -22,6 +23,7 @@ export function NumPad({
   allowDecimal = false,
   showDisplay = true,
   showActions = true,
+  displayValue,
   className,
 }: NumPadProps) {
   const handleKey = useCallback(
@@ -52,8 +54,8 @@ export function NumPad({
     >
       {/* Display */}
       {showDisplay && (
-        <div className="bg-muted rounded-md px-4 py-3 mb-3 text-right text-2xl font-mono tabular-nums min-h-[52px] flex items-center justify-end">
-          {value || "0"}
+        <div className="bg-muted rounded-md px-4 py-3 mb-3 text-2xl font-mono tabular-nums min-h-[52px] flex items-center" style={{ justifyContent: displayValue ? "center" : "flex-end" }}>
+          {displayValue ?? (value || "0")}
         </div>
       )}
 

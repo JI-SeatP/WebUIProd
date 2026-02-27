@@ -205,7 +205,20 @@
     "shift2": "Shift 2 (15:30-00:00)",
     "shift3": "Shift 3 (00:00-07:00)",
     "statusUpdated": "Status updated",
-    "hoursSaved": "Hours saved successfully"
+    "show": "Show",
+    "showAll": "All",
+    "showOnlyQty": "Only Quantities",
+    "hoursSaved": "Hours saved successfully",
+    "combined": "Combined",
+    "todayEntries": "Today's Entries",
+    "employeeHoursTitle": "Employee Hours",
+    "deleteEntry": "Delete",
+    "modifyEntry": "Modify",
+    "totalHours": "Total Hours",
+    "confirmDelete": "Confirm deletion?",
+    "entryDeleted": "Entry deleted",
+    "entryUpdated": "Entry updated",
+    "saveChanges": "Save"
   },
   "inventory": {
     "title": "Inventory",
@@ -239,6 +252,7 @@
   },
   "modals": {
     "skidScanner": "SKID Scanner",
+    "enterScanSkid": "Enter / Scan Skid Number",
     "skidNumber": "SKID No.",
     "scanSkid": "Scan or enter SKID number",
     "skidInfo": "SKID Information",

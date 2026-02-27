@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "@/context/SessionContext";
@@ -17,14 +18,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
+import { NumPad } from "@/components/shared/NumPad";
 import { W_TIME_TRACKING } from "@/constants/widths";
-import type { TimeEntry } from "@/types/timeTracking";
+import type { TimeEntry, UpdateTimeEntryPayload } from "@/types/timeTracking";
 
-interface ProductionTimeTableProps {
+interface CombinedTableProps {
   entries: TimeEntry[];
   onStatusChange: (tjseq: number, statusCode: number) => void;
+  onUpdateEntry: (payload: UpdateTimeEntryPayload) => void;
 }
 
 const statusOptions = [
@@ -39,17 +43,66 @@ function formatDuration(minutes: number): string {
   return `${h}h${m.toString().padStart(2, "0")}`;
 }
 
-export function ProductionTimeTable({
+function EditableQtyCell({
+  value,
+  onSave,
+  className,
+}: {
+  value: number;
+  onSave: (val: number) => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [numpadValue, setNumpadValue] = useState(String(value));
+
+  const handleOpen = (isOpen: boolean) => {
+    if (isOpen) {
+      setNumpadValue(String(value));
+    }
+    setOpen(isOpen);
+  };
+
+  const handleSubmit = () => {
+    const num = Number(numpadValue) || 0;
+    onSave(num);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={handleOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={`font-mono text-lg font-bold cursor-pointer hover:bg-muted rounded px-2 py-1 ${className ?? ""}`}
+        >
+          {value}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <NumPad
+          value={numpadValue}
+          onChange={setNumpadValue}
+          onSubmit={handleSubmit}
+          onClose={() => setOpen(false)}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+export function CombinedTable({
   entries,
   onStatusChange,
-}: ProductionTimeTableProps) {
+  onUpdateEntry,
+}: CombinedTableProps) {
   const { t } = useTranslation();
   const { state } = useSession();
   const navigate = useNavigate();
   const lang = state.language;
 
-  const totalQtyGood = entries.reduce((sum, e) => sum + e.QTE_BONNE, 0);
-  const totalQtyDefect = entries.reduce((sum, e) => sum + e.QTE_DEFAUT, 0);
+  const totalDuration = entries.reduce((sum, e) => sum + e.TJDUREE, 0);
+  const totalGood = entries.reduce((sum, e) => sum + e.QTE_BONNE, 0);
+  const totalDefect = entries.reduce((sum, e) => sum + e.QTE_DEFAUT, 0);
 
   return (
     <div className="border rounded-md overflow-auto">
@@ -109,11 +162,22 @@ export function ProductionTimeTable({
                 <TableCell className={W_TIME_TRACKING.employee}>
                   {entry.DECODE}/{lang === "fr" ? entry.OPERATION_P : entry.OPERATION_S}/{entry.MACODE}
                 </TableCell>
-                <TableCell className={`${W_TIME_TRACKING.qty} font-mono text-lg font-bold`}>
-                  {entry.QTE_BONNE}
+                <TableCell className={W_TIME_TRACKING.qty}>
+                  <EditableQtyCell
+                    value={entry.QTE_BONNE}
+                    onSave={(val) =>
+                      onUpdateEntry({ tjseq: entry.TJSEQ, qtyGood: val })
+                    }
+                  />
                 </TableCell>
-                <TableCell className={`${W_TIME_TRACKING.qty} font-mono text-lg font-bold text-red-600`}>
-                  {entry.QTE_DEFAUT}
+                <TableCell className={W_TIME_TRACKING.qty}>
+                  <EditableQtyCell
+                    value={entry.QTE_DEFAUT}
+                    onSave={(val) =>
+                      onUpdateEntry({ tjseq: entry.TJSEQ, qtyDefect: val })
+                    }
+                    className="text-red-600"
+                  />
                 </TableCell>
                 <TableCell className={W_TIME_TRACKING.actions}>
                   <Button
@@ -132,9 +196,11 @@ export function ProductionTimeTable({
         {entries.length > 0 && (
           <TableFooter>
             <TableRow className="h-[56px] font-bold">
-              <TableCell colSpan={6}>{t("timeTracking.totalHours")}</TableCell>
-              <TableCell className="font-mono text-lg">{totalQtyGood}</TableCell>
-              <TableCell className="font-mono text-lg text-red-600">{totalQtyDefect}</TableCell>
+              <TableCell>{t("timeTracking.totalHours")}</TableCell>
+              <TableCell>{formatDuration(totalDuration)}</TableCell>
+              <TableCell colSpan={4} />
+              <TableCell className="font-mono text-lg">{totalGood}</TableCell>
+              <TableCell className="font-mono text-lg text-red-600">{totalDefect}</TableCell>
               <TableCell />
             </TableRow>
           </TableFooter>

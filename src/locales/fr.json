@@ -205,7 +205,20 @@
     "shift2": "Quart 2 (15:30-00:00)",
     "shift3": "Quart 3 (00:00-07:00)",
     "statusUpdated": "Statut mis à jour",
-    "hoursSaved": "Heures enregistrées avec succès"
+    "show": "Afficher",
+    "showAll": "Tous",
+    "showOnlyQty": "Quantités seulement",
+    "hoursSaved": "Heures enregistrées avec succès",
+    "combined": "Combiné",
+    "todayEntries": "Entrées du jour",
+    "employeeHoursTitle": "Heures de l'employé",
+    "deleteEntry": "Supprimer",
+    "modifyEntry": "Modifier",
+    "totalHours": "Total heures",
+    "confirmDelete": "Confirmer la suppression?",
+    "entryDeleted": "Entrée supprimée",
+    "entryUpdated": "Entrée mise à jour",
+    "saveChanges": "Enregistrer"
   },
   "inventory": {
     "title": "Inventaire",
@@ -239,6 +252,7 @@
   },
   "modals": {
     "skidScanner": "Scanner SKID",
+    "enterScanSkid": "Entrer / Scanner No. SKID",
     "skidNumber": "No. SKID",
     "scanSkid": "Scanner ou entrer le numéro SKID",
     "skidInfo": "Information SKID",

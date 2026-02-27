@@ -21,6 +21,7 @@ interface MultiSelectFilterProps {
   className?: string;
   searchable?: boolean;
   popoverWidth?: string;
+  disabledValues?: Set<string>;
 }
 
 export function MultiSelectFilter({
@@ -31,6 +32,7 @@ export function MultiSelectFilter({
   className,
   searchable = false,
   popoverWidth,
+  disabledValues,
 }: MultiSelectFilterProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -59,7 +61,7 @@ export function MultiSelectFilter({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          className={cn("touch-target gap-1.5 text-sm shrink-0 px-5", className)}
+          className={cn("touch-target gap-1.5 text-[0.96rem] uppercase shrink-0 px-5", className)}
         >
           {selected.length === 1
             ? options.find((o) => o.value === selected[0])?.label ?? label
@@ -88,18 +90,25 @@ export function MultiSelectFilter({
           </div>
         )}
         <div className="max-h-[300px] overflow-auto p-1">
-          {filteredOptions.map((opt) => (
-            <label
-              key={opt.value}
-              className="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-muted cursor-pointer"
-            >
-              <Checkbox
-                checked={selected.includes(opt.value)}
-                onCheckedChange={() => handleToggle(opt.value)}
-              />
-              <span className="text-sm">{opt.label}</span>
-            </label>
-          ))}
+          {filteredOptions.map((opt) => {
+            const isDisabled = disabledValues?.has(opt.value);
+            return (
+              <label
+                key={opt.value}
+                className={cn(
+                  "flex items-center gap-2 px-2 py-2 rounded-md",
+                  isDisabled ? "opacity-40 cursor-not-allowed" : "hover:bg-muted cursor-pointer"
+                )}
+              >
+                <Checkbox
+                  checked={selected.includes(opt.value)}
+                  onCheckedChange={() => !isDisabled && handleToggle(opt.value)}
+                  disabled={isDisabled}
+                />
+                <span className="text-sm">{opt.label}</span>
+              </label>
+            );
+          })}
         </div>
         {selected.length > 0 && (
           <div className="border-t p-1">

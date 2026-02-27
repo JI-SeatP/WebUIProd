@@ -1,62 +1,14 @@
 import { http, HttpResponse } from "msw";
-import type { SkidInfo, LabelInfo, TransferInfo } from "@/types/modals";
-
-const mockSkids: Record<string, SkidInfo> = {
-  "SKID-001": {
-    SKID: "SKID-001",
-    PRODUIT_CODE: "PNL-4x8-A",
-    PRODUIT_P: "Panneau composite 4x8 A",
-    PRODUIT_S: "Composite Panel 4x8 A",
-    QTE: 250,
-    ENTREPOT_CODE: "WH-01",
-    ENTREPOT_P: "Entrepôt principal",
-    ENTREPOT_S: "Main Warehouse",
-  },
-  "SKID-002": {
-    SKID: "SKID-002",
-    PRODUIT_CODE: "PNL-4x8-B",
-    PRODUIT_P: "Panneau composite 4x8 B",
-    PRODUIT_S: "Composite Panel 4x8 B",
-    QTE: 180,
-    ENTREPOT_CODE: "WH-02",
-    ENTREPOT_P: "Entrepôt matières premières",
-    ENTREPOT_S: "Raw Materials Warehouse",
-  },
-};
-
-const mockLabels: LabelInfo[] = [
-  {
-    TRANSAC: 50001,
-    NO_PROD: "ORD-2024-001",
-    PRODUIT_P: "Panneau composite 4x8",
-    PRODUIT_S: "Composite Panel 4x8",
-    NOM_CLIENT: "Cascade Lumber",
-    QTE_PAR_SKID: 50,
-  },
-  {
-    TRANSAC: 50002,
-    NO_PROD: "ORD-2024-002",
-    PRODUIT_P: "Contreplaqué bouleau",
-    PRODUIT_S: "Birch Plywood",
-    NOM_CLIENT: "Quebec Wood Products",
-    QTE_PAR_SKID: 100,
-  },
-  {
-    TRANSAC: 50003,
-    NO_PROD: "ORD-2024-003",
-    PRODUIT_P: "Panneau MDF 5x10",
-    PRODUIT_S: "MDF Panel 5x10",
-    NOM_CLIENT: "Maritime Panels Inc.",
-    QTE_PAR_SKID: 30,
-  },
-];
+import type { TransferInfo } from "@/types/modals";
+import { loadSkids, loadLabels } from "@/mocks/loaders";
 
 export const modalsHandlers = [
   // SKID Scanner
-  http.get("/api/getSkidInfo.cfm", ({ request }) => {
+  http.get("/api/getSkidInfo.cfm", async ({ request }) => {
+    const skids = await loadSkids();
     const url = new URL(request.url);
     const skid = url.searchParams.get("skid") ?? "";
-    const info = mockSkids[skid];
+    const info = skids.find((s) => s.SKID === skid);
 
     if (!info) {
       return HttpResponse.json({
@@ -74,10 +26,11 @@ export const modalsHandlers = [
   }),
 
   // Label info (order-specific)
-  http.get("/api/getLabelInfo.cfm", ({ request }) => {
+  http.get("/api/getLabelInfo.cfm", async ({ request }) => {
+    const labels = await loadLabels();
     const url = new URL(request.url);
     const transac = Number(url.searchParams.get("transac"));
-    const label = mockLabels.find((l) => l.TRANSAC === transac);
+    const label = labels.find((l) => l.TRANSAC === transac);
 
     if (!label) {
       return HttpResponse.json({
@@ -94,11 +47,30 @@ export const modalsHandlers = [
     });
   }),
 
+  // Labels for a specific order (order details context)
+  http.get("/api/getOrderLabels.cfm", async ({ request }) => {
+    const labels = await loadLabels();
+    const url = new URL(request.url);
+    const transac = Number(url.searchParams.get("transac"));
+    // In the real system this returns all labels for the order's containers.
+    // For mock, return labels matching the transac or just return all labels to simulate.
+    const matched = labels.filter((l) => l.TRANSAC === transac);
+    // If exact match found, return it; otherwise return all labels as mock data
+    const result = matched.length > 0 ? matched : labels;
+
+    return HttpResponse.json({
+      success: true,
+      data: result,
+      message: `Found ${result.length} labels for order`,
+    });
+  }),
+
   // Label search
-  http.get("/api/searchLabels.cfm", ({ request }) => {
+  http.get("/api/searchLabels.cfm", async ({ request }) => {
+    const labels = await loadLabels();
     const url = new URL(request.url);
     const search = (url.searchParams.get("search") ?? "").toLowerCase();
-    const filtered = mockLabels.filter(
+    const filtered = labels.filter(
       (l) =>
         l.NO_PROD.toLowerCase().includes(search) ||
         l.NOM_CLIENT.toLowerCase().includes(search)
@@ -130,10 +102,11 @@ export const modalsHandlers = [
   }),
 
   // Warehouse transfer - get info
-  http.get("/api/getTransferInfo.cfm", ({ request }) => {
+  http.get("/api/getTransferInfo.cfm", async ({ request }) => {
+    const skids = await loadSkids();
     const url = new URL(request.url);
     const skid = url.searchParams.get("skid") ?? "";
-    const skidInfo = mockSkids[skid];
+    const skidInfo = skids.find((s) => s.SKID === skid);
 
     if (!skidInfo) {
       return HttpResponse.json({

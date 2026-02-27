@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
 import {
@@ -7,7 +7,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -19,17 +18,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Printer, Search } from "lucide-react";
-import { searchLabels, printLabel } from "@/api/modals";
+import { Printer, Search, X } from "lucide-react";
+import { searchLabels, printLabel, getOrderLabels } from "@/api/modals";
 import { toast } from "sonner";
 import type { LabelInfo } from "@/types/modals";
 
 interface LabelPrintingModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** When provided, auto-loads labels for this order (order details context) */
+  transac?: number;
 }
 
-export function LabelPrintingModal({ open, onOpenChange }: LabelPrintingModalProps) {
+export function LabelPrintingModal({ open, onOpenChange, transac }: LabelPrintingModalProps) {
   const { t } = useTranslation();
   const { state } = useSession();
   const lang = state.language;
@@ -40,6 +41,22 @@ export function LabelPrintingModal({ open, onOpenChange }: LabelPrintingModalPro
 
   // Print qty
   const [printQty, setPrintQty] = useState<Record<number, string>>({});
+
+  // Auto-load labels when opened from order details context
+  useEffect(() => {
+    if (open && transac) {
+      getOrderLabels(transac).then((res) => {
+        if (res.success) {
+          setSearchResults(res.data);
+        }
+      });
+    }
+    if (open && !transac) {
+      setSearchQuery("");
+      setSearchResults([]);
+      setPrintQty({});
+    }
+  }, [open, transac]);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
@@ -53,10 +70,10 @@ export function LabelPrintingModal({ open, onOpenChange }: LabelPrintingModalPro
     }
   }, [searchQuery]);
 
-  const handlePrint = useCallback(async (transac: number) => {
-    const qty = Number(printQty[transac]) || 1;
+  const handlePrint = useCallback(async (transacId: number) => {
+    const qty = Number(printQty[transacId]) || 1;
     try {
-      const res = await printLabel(transac, qty);
+      const res = await printLabel(transacId, qty);
       if (res.success) {
         toast.success(t("modals.printLabel"));
       }
@@ -67,29 +84,34 @@ export function LabelPrintingModal({ open, onOpenChange }: LabelPrintingModalPro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[700px]">
+      <DialogContent className="!max-w-[910px]">
         <DialogHeader>
           <DialogTitle>{t("modals.labelPrinting")}</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="search">
-          <TabsList>
-            <TabsTrigger value="search" className="touch-target">
-              {t("actions.search")}
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="search" className="space-y-3 mt-3">
+        <div className="space-y-3">
+            {/* Search bar — always visible, but pre-populated context skips the need for it */}
             <div className="flex items-end gap-2">
               <div className="flex-1 flex flex-col gap-1">
                 <Label className="text-sm text-muted-foreground">{t("actions.search")}</Label>
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  placeholder={t("order.number")}
-                  className="touch-target"
-                />
+                <div className="relative">
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                    placeholder={t("order.number")}
+                    className="touch-target pr-10"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-muted text-muted-foreground"
+                      onClick={() => { setSearchQuery(""); setSearchResults(transac ? [] : []); }}
+                    >
+                      <X className="size-4" />
+                    </button>
+                  )}
+                </div>
               </div>
               <Button className="touch-target gap-2" onClick={handleSearch}>
                 <Search size={18} />
@@ -150,8 +172,7 @@ export function LabelPrintingModal({ open, onOpenChange }: LabelPrintingModalPro
                 </TableBody>
               </Table>
             </div>
-          </TabsContent>
-        </Tabs>
+        </div>
       </DialogContent>
     </Dialog>
   );

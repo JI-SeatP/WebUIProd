@@ -42,7 +42,7 @@ export function LoginPage() {
   }, [code, dispatch, navigate, t, i18n]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-muted/30 p-4">
+    <div className="flex items-center justify-center min-h-screen p-4" style={{ backgroundColor: "#C5E0D4" }}>
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center pb-2">
           <img src="/logo-seatply.png" alt="SeatPly" className="h-16 mx-auto mb-1" />

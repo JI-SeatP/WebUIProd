@@ -62,17 +62,18 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
 
   return (
     <Card className="p-4 flex flex-col justify-start">
-      <div className="grid grid-cols-24 gap-4 items-start">
+      <div className="grid gap-2 items-start" style={{ gridTemplateColumns: "12% 15% 12.5% 8% 26% 24%" }}>
         {/* Order */}
-        <div className="col-span-3 space-y-1">
+        <div className="space-y-1">
           <div className="text-xs text-muted-foreground uppercase tracking-wide">
             {t("order.title")}
           </div>
           <div className="text-2xl font-bold">{operation.NO_PROD}</div>
+          <StatusBadge status={status} />
         </div>
 
         {/* Client */}
-        <div className="col-span-4">
+        <div>
           <Field label={t("order.client")} value={operation.NOM_CLIENT} />
           {operation.CONOPO && (
             <div className="text-xs text-muted-foreground mt-0.5">
@@ -82,7 +83,7 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
         </div>
 
         {/* Product */}
-        <div className="col-span-3">
+        <div>
           <Field
             label={t("order.product")}
             value={
@@ -98,15 +99,15 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
           />
         </div>
 
-                {/* Panel */}
-        <div className="col-span-2">
+        {/* Panel */}
+        <div>
           {operation.Panneau && (
             <Field label={t("press.panel")} value={operation.Panneau} />
           )}
         </div>
 
         {/* Quantities */}
-        <div className="col-span-7 flex items-start gap-6">
+        <div className="flex items-start gap-[19px]">
           <QtyField 
             label={t("order.qtyToMake")} 
             value={operation.QTE_A_FAB}
@@ -132,7 +133,7 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
         </div>
 
         {/* Operation / Machine */}
-        <div className="col-span-4 space-y-1.5">
+        <div className="space-y-1.5">
           <div className="text-[1.15rem] font-medium px-3 py-1 rounded-lg bg-muted text-center">
             {loc(operation.OPERATION_P, operation.OPERATION_S) ?? "—"}
           </div>
@@ -141,10 +142,6 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
           </div>
         </div>
 
-        {/* Status */}
-        <div className="col-span-1 flex items-start justify-end">
-          <StatusBadge status={status} />
-        </div>
       </div>
     </Card>
   );

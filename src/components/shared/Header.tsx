@@ -67,6 +67,11 @@ export function Header() {
   const isOnOrders = location.pathname === "/orders";
   const isOnOperation = location.pathname.includes("/operation/");
 
+  // Extract transac from URL when on operation details page
+  const operationTransac = isOnOperation
+    ? Number(location.pathname.match(/\/orders\/(\d+)\//)?.[1]) || undefined
+    : undefined;
+
   const handleLogout = () => {
     dispatch({ type: "LOGOUT" });
     navigate("/login");
@@ -93,21 +98,21 @@ export function Header() {
   };
 
   const actions: HeaderAction[] = [
-    { icon: <Clock size={25} />, label: t("timeTracking.title"), onClick: () => navigate("/time-tracking"), route: "/time-tracking" },
-    { icon: <List size={25} />, label: t("header.machineSelection"), onClick: () => setActiveModal("machine") },
-    { icon: <Maximize size={25} />, label: t("header.fullscreen"), onClick: handleFullscreen },
-    { icon: <RefreshCw size={25} />, label: t("actions.refresh"), onClick: () => window.location.reload() },
-    { icon: <ScanBarcode size={25} />, label: t("header.skidScan"), onClick: () => setActiveModal("skid") },
-    { icon: <Tag size={25} />, label: t("header.labelPrint"), onClick: () => setActiveModal("label") },
-    { icon: <Send size={25} />, label: t("header.sendMessage"), onClick: () => setActiveModal("message") },
-    { icon: <ArrowLeftRight size={25} />, label: t("actions.transfer"), onClick: () => setActiveModal("transfer"), visible: isOnOperation },
-    { icon: <ClipboardList size={25} />, label: t("inventory.title"), onClick: () => navigate("/inventory"), route: "/inventory" },
-    { icon: <LogOut size={25} />, label: t("actions.logout"), onClick: handleLogout },
+    { icon: <Clock className="size-5" />, label: t("timeTracking.title"), onClick: () => navigate("/time-tracking"), route: "/time-tracking" },
+    { icon: <List className="size-5" />, label: t("header.machineSelection"), onClick: () => setActiveModal("machine") },
+    { icon: <Maximize className="size-5" />, label: t("header.fullscreen"), onClick: handleFullscreen },
+    { icon: <RefreshCw className="size-5" />, label: t("actions.refresh"), onClick: () => window.location.reload() },
+    { icon: <ScanBarcode className="size-5" />, label: t("header.skidScan"), onClick: () => setActiveModal("skid") },
+    { icon: <Tag className="size-5" />, label: t("header.labelPrint"), onClick: () => setActiveModal("label") },
+    { icon: <Send className="size-5" />, label: t("header.sendMessage"), onClick: () => setActiveModal("message") },
+    { icon: <ArrowLeftRight className="size-5" />, label: t("actions.transfer"), onClick: () => setActiveModal("transfer"), visible: isOnOperation },
+    { icon: <ClipboardList className="size-5" />, label: t("inventory.title"), onClick: () => navigate("/inventory"), route: "/inventory" },
+    { icon: <LogOut className="size-5" />, label: t("actions.logout"), onClick: handleLogout },
   ];
 
   return (
     <>
-      <header className="flex items-center gap-2 px-3 py-[3px] border-b bg-background shrink-0">
+      <header className="flex items-center gap-2 px-3 py-[3px] border-b bg-black shrink-0">
         {/* Logo */}
         <img src="/logo-seatply.png" alt="SeatPly" className="h-12 shrink-0" />
 
@@ -118,10 +123,10 @@ export function Header() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="touch-target"
+                className="touch-target bg-white hover:bg-gray-100"
                 onClick={() => navigate(-1)}
               >
-                <ChevronLeft size={25} />
+                <ChevronLeft className="size-5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>{t("actions.back")}</TooltipContent>
@@ -133,11 +138,11 @@ export function Header() {
                 size="icon"
                 className={cn(
                   "touch-target",
-                  isOnOrders && "bg-[#aeffae] hover:bg-[#aeffae]"
+                  isOnOrders ? "bg-[#aeffae] hover:bg-[#aeffae]" : "bg-white hover:bg-gray-100"
                 )}
                 onClick={() => navigate("/orders")}
               >
-                <LayoutGrid size={25} />
+                <LayoutGrid className="size-5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Orders</TooltipContent>
@@ -147,10 +152,10 @@ export function Header() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="touch-target"
+                className="touch-target bg-white hover:bg-gray-100"
                 onClick={() => navigate(1)}
               >
-                <ChevronRight size={25} />
+                <ChevronRight className="size-5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Forward</TooltipContent>
@@ -162,7 +167,7 @@ export function Header() {
           value={state.department ? String(state.department.DESEQ) : ""}
           onValueChange={handleDepartmentChange}
         >
-          <SelectTrigger className="h-10 w-[200px] ml-2">
+          <SelectTrigger className="!h-[48px] w-[200px] ml-2 bg-white">
             <SelectValue placeholder={t("operation.department")} />
           </SelectTrigger>
           <SelectContent>
@@ -195,7 +200,7 @@ export function Header() {
                     size="icon"
                     className={cn(
                       "touch-target",
-                      action.route && location.pathname.startsWith(action.route) && "bg-[#aeffae] hover:bg-[#aeffae]"
+                      action.route && location.pathname.startsWith(action.route) ? "bg-[#aeffae] hover:bg-[#aeffae]" : "bg-white hover:bg-gray-100"
                     )}
                     onClick={action.onClick}
                   >
@@ -210,17 +215,23 @@ export function Header() {
         {/* Language toggle */}
         <div className="flex items-center gap-0.5 ml-1">
           <Button
-            variant={state.language === "fr" ? "default" : "ghost"}
+            variant="ghost"
             size="sm"
-            className={cn("h-8 px-2 text-xs font-semibold")}
+            className={cn(
+              "h-8 px-2 text-xs font-semibold text-black",
+              state.language === "fr" ? "bg-[#aeffae] hover:bg-[#aeffae]" : "bg-white hover:bg-gray-100"
+            )}
             onClick={() => handleLanguageToggle("fr")}
           >
             FR
           </Button>
           <Button
-            variant={state.language === "en" ? "default" : "ghost"}
+            variant="ghost"
             size="sm"
-            className={cn("h-8 px-2 text-xs font-semibold")}
+            className={cn(
+              "h-8 px-2 text-xs font-semibold text-black",
+              state.language === "en" ? "bg-[#aeffae] hover:bg-[#aeffae]" : "bg-white hover:bg-gray-100"
+            )}
             onClick={() => handleLanguageToggle("en")}
           >
             EN
@@ -236,6 +247,7 @@ export function Header() {
       <LabelPrintingModal
         open={activeModal === "label"}
         onOpenChange={(open) => !open && setActiveModal(null)}
+        transac={operationTransac}
       />
       <MessageModal
         open={activeModal === "message"}

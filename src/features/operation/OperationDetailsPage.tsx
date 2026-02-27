@@ -1,3 +1,4 @@
+import { useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { useSession } from "@/context/SessionContext";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -50,6 +51,11 @@ export function OperationDetailsPage() {
   const { state } = useSession();
   const { t } = useTranslation();
   const { operation, loading, error, refetch } = useOperation(transac!, copmachine!);
+  const [localStatus, setLocalStatus] = useState<string | null>(null);
+
+  const handleStatusChanged = useCallback((newStatus: string) => {
+    setLocalStatus(newStatus);
+  }, []);
 
   if (loading) {
     return <LoadingSpinner className="flex-1" />;
@@ -76,8 +82,8 @@ export function OperationDetailsPage() {
   const hasDoNotPress = false;
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-auto space-y-3 p-0 pb-32">
+    <div className="flex flex-col h-full bg-[#C5E0D4]">
+      <div className="flex-1 overflow-auto space-y-2 p-0 pb-32">
         {/* Alerts */}
         {hasPpap && <PpapAlert />}
         {hasDoNotPress && <DoNotPressAlert />}
@@ -86,7 +92,7 @@ export function OperationDetailsPage() {
         <OperationHeader operation={operation} language={state.language} />
 
         {/* Machine overview: press mold info (left, press only) + machine info panel (right) */}
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           {isPress && (
             <div className="shrink-0">
               <PressInfoSection operation={operation} />
@@ -98,9 +104,9 @@ export function OperationDetailsPage() {
         </div>
 
         {/* Operation details (left) + technical drawing (right) */}
-        <div className="flex gap-3 items-start">
+        <div className="flex gap-2 items-start">
           {/* Left: operation-specific detail cards */}
-          <div className="flex-1 min-w-0 space-y-3">
+          <div className="flex-1 min-w-0 space-y-2">
             {isPress && (
               <>
                 <PanelDetailsTable detail={MOCK_PANEL_DETAIL} />
@@ -138,7 +144,8 @@ export function OperationDetailsPage() {
       <StatusActionBar
         transac={operation.TRANSAC}
         copmachine={operation.COPMACHINE}
-        statusCode={Number(operation.STATUT_CODE)}
+        statusCode={localStatus ?? operation.STATUT_CODE}
+        onStatusChanged={handleStatusChanged}
       />
     </div>
   );

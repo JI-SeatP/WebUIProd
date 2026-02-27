@@ -1,7 +1,17 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/shared/DatePicker";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { MultiSelectFilter } from "@/components/shared/MultiSelectFilter";
+import type { FilterOption } from "@/components/shared/MultiSelectFilter";
 import { Search } from "lucide-react";
 import type { TimeTrackingFilters } from "@/types/timeTracking";
 
@@ -9,14 +19,31 @@ interface ProductionTimeFiltersProps {
   filters: TimeTrackingFilters;
   onFiltersChange: (filters: TimeTrackingFilters) => void;
   onSearch: () => void;
+  tabsList?: React.ReactNode;
+  orderNumbers?: string[];
+  deptOptions?: FilterOption[];
+  machineOptions?: FilterOption[];
+  disabledDepts?: Set<string>;
+  disabledMachines?: Set<string>;
 }
 
 export function ProductionTimeFilters({
   filters,
   onFiltersChange,
   onSearch,
+  tabsList,
+  orderNumbers = [],
+  deptOptions = [],
+  machineOptions = [],
+  disabledDepts,
+  disabledMachines,
 }: ProductionTimeFiltersProps) {
   const { t } = useTranslation();
+
+  const orderOptions = useMemo(
+    () => orderNumbers.map((o) => ({ value: o, label: o })),
+    [orderNumbers]
+  );
 
   const updateFilter = <K extends keyof TimeTrackingFilters>(
     key: K,
@@ -26,56 +53,81 @@ export function ProductionTimeFilters({
   };
 
   return (
-    <div className="flex items-end gap-3 flex-wrap">
-      <div className="flex flex-col gap-1">
+    <div className="bg-white rounded-lg p-2 pt-4 pb-[14px] space-y-4">
+      <div className="grid grid-cols-[35%_65%]">
+        <div />
+        <div className="flex items-center">{tabsList}</div>
+      </div>
+      <div className="flex items-end gap-3 flex-wrap">
+      <div className="flex flex-col gap-1 ml-5">
         <Label className="text-sm text-muted-foreground">{t("timeTracking.dateStart")}</Label>
-        <Input
-          type="date"
+        <DatePicker
           value={filters.startDate}
-          onChange={(e) => updateFilter("startDate", e.target.value)}
-          className="touch-target"
+          onChange={(v) => updateFilter("startDate", v)}
         />
       </div>
       <div className="flex flex-col gap-1">
         <Label className="text-sm text-muted-foreground">{t("timeTracking.dateEnd")}</Label>
-        <Input
-          type="date"
+        <DatePicker
           value={filters.endDate}
-          onChange={(e) => updateFilter("endDate", e.target.value)}
-          className="touch-target"
+          onChange={(v) => updateFilter("endDate", v)}
         />
       </div>
       <div className="flex flex-col gap-1">
         <Label className="text-sm text-muted-foreground">{t("timeTracking.orderSearch")}</Label>
-        <Input
-          value={filters.orderSearch}
-          onChange={(e) => updateFilter("orderSearch", e.target.value)}
-          placeholder={t("order.number")}
-          className="touch-target"
+        <MultiSelectFilter
+          label={t("timeTracking.showAll")}
+          options={orderOptions}
+          selected={filters.selectedOrders}
+          onChange={(v) => updateFilter("selectedOrders", v)}
+          searchable
+          popoverWidth="w-[250px]"
         />
       </div>
       <div className="flex flex-col gap-1">
         <Label className="text-sm text-muted-foreground">{t("operation.department")}</Label>
-        <Input
-          value={filters.department}
-          onChange={(e) => updateFilter("department", e.target.value)}
-          placeholder={t("filters.allDepartments")}
-          className="touch-target"
+        <MultiSelectFilter
+          label={t("filters.allDepartments")}
+          options={deptOptions}
+          selected={filters.selectedDepartments}
+          onChange={(v) => updateFilter("selectedDepartments", v)}
+          disabledValues={disabledDepts}
+          searchable
+          popoverWidth="w-[300px]"
         />
       </div>
       <div className="flex flex-col gap-1">
         <Label className="text-sm text-muted-foreground">{t("operation.machine")}</Label>
-        <Input
-          value={filters.machine}
-          onChange={(e) => updateFilter("machine", e.target.value)}
-          placeholder={t("filters.allMachines")}
-          className="touch-target"
+        <MultiSelectFilter
+          label={t("filters.allMachines")}
+          options={machineOptions}
+          selected={filters.selectedMachines}
+          onChange={(v) => updateFilter("selectedMachines", v)}
+          disabledValues={disabledMachines}
+          searchable
+          popoverWidth="w-[330px]"
         />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label className="text-sm text-muted-foreground">{t("timeTracking.show")}</Label>
+        <Select
+          value={filters.showMode}
+          onValueChange={(v) => updateFilter("showMode", v as "all" | "onlyQty")}
+        >
+          <SelectTrigger className="w-[200px] !h-12">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("timeTracking.showAll")}</SelectItem>
+            <SelectItem value="onlyQty">{t("timeTracking.showOnlyQty")}</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       <Button className="touch-target gap-2" onClick={onSearch}>
         <Search size={18} />
         {t("actions.search")}
       </Button>
+      </div>
     </div>
   );
 }

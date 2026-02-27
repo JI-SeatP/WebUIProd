@@ -34,7 +34,7 @@ export const W_OPERATION_HEADER = {
   productLabel:   "w-[80px]",
   productValue:   "w-[250px]",
   qtyLabel:       "w-[100px]",
-  qtyValue:       "w-[80px]",
+  qtyValue:       "w-[100px]",
   operationLabel: "w-[100px]",
   operationValue: "w-[250px]",
   statusLabel:    "w-[80px]",
@@ -84,15 +84,15 @@ export const W_DRAWING_PANEL = {
 export const W_PRESS_SECTION = {
   materialsCard: "w-[150px]",
   machineCard:   "w-[228px]",
-  moldCard:      "w-[460px]",
+  moldCard:      "w-[552px]",
 } as const;
 
 // ───────────────────────────────────────
 // WIDTH - MOLD_INFO (S003 Press)
 // ───────────────────────────────────────
 export const W_MOLD_INFO = {
-  label:     "w-[160px]",
-  value:     "w-[200px]",
+  label:     "w-[192px]",
+  value:     "w-[240px]",
 } as const;
 
 // ───────────────────────────────────────
@@ -140,6 +140,20 @@ export const W_INVENTORY = {
   unit:        "w-[80px]",
   date:        "w-[120px]",
   actions:     "w-[80px]",
+} as const;
+
+// ───────────────────────────────────────
+// WIDTH - EMPLOYEE_HOURS_TABLE (S007 Add Hours)
+// ───────────────────────────────────────
+export const W_EMPLOYEE_HOURS = {
+  startEnd:    "w-[150px]",
+  duration:    "w-[90px]",
+  department:  "w-[120px]",
+  machine:     "w-[120px]",
+  employee:    "w-[160px]",
+  effortRate:  "w-[90px]",
+  hoursWorked: "w-[110px]",
+  actions:     "w-[100px]",
 } as const;
 
 // ───────────────────────────────────────

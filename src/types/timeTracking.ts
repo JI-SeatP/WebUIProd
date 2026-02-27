@@ -43,9 +43,10 @@ export interface EmployeeHours {
 export interface TimeTrackingFilters {
   startDate: string;
   endDate: string;
-  orderSearch: string;
-  department: string;
-  machine: string;
+  selectedOrders: string[];
+  selectedDepartments: string[];
+  selectedMachines: string[];
+  showMode: "all" | "onlyQty";
 }
 
 export interface SearchFilters {
@@ -54,4 +55,27 @@ export interface SearchFilters {
   department: string;
   machine: string;
   employee: string;
+}
+
+export interface EmployeeHoursEntry {
+  EHSEQ: number;
+  EHDEBUT: string;
+  EHFIN: string;
+  EHDUREE: number;
+  DEPARTEMENT: number;
+  DECODE: string;
+  MACODE: string;
+  MACHINE_P: string;
+  MACHINE_S: string;
+  EMNOIDENT: number;
+  EMNOM: string;
+  EFFORTRATE: number;
+  HOURSWORKED: number;
+}
+
+export interface UpdateTimeEntryPayload {
+  tjseq: number;
+  qtyGood?: number;
+  qtyDefect?: number;
+  statusCode?: number;
 }

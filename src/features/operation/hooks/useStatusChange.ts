@@ -5,7 +5,11 @@ import { useSession } from "@/context/SessionContext";
 
 export type StatusAction = "SETUP" | "PROD" | "PAUSE" | "STOP" | "COMP" | "ON_HOLD" | "RESET_READY";
 
-export function useStatusChange(transac: number, copmachine: number | null) {
+export function useStatusChange(
+  transac: number,
+  copmachine: number | null,
+  onStatusChanged?: (newStatus: string) => void
+) {
   const navigate = useNavigate();
   const { state } = useSession();
   const [loading, setLoading] = useState(false);
@@ -32,18 +36,20 @@ export function useStatusChange(transac: number, copmachine: number | null) {
       });
 
       if (res.success) {
+        // Update local status immediately
+        onStatusChanged?.(confirmAction);
+
         // STOP and COMP navigate to questionnaire
         if (confirmAction === "STOP" || confirmAction === "COMP") {
           const type = confirmAction === "STOP" ? "stop" : "comp";
           navigate(`/orders/${transac}/questionnaire/${type}`);
         }
-        // Other statuses stay on operation page (data will refresh)
       }
     } finally {
       setLoading(false);
       setConfirmAction(null);
     }
-  }, [confirmAction, transac, copmachine, state.employee, navigate]);
+  }, [confirmAction, transac, copmachine, state.employee, navigate, onStatusChanged]);
 
   return {
     loading,

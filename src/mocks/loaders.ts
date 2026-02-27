@@ -4,6 +4,9 @@ import type { Employee } from "@/types/employee";
 import type { WorkOrder, WorkOrderDetail } from "@/types/workOrder";
 import type { Warehouse } from "@/types/warehouse";
 import type { Team, EmployeeFunction } from "@/types/team";
+import type { TimeEntry, EmployeeHoursEntry } from "@/types/timeTracking";
+import type { InventoryTransaction, ContainerDetail } from "@/types/inventory";
+import type { SkidInfo, LabelInfo } from "@/types/modals";
 
 function parseCSV<T>(csv: string): T[] {
   const lines = csv.trim().split("\n");
@@ -67,6 +70,12 @@ let workOrderDetailsCache: WorkOrderDetail[] | null = null;
 let warehousesCache: Warehouse[] | null = null;
 let teamsCache: Team[] | null = null;
 let employeeFunctionsCache: EmployeeFunction[] | null = null;
+let productionTimeCache: TimeEntry[] | null = null;
+let employeeHoursCache: EmployeeHoursEntry[] | null = null;
+let skidsCache: SkidInfo[] | null = null;
+let labelsCache: LabelInfo[] | null = null;
+let inventoryTransactionsCache: InventoryTransaction[] | null = null;
+let containerDetailsCache: (ContainerDetail & { TRSEQ: number })[] | null = null;
 
 async function loadCSV(filename: string): Promise<string> {
   const response = await fetch(`/src/mocks/data/${filename}`);
@@ -127,4 +136,46 @@ export async function loadEmployeeFunctions(): Promise<EmployeeFunction[]> {
   const csv = await loadCSV("employee_functions.csv");
   employeeFunctionsCache = parseCSV<EmployeeFunction>(csv);
   return employeeFunctionsCache;
+}
+
+export async function loadProductionTime(): Promise<TimeEntry[]> {
+  if (productionTimeCache) return productionTimeCache;
+  const csv = await loadCSV("production_time.csv");
+  productionTimeCache = parseCSV<TimeEntry>(csv);
+  return productionTimeCache;
+}
+
+export async function loadEmployeeHours(): Promise<EmployeeHoursEntry[]> {
+  if (employeeHoursCache) return employeeHoursCache;
+  const csv = await loadCSV("employee_hours.csv");
+  employeeHoursCache = parseCSV<EmployeeHoursEntry>(csv);
+  return employeeHoursCache;
+}
+
+export async function loadSkids(): Promise<SkidInfo[]> {
+  if (skidsCache) return skidsCache;
+  const csv = await loadCSV("skids.csv");
+  skidsCache = parseCSV<SkidInfo>(csv);
+  return skidsCache;
+}
+
+export async function loadLabels(): Promise<LabelInfo[]> {
+  if (labelsCache) return labelsCache;
+  const csv = await loadCSV("labels.csv");
+  labelsCache = parseCSV<LabelInfo>(csv);
+  return labelsCache;
+}
+
+export async function loadInventoryTransactions(): Promise<InventoryTransaction[]> {
+  if (inventoryTransactionsCache) return inventoryTransactionsCache;
+  const csv = await loadCSV("inventory_transactions.csv");
+  inventoryTransactionsCache = parseCSV<InventoryTransaction>(csv);
+  return inventoryTransactionsCache;
+}
+
+export async function loadContainerDetails(): Promise<(ContainerDetail & { TRSEQ: number })[]> {
+  if (containerDetailsCache) return containerDetailsCache;
+  const csv = await loadCSV("container_details.csv");
+  containerDetailsCache = parseCSV<ContainerDetail & { TRSEQ: number }>(csv);
+  return containerDetailsCache;
 }
