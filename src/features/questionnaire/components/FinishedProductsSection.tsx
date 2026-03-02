@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NumPad } from "@/components/shared/NumPad";
@@ -25,6 +25,7 @@ export interface FinishedProductRow {
 interface FinishedProductsSectionProps {
   products: FinishedProductRow[];
   onProductsChange: (products: FinishedProductRow[]) => void;
+  theme?: "modern" | "minimal" | "dense";
 }
 
 let nextId = 1;
@@ -32,6 +33,7 @@ let nextId = 1;
 export function FinishedProductsSection({
   products,
   onProductsChange,
+  theme = "modern",
 }: FinishedProductsSectionProps) {
   const { t } = useTranslation();
   const [activeNumpad, setActiveNumpad] = useState<number | null>(null);
@@ -59,21 +61,39 @@ export function FinishedProductsSection({
     [products, onProductsChange]
   );
 
+  const headerClasses = {
+    modern: "py-1.5 px-3 flex flex-row items-center justify-between",
+    minimal: "py-2.5 px-4 flex flex-row items-center justify-between",
+    dense: "py-1 px-3 border-b border-green-200 flex flex-row items-center justify-between",
+  }[theme];
+
+  const headerTextClasses = {
+    modern: "border border-green-400 bg-green-50 rounded-lg px-3 py-1 text-2xl font-bold text-green-900 uppercase tracking-wider",
+    minimal: "text-sm font-semibold text-green-900",
+    dense: "text-xs font-bold text-green-900 uppercase",
+  }[theme];
+
+  const contentClasses = {
+    modern: "px-3 pt-0.5 pb-2",
+    minimal: "px-4 pt-0.5 pb-3",
+    dense: "px-3 pt-px pb-1.5",
+  }[theme];
+
   return (
-    <Card>
-      <CardHeader className="py-3 px-4 flex flex-row items-center justify-between">
-        <CardTitle className="text-base">{t("questionnaire.finishedProducts")}</CardTitle>
+    <Card className={`bg-white ${theme === "dense" ? "border border-gray-200" : ""}`}>
+      <div className={headerClasses}>
+        <div className={headerTextClasses}>{t("questionnaire.finishedProducts")}</div>
         <Button
           variant="outline"
           size="sm"
-          className="touch-target gap-2 text-base"
+          className={`touch-target gap-2 text-green-800 border-2 border-green-600 hover:text-green-900 hover:border-green-700 ${theme === "dense" ? "text-xs h-8" : "text-base"}`}
           onClick={addRow}
         >
-          <Plus size={18} />
+          <Plus size={theme === "dense" ? 14 : 18} />
           {t("questionnaire.addProduct")}
         </Button>
-      </CardHeader>
-      <CardContent className="px-4 pb-3">
+      </div>
+      <CardContent className={contentClasses}>
         {products.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">
             {t("common.noResults")}
@@ -82,8 +102,8 @@ export function FinishedProductsSection({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[250px]">{t("order.product")}</TableHead>
                 <TableHead className="w-[120px]">{t("questionnaire.qty")}</TableHead>
+                <TableHead className="w-[250px]">{t("order.product")}</TableHead>
                 <TableHead className="w-[180px]">{t("questionnaire.container")}</TableHead>
                 <TableHead className="w-[80px]" />
               </TableRow>
@@ -91,14 +111,6 @@ export function FinishedProductsSection({
             <TableBody>
               {products.map((row) => (
                 <TableRow key={row.id} className="h-[56px]">
-                  <TableCell>
-                    <Input
-                      value={row.product}
-                      onChange={(e) => updateRow(row.id, "product", e.target.value)}
-                      className="touch-target text-base"
-                      placeholder={t("order.product")}
-                    />
-                  </TableCell>
                   <TableCell>
                     <Popover
                       open={activeNumpad === row.id}
@@ -108,7 +120,7 @@ export function FinishedProductsSection({
                         <Input
                           value={row.qty}
                           readOnly
-                          className="touch-target text-lg font-mono cursor-pointer"
+                          className="touch-target !text-3xl font-mono font-bold cursor-pointer bg-white text-green-600"
                           placeholder="0"
                         />
                       </PopoverTrigger>
@@ -124,9 +136,17 @@ export function FinishedProductsSection({
                   </TableCell>
                   <TableCell>
                     <Input
+                      value={row.product}
+                      onChange={(e) => updateRow(row.id, "product", e.target.value)}
+                      className="touch-target text-base bg-white"
+                      placeholder={t("order.product")}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
                       value={row.container}
                       onChange={(e) => updateRow(row.id, "container", e.target.value)}
-                      className="touch-target text-base"
+                      className="touch-target !text-2xl bg-white"
                       placeholder={t("questionnaire.container")}
                     />
                   </TableCell>

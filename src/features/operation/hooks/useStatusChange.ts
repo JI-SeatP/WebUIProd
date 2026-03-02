@@ -42,7 +42,8 @@ export function useStatusChange(
         // STOP and COMP navigate to questionnaire
         if (confirmAction === "STOP" || confirmAction === "COMP") {
           const type = confirmAction === "STOP" ? "stop" : "comp";
-          navigate(`/orders/${transac}/questionnaire/${type}`);
+          const copValue = copmachine ?? 0;
+          navigate(`/orders/${transac}/questionnaire/${type}?copmachine=${copValue}`);
         }
       }
     } finally {

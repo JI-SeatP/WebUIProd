@@ -135,7 +135,7 @@
     "goodQuantity": "Quantité bonne",
     "defectQuantity": "Quantité défectueuse",
     "defectType": "Type de défaut",
-    "finishedProducts": "Produits finis",
+    "finishedProducts": "Qté produite",
     "materialOutput": "Sortie matériel",
     "notes": "Notes",
     "employeeCode": "Code employé",
@@ -153,7 +153,8 @@
     "submitError": "Erreur lors de la soumission du questionnaire",
     "employeeRequired": "Le code employé est requis",
     "causeRequired": "La cause d'arrêt est requise",
-    "addProduct": "Ajouter produit"
+    "addProduct": "Ajouter produit",
+    "confirmQuantities": "Confirmer les quantités"
   },
   "dialogs": {
     "loading": "Veuillez patienter...",
@@ -243,7 +244,7 @@
     "productionTime": "Temps de production",
     "defectQuantities": "Quantités défectueuses",
     "goodQuantities": "Quantités bonnes",
-    "finishedProducts": "Produits finis",
+    "finishedProducts": "Qté produite",
     "materialOutput": "Sortie matériel",
     "originalQty": "Qté originale",
     "correctedQty": "Qté corrigée",

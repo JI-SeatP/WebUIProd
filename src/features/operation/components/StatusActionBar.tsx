@@ -24,6 +24,7 @@ interface StatusActionBarProps {
   transac: number;
   copmachine: number | null;
   statusCode: number | string;
+  orderNumber: string;
   onStatusChanged?: (newStatus: string) => void;
 }
 
@@ -100,7 +101,7 @@ const STATUS_DISPLAY: Record<OperationStatus, { labelKey: string; bgColor: strin
   DONE:    { labelKey: "status.done",       bgColor: "#059669" },
 };
 
-export function StatusActionBar({ transac, copmachine, statusCode, onStatusChanged }: StatusActionBarProps) {
+export function StatusActionBar({ transac, copmachine, statusCode, orderNumber, onStatusChanged }: StatusActionBarProps) {
   const { t } = useTranslation();
   const status = statusCodeToEnum(statusCode);
   const { loading, confirmAction, requestChange, cancelChange, executeChange } = useStatusChange(transac, copmachine, onStatusChanged);
@@ -177,8 +178,12 @@ export function StatusActionBar({ transac, copmachine, statusCode, onStatusChang
       <ConfirmDialog
         open={!!confirmAction}
         onOpenChange={(open) => !open && cancelChange()}
-        title={t("dialogs.confirmation")}
-        description={`${confirmAction ? confirmLabels[confirmAction] : ""} — ${t("order.title")} ${transac}?`}
+        title={
+          <span>
+            {confirmAction ? confirmLabels[confirmAction] : ""} — {t("order.title")}{" "}
+            <span className="text-blue-600">{orderNumber}</span>?
+          </span>
+        }
         onConfirm={executeChange}
         variant={confirmAction === "STOP" ? "destructive" : "default"}
       />

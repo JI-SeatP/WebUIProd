@@ -45,7 +45,7 @@ export function getEmployeeProductionTime(params: {
 }
 
 export function updateTimeEntry(payload: UpdateTimeEntryPayload) {
-  return apiPost<{ TJSEQ: number }>("updateTimeEntry.cfm", payload as Record<string, unknown>);
+  return apiPost<{ TJSEQ: number }>("updateTimeEntry.cfm", payload as unknown as Record<string, unknown>);
 }
 
 export function getEmployeeHours(params: {

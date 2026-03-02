@@ -32,7 +32,7 @@ function DateField({ label, value }: { label: string; value: React.ReactNode }) 
 
 export function MachineInfoPanel({ operation }: MachineInfoPanelProps) {
   const { t } = useTranslation();
-  const op = operation as Record<string, unknown>;
+  const op = operation as unknown as Record<string, unknown>;
 
   // Notes field varies by machine family
   const getNotes = (): string => {

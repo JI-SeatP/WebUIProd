@@ -100,7 +100,7 @@ export const W_MOLD_INFO = {
 // ───────────────────────────────────────
 export const W_QUESTIONNAIRE = {
   label:     "w-[180px]",
-  input:     "w-[250px]",
+  input:     "w-[150px]",
   dropdown:  "w-[300px]",
 } as const;
 

@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/select";
 import { NumPad } from "@/components/shared/NumPad";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Check } from "lucide-react";
 import { useAddHours } from "../hooks/useAddHours";
 import { EmployeeHoursTable } from "./EmployeeHoursTable";
 import { apiGet, apiPost } from "@/api/client";
@@ -23,7 +22,7 @@ import type { Machine } from "@/types/machine";
 
 export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
   const { t } = useTranslation();
-  const { form, updateField, duration, hoursWorked, loading, submit } = useAddHours();
+  const { form, updateField, hoursWorked, loading, submit } = useAddHours();
   const [empNumpadOpen, setEmpNumpadOpen] = useState(false);
   const [effortNumpadOpen, setEffortNumpadOpen] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -93,12 +92,6 @@ export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
   const handleTimeNumpadClose = () => {
     setTimeNumpadField(null);
     setTimeRaw("");
-  };
-
-  const formatDuration = (mins: number) => {
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return `${h}h${m.toString().padStart(2, "0")}`;
   };
 
   return (

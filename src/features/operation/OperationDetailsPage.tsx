@@ -143,8 +143,9 @@ export function OperationDetailsPage() {
       {/* Floating status action panel */}
       <StatusActionBar
         transac={operation.TRANSAC}
-        copmachine={operation.COPMACHINE}
+        copmachine={operation.COPMACHINE ?? Number(copmachine)}
         statusCode={localStatus ?? operation.STATUT_CODE}
+        orderNumber={operation.NO_PROD}
         onStatusChanged={handleStatusChanged}
       />
     </div>

@@ -1,3 +1,4 @@
+import React from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,8 +14,8 @@ import { useTranslation } from "react-i18next";
 interface ConfirmDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  title: string;
-  description: string;
+  title: React.ReactNode;
+  description?: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   onConfirm: () => void;
@@ -35,23 +36,22 @@ export function ConfirmDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="max-w-md">
+      <AlertDialogContent className="max-w-md !py-8">
         <AlertDialogHeader>
           <AlertDialogTitle className="text-xl">{title}</AlertDialogTitle>
-          <AlertDialogDescription className="text-lg">
-            {description}
-          </AlertDialogDescription>
+          {description && (
+            <AlertDialogDescription className="text-lg">
+              {description}
+            </AlertDialogDescription>
+          )}
         </AlertDialogHeader>
         <AlertDialogFooter className="flex gap-3">
           <AlertDialogCancel className="min-h-[48px] text-lg flex-1">
             {cancelLabel ?? t("actions.cancel")}
           </AlertDialogCancel>
           <AlertDialogAction
-            className={`min-h-[48px] text-lg flex-1 ${
-              variant === "destructive"
-                ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                : ""
-            }`}
+            className="min-h-[48px] text-lg flex-1"
+            style={{ backgroundColor: "#16a34a", color: "white" }}
             onClick={onConfirm}
           >
             {confirmLabel ?? t("actions.confirm")}

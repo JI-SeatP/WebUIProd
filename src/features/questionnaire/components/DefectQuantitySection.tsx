@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NumPad } from "@/components/shared/NumPad";
@@ -22,13 +22,11 @@ import {
 } from "@/components/ui/table";
 import { Plus, Trash2 } from "lucide-react";
 import { apiGet } from "@/api/client";
-import { W_DEFECT_TABLE } from "@/constants/widths";
 
 interface DefectRow {
   id: number;
   qty: string;
   typeId: string;
-  notes: string;
 }
 
 interface DefectType {
@@ -41,6 +39,7 @@ interface DefectQuantitySectionProps {
   language: string;
   defects: DefectRow[];
   onDefectsChange: (defects: DefectRow[]) => void;
+  theme?: "modern" | "minimal" | "dense";
 }
 
 let nextId = 1;
@@ -49,6 +48,7 @@ export function DefectQuantitySection({
   language,
   defects,
   onDefectsChange,
+  theme = "modern",
 }: DefectQuantitySectionProps) {
   const { t } = useTranslation();
   const isFr = language === "fr";
@@ -63,7 +63,7 @@ export function DefectQuantitySection({
   }, []);
 
   const addRow = useCallback(() => {
-    onDefectsChange([...defects, { id: nextId++, qty: "", typeId: "", notes: "" }]);
+    onDefectsChange([...defects, { id: nextId++, qty: "", typeId: "" }]);
   }, [defects, onDefectsChange]);
 
   const removeRow = useCallback(
@@ -82,39 +82,56 @@ export function DefectQuantitySection({
     [defects, onDefectsChange]
   );
 
+  const headerClasses = {
+    modern: "py-1.5 px-3 flex flex-row items-center justify-between",
+    minimal: "py-2.5 px-4 flex flex-row items-center justify-between",
+    dense: "py-1 px-3 border-b border-red-200 flex flex-row items-center justify-between",
+  }[theme];
+
+  const headerTextClasses = {
+    modern: "border border-red-400 bg-red-50 rounded-lg px-3 py-1 text-2xl font-bold text-red-900 uppercase tracking-wider",
+    minimal: "text-sm font-semibold text-red-900",
+    dense: "text-xs font-bold text-red-900 uppercase",
+  }[theme];
+
+  const contentClasses = {
+    modern: "px-3 pt-0.5 pb-2",
+    minimal: "px-4 pt-0.5 pb-3",
+    dense: "px-3 pt-px pb-1.5",
+  }[theme];
+
   return (
-    <Card>
-      <CardHeader className="py-3 px-4 flex flex-row items-center justify-between">
-        <CardTitle className="text-base">{t("questionnaire.defectQuantity")}</CardTitle>
+    <Card className={`bg-white ${theme === "dense" ? "border border-gray-200" : ""}`}>
+      <div className={headerClasses}>
+        <div className={headerTextClasses}>{t("questionnaire.defectQuantity")}</div>
         <Button
           variant="outline"
           size="sm"
-          className="touch-target gap-2 text-base"
+          className={`touch-target gap-2 text-red-800 border-2 border-red-600 hover:text-red-900 hover:border-red-700 ${theme === "dense" ? "text-xs h-8" : "text-base"}`}
           onClick={addRow}
         >
-          <Plus size={18} />
+          <Plus size={theme === "dense" ? 14 : 18} />
           {t("questionnaire.addDefect")}
         </Button>
-      </CardHeader>
-      <CardContent className="px-4 pb-3">
+      </div>
+      <CardContent className={contentClasses}>
         {defects.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">
+          <p className={`text-muted-foreground text-center ${theme === "dense" ? "text-xs py-2" : "text-sm py-4"}`}>
             {t("common.noResults")}
           </p>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className={W_DEFECT_TABLE.qty}>{t("questionnaire.qty")}</TableHead>
-                <TableHead className={W_DEFECT_TABLE.type}>{t("questionnaire.defectType")}</TableHead>
-                <TableHead className={W_DEFECT_TABLE.notes}>{t("questionnaire.notes")}</TableHead>
-                <TableHead className={W_DEFECT_TABLE.actions} />
+                <TableHead className="w-[120px]">{t("questionnaire.qty")}</TableHead>
+                <TableHead>{t("questionnaire.defectType")}</TableHead>
+                <TableHead className="w-[80px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {defects.map((row) => (
                 <TableRow key={row.id} className="h-[56px]">
-                  <TableCell className={W_DEFECT_TABLE.qty}>
+                  <TableCell>
                     <Popover
                       open={activeNumpad === row.id}
                       onOpenChange={(open) => setActiveNumpad(open ? row.id : null)}
@@ -123,7 +140,7 @@ export function DefectQuantitySection({
                         <Input
                           value={row.qty}
                           readOnly
-                          className="touch-target text-lg font-mono cursor-pointer"
+                          className="touch-target !text-3xl font-mono font-bold cursor-pointer text-red-600 bg-white"
                           placeholder="0"
                         />
                       </PopoverTrigger>
@@ -137,12 +154,12 @@ export function DefectQuantitySection({
                       </PopoverContent>
                     </Popover>
                   </TableCell>
-                  <TableCell className={W_DEFECT_TABLE.type}>
+                  <TableCell>
                     <Select
                       value={row.typeId}
                       onValueChange={(v) => updateRow(row.id, "typeId", v)}
                     >
-                      <SelectTrigger className="touch-target text-base">
+                      <SelectTrigger className="w-full touch-target text-base bg-white">
                         <SelectValue placeholder={t("questionnaire.selectDefectType")} />
                       </SelectTrigger>
                       <SelectContent>
@@ -154,15 +171,7 @@ export function DefectQuantitySection({
                       </SelectContent>
                     </Select>
                   </TableCell>
-                  <TableCell className={W_DEFECT_TABLE.notes}>
-                    <Input
-                      value={row.notes}
-                      onChange={(e) => updateRow(row.id, "notes", e.target.value)}
-                      className="touch-target text-base"
-                      placeholder={t("questionnaire.notes")}
-                    />
-                  </TableCell>
-                  <TableCell className={W_DEFECT_TABLE.actions}>
+                  <TableCell>
                     <Button
                       variant="ghost"
                       size="icon"

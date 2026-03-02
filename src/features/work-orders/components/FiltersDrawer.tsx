@@ -86,10 +86,11 @@ export function FiltersDrawer({ filters, onFiltersChange }: FiltersDrawerProps) 
   };
 
   const handleStatusToggle = (code: number, checked: boolean) => {
-    const current = filters.statuses ?? [];
+    const current = (filters.statuses ?? []) as string[];
+    const strCode = String(code);
     const updated = checked
-      ? [...current, code]
-      : current.filter((c) => c !== code);
+      ? [...current, strCode]
+      : current.filter((c) => c !== strCode);
     onFiltersChange({ ...filters, statuses: updated.length ? updated : undefined });
   };
 
@@ -241,7 +242,7 @@ export function FiltersDrawer({ filters, onFiltersChange }: FiltersDrawerProps) 
                   className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer"
                 >
                   <Checkbox
-                    checked={filters.statuses?.includes(opt.code) ?? false}
+                    checked={(filters.statuses as string[] | undefined)?.includes(String(opt.code)) ?? false}
                     onCheckedChange={(checked) =>
                       handleStatusToggle(opt.code, !!checked)
                     }

@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
 import { useOperation } from "@/features/operation/hooks/useOperation";
@@ -29,11 +29,14 @@ interface DefectRow {
 
 export function QuestionnairePage() {
   const { transac, type } = useParams<{ transac: string; type: string }>();
+  const [searchParams] = useSearchParams();
   const { state } = useSession();
   const { t } = useTranslation();
-
-  // We need copmachine from the URL — extract from the referrer or session context
-  const copmachine = state.activeOperation?.COPMACHINE?.toString() ?? "0";
+  // Get copmachine from URL query param (passed from status action) or fall back to session state
+  const copmachine =
+    searchParams.get("copmachine") ??
+    state.activeOperation?.COPMACHINE?.toString() ??
+    "0";
   const { operation, loading: opLoading } = useOperation(transac!, copmachine);
 
   const isStop = type === "stop";
@@ -93,7 +96,7 @@ export function QuestionnairePage() {
     });
 
     if (validationErrors) {
-      setErrors(validationErrors);
+      setErrors(validationErrors as Record<string, string>);
     } else {
       setErrors({});
     }
@@ -144,22 +147,12 @@ export function QuestionnairePage() {
   return (
     <div className="flex flex-col h-full">
       {/* Scrollable content */}
-      <div className="flex-1 overflow-auto space-y-3 p-3">
-        {/* Title */}
-        <h1 className="text-xl font-bold">
-          {isStop ? t("questionnaire.stopSurvey") : t("questionnaire.completionSurvey")}
-        </h1>
-
+      <div className="flex-1 overflow-auto space-y-2 px-3 pb-3 pt-0">
         {/* Order info */}
-        <OrderInfoBlock operation={operation} language={state.language} />
-
-        {/* Employee */}
-        <EmployeeEntry
-          employeeCode={employeeCode}
-          employeeName={employeeName}
-          onCodeChange={setEmployeeCode}
-          onEmployeeFound={handleEmployeeFound}
-          error={errors.employeeCode}
+        <OrderInfoBlock
+          operation={operation}
+          language={state.language}
+          label={isStop ? t("questionnaire.stopSurvey") : t("questionnaire.completionSurvey")}
         />
 
         {/* Mold action (PRESS/CNC on COMP only) */}
@@ -167,41 +160,60 @@ export function QuestionnairePage() {
           <MoldActionSection value={moldAction} onChange={setMoldAction} />
         )}
 
-        {/* Stop cause (STOP only) */}
-        {isStop && (
-          <StopCauseSection
-            language={state.language}
-            primaryCause={primaryCause}
-            secondaryCause={secondaryCause}
-            notes={notes}
-            onPrimaryCauseChange={setPrimaryCause}
-            onSecondaryCauseChange={setSecondaryCause}
-            onNotesChange={setNotes}
-            error={errors.primaryCause}
-          />
-        )}
+        {/* Employee + Stop cause side by side */}
+        <div className="flex gap-4 items-start">
+          <div className={isStop ? "w-1/3" : "w-full"}>
+            <EmployeeEntry
+              employeeCode={employeeCode}
+              employeeName={employeeName}
+              onCodeChange={setEmployeeCode}
+              onEmployeeFound={handleEmployeeFound}
+              error={errors.employeeCode}
+            />
+          </div>
+          {isStop && (
+            <div className="w-2/3">
+              <StopCauseSection
+                language={state.language}
+                primaryCause={primaryCause}
+                secondaryCause={secondaryCause}
+                notes={notes}
+                onPrimaryCauseChange={setPrimaryCause}
+                onSecondaryCauseChange={setSecondaryCause}
+                onNotesChange={setNotes}
+                error={errors.primaryCause}
+              />
+            </div>
+          )}
+        </div>
 
-        {/* Defect quantities (not for VCUT) */}
-        {showDefects && (
-          <DefectQuantitySection
-            language={state.language}
-            defects={defects}
-            onDefectsChange={setDefects}
-          />
-        )}
+        {/* Finished/Good products + Defect quantities + Material output — side by side */}
+        <div className="flex gap-4 items-start">
+          <div className="flex-1">
+            {showFinishedProducts ? (
+              <FinishedProductsSection
+                products={finishedProducts}
+                onProductsChange={setFinishedProducts}
+              />
+            ) : (
+              <GoodQuantitySection value={goodQty} onChange={setGoodQty} />
+            )}
+          </div>
 
-        {/* Good quantity OR finished products */}
-        {showFinishedProducts ? (
-          <FinishedProductsSection
-            products={finishedProducts}
-            onProductsChange={setFinishedProducts}
-          />
-        ) : (
-          <GoodQuantitySection value={goodQty} onChange={setGoodQty} />
-        )}
+          {showDefects && (
+            <div className="flex-1">
+              <DefectQuantitySection
+                language={state.language}
+                defects={defects}
+                onDefectsChange={setDefects}
+              />
+            </div>
+          )}
 
-        {/* Material output */}
-        <MaterialOutputSection materials={materials} />
+          <div className="flex-1">
+            <MaterialOutputSection materials={materials} />
+          </div>
+        </div>
       </div>
 
       {/* Fixed footer */}
@@ -222,7 +234,7 @@ export function QuestionnairePage() {
           disabled={submitLoading}
         >
           <Check size={20} />
-          OK
+          {t("questionnaire.confirmQuantities")}
         </Button>
       </div>
 

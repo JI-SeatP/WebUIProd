@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -20,17 +20,36 @@ export interface MaterialRow {
 
 interface MaterialOutputSectionProps {
   materials: MaterialRow[];
+  theme?: "modern" | "minimal" | "dense";
 }
 
-export function MaterialOutputSection({ materials }: MaterialOutputSectionProps) {
+export function MaterialOutputSection({ materials, theme = "modern" }: MaterialOutputSectionProps) {
   const { t } = useTranslation();
 
+  const headerClasses = {
+    modern: "border-l-4 border-gray-600 bg-gray-50 py-1.5 px-3",
+    minimal: "bg-gray-100 py-2.5 px-4",
+    dense: "bg-gray-50 py-1 px-3 border-b border-gray-200",
+  }[theme];
+
+  const headerTextClasses = {
+    modern: "text-xs font-bold text-gray-900 uppercase tracking-wider",
+    minimal: "text-sm font-semibold text-gray-900",
+    dense: "text-xs font-bold text-gray-900 uppercase",
+  }[theme];
+
+  const contentClasses = {
+    modern: "px-3 pt-0.5 pb-2",
+    minimal: "px-4 pt-0.5 pb-3",
+    dense: "px-3 pt-px pb-1.5",
+  }[theme];
+
   return (
-    <Card>
-      <CardHeader className="py-3 px-4">
-        <CardTitle className="text-base">{t("questionnaire.materialOutput")}</CardTitle>
-      </CardHeader>
-      <CardContent className="px-4 pb-3">
+    <Card className={theme === "dense" ? "border border-gray-200" : ""}>
+      <div className={headerClasses}>
+        <div className={headerTextClasses}>{t("questionnaire.materialOutput")}</div>
+      </div>
+      <CardContent className={contentClasses}>
         {materials.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">
             {t("common.noResults")}

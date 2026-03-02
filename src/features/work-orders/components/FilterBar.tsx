@@ -89,7 +89,7 @@ export function FilterBar({ filters, onFiltersChange, allOrders }: FilterBarProp
         matchesOpTypes(wo, filters.operationTypes) &&
         matchesMachines(wo, filters.machines)
     );
-    const presentStatuses = new Set(
+    const presentStatuses = new Set<string>(
       relevant.map((wo) => statusCodeToEnum(wo.STATUT_CODE))
     );
     return ALL_STATUS_OPTIONS

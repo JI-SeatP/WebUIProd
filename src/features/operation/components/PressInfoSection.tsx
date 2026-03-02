@@ -45,7 +45,7 @@ export function PressInfoSection({ operation }: PressInfoSectionProps) {
 
   // These fields come from the extended operation data
   // In mock mode they may be undefined — show placeholders
-  const op = operation as Record<string, unknown>;
+  const op = operation as unknown as Record<string, unknown>;
 
   return (
     <div className="space-y-3">

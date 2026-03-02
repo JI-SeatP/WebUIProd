@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NumPad } from "@/components/shared/NumPad";
@@ -15,6 +15,7 @@ interface EmployeeEntryProps {
   onCodeChange: (code: string) => void;
   onEmployeeFound: (employee: Employee) => void;
   error?: string;
+  theme?: "modern" | "minimal" | "dense";
 }
 
 export function EmployeeEntry({
@@ -23,6 +24,7 @@ export function EmployeeEntry({
   onCodeChange,
   onEmployeeFound,
   error,
+  theme = "modern",
 }: EmployeeEntryProps) {
   const { t } = useTranslation();
   const [numpadOpen, setNumpadOpen] = useState(false);
@@ -50,52 +52,68 @@ export function EmployeeEntry({
     lookupEmployee(employeeCode);
   }, [employeeCode, lookupEmployee]);
 
-  return (
-    <Card>
-      <CardHeader className="py-3 px-4">
-        <CardTitle className="text-base">{t("timeTracking.employee")}</CardTitle>
-      </CardHeader>
-      <CardContent className="px-4 pb-3">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Label className="text-sm text-muted-foreground shrink-0">
-              {t("questionnaire.employeeCode")}:
-            </Label>
-            <Popover open={numpadOpen} onOpenChange={setNumpadOpen}>
-              <PopoverTrigger asChild>
-                <Input
-                  value={employeeCode}
-                  readOnly
-                  className={`${W_QUESTIONNAIRE.input} touch-target text-lg font-mono cursor-pointer ${
-                    error || lookupError ? "border-destructive" : ""
-                  }`}
-                  placeholder="0"
-                  onClick={() => setNumpadOpen(true)}
-                />
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <NumPad
-                  value={employeeCode}
-                  onChange={onCodeChange}
-                  onSubmit={handleNumpadSubmit}
-                  onClose={() => setNumpadOpen(false)}
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
+  const headerClasses = {
+    modern: "border-l-4 border-blue-600 bg-blue-50 py-1.5 px-3",
+    minimal: "bg-blue-100 py-2.5 px-4",
+    dense: "bg-blue-50 py-1 px-3 border-b border-blue-200",
+  }[theme];
 
-          <div className="flex items-center gap-2">
-            <Label className="text-sm text-muted-foreground shrink-0">
-              {t("questionnaire.employeeName")}:
-            </Label>
-            <span className="text-lg font-medium">
-              {employeeName || "—"}
-            </span>
+  const headerTextClasses = {
+    modern: "text-xs font-bold text-blue-900 uppercase tracking-wider",
+    minimal: "text-sm font-semibold text-blue-900",
+    dense: "text-xs font-bold text-blue-900 uppercase",
+  }[theme];
+
+  const contentClasses = {
+    modern: "pt-0.5 pb-2 px-3",
+    minimal: "pt-0.5 pb-3 px-4",
+    dense: "pt-px pb-1.5 px-3",
+  }[theme];
+
+  return (
+    <Card className={theme === "dense" ? "border border-gray-200" : ""}>
+      <div className={headerClasses}>
+        <div className={headerTextClasses}>{t("timeTracking.employee")}</div>
+      </div>
+      <CardContent className={`${contentClasses} flex flex-wrap items-start gap-6`}>
+        <div className="flex flex-col gap-0.5">
+          <Label className={`${theme === "dense" ? "text-xs" : "text-sm"} text-muted-foreground`}>
+            {t("questionnaire.employeeCode")}:
+          </Label>
+          <Popover open={numpadOpen} onOpenChange={setNumpadOpen}>
+            <PopoverTrigger asChild>
+              <Input
+                value={employeeCode}
+                readOnly
+                className={`${W_QUESTIONNAIRE.input} touch-target !text-3xl font-mono cursor-pointer ${
+                  error || lookupError ? "border-destructive" : ""
+                }`}
+                placeholder="0"
+                onClick={() => setNumpadOpen(true)}
+              />
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <NumPad
+                value={employeeCode}
+                onChange={onCodeChange}
+                onSubmit={handleNumpadSubmit}
+                onClose={() => setNumpadOpen(false)}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+          <Label className={`${theme === "dense" ? "text-xs" : "text-sm"} text-muted-foreground`}>
+            {t("questionnaire.employeeName")}:
+          </Label>
+          <div className="touch-target flex items-center text-xl font-medium px-3 rounded-md bg-gray-100 border border-gray-200 w-full">
+            {employeeName || "—"}
           </div>
         </div>
 
         {(error || lookupError) && (
-          <p className="text-sm text-destructive mt-1">{error || lookupError}</p>
+          <p className="w-full text-sm text-destructive">{error || lookupError}</p>
         )}
       </CardContent>
     </Card>

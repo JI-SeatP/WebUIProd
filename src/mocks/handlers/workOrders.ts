@@ -19,7 +19,7 @@ export const workOrderHandlers = [
     }
     if (status) {
       const statuses = status.split(",").map(Number);
-      data = data.filter((wo) => statuses.includes(wo.STATUT_CODE));
+      data = data.filter((wo) => statuses.includes(Number(wo.STATUT_CODE)));
     }
     if (search) {
       const term = search.toLowerCase();

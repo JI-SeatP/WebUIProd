@@ -9,7 +9,7 @@ interface CncInfoSectionProps {
 
 export function CncInfoSection({ operation, language }: CncInfoSectionProps) {
   const { t } = useTranslation();
-  const op = operation as Record<string, unknown>;
+  const op = operation as unknown as Record<string, unknown>;
 
   const loc = (fr: unknown, en: unknown) =>
     String((language === "fr" ? fr : en) ?? fr ?? "—");
@@ -27,9 +27,9 @@ export function CncInfoSection({ operation, language }: CncInfoSectionProps) {
               ? loc(op.NEXT_OPERATION_P, op.NEXT_OPERATION_S)
               : t("common.noResults")}
           </div>
-          {op.NEXT_MACHINE_P && (
+          {!!op.NEXT_MACHINE_P && (
             <div className="text-sm mt-1">
-              {t("operation.machine")}: {loc(op.NEXT_MACHINE_P, op.NEXT_MACHINE_S)}
+              {t("operation.machine")}: {String(loc(op.NEXT_MACHINE_P, op.NEXT_MACHINE_S))}
             </div>
           )}
         </CardContent>
