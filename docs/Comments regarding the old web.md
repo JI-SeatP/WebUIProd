@@ -52,3 +52,6 @@ In general
 - Bottom block. The pdf section should show the drawing with zoom extents all in the viewer to avoid showing the drawing very small and with a lot of black borders around.
 - Add "On hold" to the operations statuses (suggested color - orange). This status allows us to quickly detect an abnormality in production, whether due to a problem or an administrative reason.
 - Allow to reset the “ready” status of an order is occasionally planned production of a certain order so that it is changed to the “setup” state but then for some reason it is cancelled and a different order is produced, it would be very convenient to be able to return the order that will not be produced to the “ready” state.
+
+S007 and S008
+I don't like that the operator needs to see 2 screens, one for time entry and the other for production entries. It would be simple if user could see all time dedicated per work order operation and the quantities produced in a unified screen. This could be developed as an additional screen after initial website is migrated.

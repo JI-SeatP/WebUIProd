@@ -31,6 +31,7 @@ Generate `.drawio` XML files with a cohesive, modern visual style inspired by sh
 2. **Readability** — Generous padding, clear hierarchy, high contrast text
 3. **Professional** — Clean lines, subtle rounded corners, no visual noise
 4. **Semantic color** — Use color purposefully: accent for primary flow, muted for secondary, destructive for error paths
+ 
 
 ## File Structure
 
@@ -67,7 +68,7 @@ The generated file is standard Draw.io XML:
 - **ERD grids**: 40px gap between tables, group related entities
 - **Cell IDs**: Use descriptive IDs when possible (e.g., `node_start`, `decision_auth`, `table_users`)
 - **Edge routing**: Use `edgeStyle=orthogonalEdgeStyle` for clean right-angle connectors
-
+- **Grouping**: In order to keep diagrams simple, add detailed logic on separate groups that arre connected to the nodes you want to detail. For example, if a process "PROC A" is simple but has one element that should be detailed, create a group titled "PROC A - Detail" on the side that shows the detail view and connect this group to "PROC A" node.
 ## Important Notes
 
 - All `.drawio` files must be valid XML — escape special characters in labels (`&amp;`, `&lt;`, `&gt;`)

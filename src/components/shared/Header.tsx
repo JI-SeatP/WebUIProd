@@ -1,0 +1,266 @@
+import { useNavigate, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { useSession } from "@/context/SessionContext";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Clock,
+  List,
+  Maximize,
+  RefreshCw,
+  ScanBarcode,
+  Tag,
+  Send,
+  ArrowLeftRight,
+  ClipboardList,
+  LogOut,
+  ChevronLeft,
+  LayoutGrid,
+  ChevronRight,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { Department } from "@/types/department";
+import { apiGet } from "@/api/client";
+import { useEffect, useState } from "react";
+import { InfoBar } from "./InfoBar";
+import { SkidScannerModal } from "@/components/modals/SkidScannerModal";
+import { LabelPrintingModal } from "@/components/modals/LabelPrintingModal";
+import { MessageModal } from "@/components/modals/MessageModal";
+import { WarehouseTransferModal } from "@/components/modals/WarehouseTransferModal";
+import { MachineSelectionModal } from "@/components/modals/MachineSelectionModal";
+
+type ModalType = "skid" | "label" | "message" | "transfer" | "machine" | null;
+
+interface HeaderAction {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  visible?: boolean;
+  route?: string;
+}
+
+export function Header() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { t, i18n } = useTranslation();
+  const { state, dispatch } = useSession();
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [activeModal, setActiveModal] = useState<ModalType>(null);
+
+  useEffect(() => {
+    apiGet<Department[]>("getDepartments.cfm").then((res) => {
+      if (res.success) setDepartments(res.data);
+    });
+  }, []);
+
+  const isOnOrders = location.pathname === "/orders";
+  const isOnOperation = location.pathname.includes("/operation/");
+
+  // Extract transac from URL when on operation details page
+  const operationTransac = isOnOperation
+    ? Number(location.pathname.match(/\/orders\/(\d+)\//)?.[1]) || undefined
+    : undefined;
+
+  const handleLogout = () => {
+    dispatch({ type: "LOGOUT" });
+    navigate("/login");
+  };
+
+  const handleDepartmentChange = (value: string) => {
+    const dept = departments.find((d) => d.DESEQ === Number(value));
+    if (dept) {
+      dispatch({ type: "SET_DEPARTMENT", payload: { department: dept } });
+    }
+  };
+
+  const handleLanguageToggle = (lang: "fr" | "en") => {
+    i18n.changeLanguage(lang);
+    dispatch({ type: "SET_LANGUAGE", payload: { language: lang } });
+  };
+
+  const handleFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      document.documentElement.requestFullscreen();
+    }
+  };
+
+  const actions: HeaderAction[] = [
+    { icon: <Clock className="size-5" />, label: t("timeTracking.title"), onClick: () => navigate("/time-tracking"), route: "/time-tracking" },
+    { icon: <List className="size-5" />, label: t("header.machineSelection"), onClick: () => setActiveModal("machine") },
+    { icon: <Maximize className="size-5" />, label: t("header.fullscreen"), onClick: handleFullscreen },
+    { icon: <RefreshCw className="size-5" />, label: t("actions.refresh"), onClick: () => window.location.reload() },
+    { icon: <ScanBarcode className="size-5" />, label: t("header.skidScan"), onClick: () => setActiveModal("skid") },
+    { icon: <Tag className="size-5" />, label: t("header.labelPrint"), onClick: () => setActiveModal("label") },
+    { icon: <Send className="size-5" />, label: t("header.sendMessage"), onClick: () => setActiveModal("message") },
+    { icon: <ArrowLeftRight className="size-5" />, label: t("actions.transfer"), onClick: () => setActiveModal("transfer"), visible: isOnOperation },
+    { icon: <ClipboardList className="size-5" />, label: t("inventory.title"), onClick: () => navigate("/inventory"), route: "/inventory" },
+    { icon: <LogOut className="size-5" />, label: t("actions.logout"), onClick: handleLogout },
+  ];
+
+  return (
+    <>
+      <header className="flex items-center gap-2 px-3 py-[3px] border-b bg-black shrink-0">
+        {/* Logo */}
+        <img src="/logo-seatply.png" alt="SeatPly" className="h-12 shrink-0" />
+
+        {/* Nav buttons */}
+        <div className="flex items-center gap-1 ml-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="touch-target bg-white hover:bg-gray-100"
+                onClick={() => navigate(-1)}
+              >
+                <ChevronLeft className="size-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t("actions.back")}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "touch-target",
+                  isOnOrders ? "bg-[#aeffae] hover:bg-[#aeffae]" : "bg-white hover:bg-gray-100"
+                )}
+                onClick={() => navigate("/orders")}
+              >
+                <LayoutGrid className="size-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Orders</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="touch-target bg-white hover:bg-gray-100"
+                onClick={() => navigate(1)}
+              >
+                <ChevronRight className="size-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Forward</TooltipContent>
+          </Tooltip>
+        </div>
+
+        {/* Department dropdown */}
+        <Select
+          value={state.department ? String(state.department.DESEQ) : ""}
+          onValueChange={handleDepartmentChange}
+        >
+          <SelectTrigger className="!h-[48px] w-[200px] ml-2 bg-white">
+            <SelectValue placeholder={t("operation.department")} />
+          </SelectTrigger>
+          <SelectContent>
+            {departments.map((dept) => (
+              <SelectItem key={dept.DESEQ} value={String(dept.DESEQ)}>
+                {state.language === "fr" ? dept.DEDESCRIPTION_P : dept.DEDESCRIPTION_S}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* User / Plant / Time info */}
+        <InfoBar />
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Action toolbar */}
+        <div className="flex items-center gap-1">
+          {actions
+            .filter((a) => a.visible !== false)
+            .map((action) => (
+              <Tooltip key={action.label}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "touch-target",
+                      action.route && location.pathname.startsWith(action.route) ? "bg-[#aeffae] hover:bg-[#aeffae]" : "bg-white hover:bg-gray-100"
+                    )}
+                    onClick={action.onClick}
+                  >
+                    {action.icon}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{action.label}</TooltipContent>
+              </Tooltip>
+            ))}
+        </div>
+
+        {/* Language toggle */}
+        <div className="flex items-center gap-0.5 ml-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "h-8 px-2 text-xs font-semibold text-black",
+              state.language === "fr" ? "bg-[#aeffae] hover:bg-[#aeffae]" : "bg-white hover:bg-gray-100"
+            )}
+            onClick={() => handleLanguageToggle("fr")}
+          >
+            FR
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "h-8 px-2 text-xs font-semibold text-black",
+              state.language === "en" ? "bg-[#aeffae] hover:bg-[#aeffae]" : "bg-white hover:bg-gray-100"
+            )}
+            onClick={() => handleLanguageToggle("en")}
+          >
+            EN
+          </Button>
+        </div>
+      </header>
+
+      {/* Modals */}
+      <SkidScannerModal
+        open={activeModal === "skid"}
+        onOpenChange={(open) => !open && setActiveModal(null)}
+      />
+      <LabelPrintingModal
+        open={activeModal === "label"}
+        onOpenChange={(open) => !open && setActiveModal(null)}
+        transac={operationTransac}
+      />
+      <MessageModal
+        open={activeModal === "message"}
+        onOpenChange={(open) => !open && setActiveModal(null)}
+      />
+      <WarehouseTransferModal
+        open={activeModal === "transfer"}
+        onOpenChange={(open) => !open && setActiveModal(null)}
+      />
+      <MachineSelectionModal
+        open={activeModal === "machine"}
+        onOpenChange={(open) => !open && setActiveModal(null)}
+      />
+    </>
+  );
+}
