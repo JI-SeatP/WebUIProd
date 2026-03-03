@@ -7,6 +7,10 @@ interface DrawingViewerProps {
   images?: string[];
 }
 
+function isPdf(url: string) {
+  return /\.pdf$/i.test(url) || /\/doc\/\d+/.test(url);
+}
+
 export function DrawingViewer({ images }: DrawingViewerProps) {
   const [page, setPage] = useState(0);
 
@@ -21,15 +25,37 @@ export function DrawingViewer({ images }: DrawingViewerProps) {
   }
 
   const total = images.length;
+  const currentUrl = images[page];
 
   return (
     <Card className="py-0 gap-0">
       <CardContent className="px-4 pt-3 pb-4 flex flex-col gap-3">
-        <img
-          src={images[page]}
-          alt={`Drawing page ${page + 1}`}
-          className="w-full rounded border object-contain max-h-[600px]"
-        />
+        {isPdf(currentUrl) ? (
+          <object
+            data={currentUrl}
+            type="application/pdf"
+            className="w-full rounded border"
+            style={{ height: "600px" }}
+          >
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+              <p className="text-sm">PDF preview not available</p>
+              <a
+                href={currentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-blue-600 underline"
+              >
+                Open PDF in new tab
+              </a>
+            </div>
+          </object>
+        ) : (
+          <img
+            src={currentUrl}
+            alt={`Drawing page ${page + 1}`}
+            className="w-full rounded border object-contain max-h-[600px]"
+          />
+        )}
         {total > 1 && (
           <div className="flex items-center justify-center gap-2">
             <Button

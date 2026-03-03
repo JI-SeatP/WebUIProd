@@ -11,11 +11,12 @@ export default defineConfig({
     },
   },
   server: {
-    // Proxy API calls to ColdFusion server during development
+    // Proxy API calls to local Express server (direct SQL Server connection)
     proxy: {
       "/api": {
-        target: "http://localhost:8500", // ColdFusion server
+        target: "http://localhost:3001",
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ""),
       },
     },
   },

@@ -162,28 +162,28 @@ export function Header() {
           </Tooltip>
         </div>
 
-        {/* Department dropdown */}
-        <Select
-          value={state.department ? String(state.department.DESEQ) : ""}
-          onValueChange={handleDepartmentChange}
-        >
-          <SelectTrigger className="!h-[48px] w-[200px] ml-2 bg-white">
-            <SelectValue placeholder={t("operation.department")} />
-          </SelectTrigger>
-          <SelectContent>
-            {departments.map((dept) => (
-              <SelectItem key={dept.DESEQ} value={String(dept.DESEQ)}>
-                {state.language === "fr" ? dept.DEDESCRIPTION_P : dept.DEDESCRIPTION_S}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
         {/* Spacer */}
         <div className="flex-1" />
 
         {/* User / Plant / Time info */}
         <InfoBar />
+
+        {/* Department dropdown */}
+        <Select
+          value={state.department ? String(state.department.DESEQ) : ""}
+          onValueChange={handleDepartmentChange}
+        >
+          <SelectTrigger className="!h-[48px] w-[200px] ml-2 bg-white !text-lg">
+            <SelectValue placeholder={t("operation.department")} />
+          </SelectTrigger>
+          <SelectContent position="popper" className="!max-h-none">
+            {departments.map((dept) => (
+              <SelectItem key={dept.DESEQ} value={String(dept.DESEQ)} className="!text-lg">
+                {state.language === "fr" ? dept.DEDESCRIPTION_P : dept.DEDESCRIPTION_S}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         {/* Spacer */}
         <div className="flex-1" />

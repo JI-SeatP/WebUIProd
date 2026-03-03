@@ -62,7 +62,7 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
 
   return (
     <Card className="p-4 flex flex-col justify-start">
-      <div className="grid gap-2 items-start" style={{ gridTemplateColumns: "80px 24px 12% 15% 12.5% 8% 26% 1fr" }}>
+      <div className="grid gap-2 items-start" style={{ gridTemplateColumns: "80px 24px 12% 27.5% 8% 26% 1fr" }}>
         {/* Priority */}
         <div className="flex items-center justify-center h-full bg-muted rounded-lg">
           {(operation as unknown as Record<string, unknown>).DCPRIORITE != null ? (
@@ -84,31 +84,35 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
           <StatusBadge status={status} />
         </div>
 
-        {/* Client */}
-        <div>
-          <Field label={t("order.client")} value={operation.NOM_CLIENT} />
-          {operation.CONOPO && (
-            <div className="text-sm text-muted-foreground mt-0.5">
-              PO: {operation.CONOPO}
-            </div>
-          )}
-        </div>
-
-        {/* Product */}
-        <div>
-          <Field
-            label={t("order.product")}
-            value={
-              <div>
-                <div>{loc(operation.PRODUIT_P, operation.PRODUIT_S) || loc(operation.INVENTAIRE_P, operation.INVENTAIRE_S)}</div>
-                {operation.REVISION && (
-                  <span className="text-xs text-muted-foreground">
-                    Rev. {operation.REVISION}
-                  </span>
-                )}
+        {/* Client + Product — share available width */}
+        <div className="flex justify-evenly min-w-0">
+          <div className="min-w-0 shrink-1">
+            <Field label={t("order.client")} value={operation.NOM_CLIENT} />
+            {operation.CONOPO && (
+              <div className="text-sm text-muted-foreground mt-0.5">
+                PO: {operation.CONOPO}
               </div>
-            }
-          />
+            )}
+          </div>
+
+          <div className="min-w-0 shrink-1">
+            <Field
+              label={t("order.product")}
+              value={
+                <div>
+                  <div>
+                    {(operation as unknown as Record<string, unknown>).PRODUIT_CODE as string ?? "—"}
+                    {operation.REVISION && (
+                      <span className="text-xs text-muted-foreground ml-2">
+                        Rev. {operation.REVISION}
+                      </span>
+                    )}
+                  </div>
+                  <div>{loc(operation.PRODUIT_P, operation.PRODUIT_S) || loc(operation.INVENTAIRE_P, operation.INVENTAIRE_S)}</div>
+                </div>
+              }
+            />
+          </div>
         </div>
 
         {/* Panel */}
@@ -139,7 +143,7 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
           />
           <QtyField 
             label={t("order.qtyRemaining")} 
-            value={operation.QTE_RESTANTE ?? "—"}
+            value={typeof operation.QTE_RESTANTE === "number" ? Math.round(operation.QTE_RESTANTE) : (operation.QTE_RESTANTE ?? "—")}
             backgroundColor="#FFF88E"
           />
         </div>

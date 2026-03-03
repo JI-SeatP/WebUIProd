@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, useRef, useCallback, ReactNode } from "react";
+import { createContext, useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { OnScreenKeyboard } from "@/components/shared/OnScreenKeyboard";
 

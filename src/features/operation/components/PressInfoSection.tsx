@@ -10,6 +10,14 @@ interface PressInfoSectionProps {
   showMoldInfo?: boolean;
 }
 
+/** Format numeric values to 2 decimals */
+function formatNum(raw: unknown): string {
+  if (raw == null || raw === "") return "—";
+  const n = Number(raw);
+  if (isNaN(n)) return String(raw);
+  return n.toFixed(2);
+}
+
 function MoldField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="space-y-0.5">
@@ -81,7 +89,10 @@ export function PressInfoSection({ operation, showMoldInfo = true }: PressInfoSe
                   <div className="text-xs text-muted-foreground uppercase tracking-wide">{t("press.moldCode")}</div>
                   <div className="text-[1.3rem] font-bold leading-tight">{operation.MOULE_CODE ?? "—"}</div>
                 </div>
-                <MoldField label={t("press.moldType")} value={op.MOULE_TYPE as string} />
+                <div className="space-y-0.5">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">{t("press.moldType")}</div>
+                  <div className="text-base font-semibold">{(op.MOULE_TYPE as string) ?? "—"}</div>
+                </div>
               </div>
 
               {/* Col 2: Pieces/Cavity + Cavities/Mold */}
@@ -91,25 +102,20 @@ export function PressInfoSection({ operation, showMoldInfo = true }: PressInfoSe
               </div>
 
               {/* Col 3: Gap */}
-              <div className="space-y-2 min-w-0">
-                <MoldField label={t("press.gap")} value={op.MOULE_ECART as string} />
+              <div className="space-y-2 min-w-0 text-center">
+                <MoldField label={t("press.gap")} value={formatNum(op.MOULE_ECART)} />
               </div>
 
               {/* Col 4: Times */}
-              <div className="space-y-2 min-w-0">
-                <MoldField label={t("press.cookTime")} value={op.PRESSAGE_PRESSAGE as string} />
-                <MoldField label={t("press.coolTime")} value={op.PRESSAGE_TEST_APRES as string} />
+              <div className="space-y-2 min-w-0 text-center">
+                <MoldField label={t("press.cookTime")} value={formatNum(op.PRESSAGE_PRESSAGE)} />
+                <MoldField label={t("press.coolTime")} value={formatNum(op.PRESSAGE_TEST_APRES)} />
               </div>
             </div>
 
             {/* Note — spans full width at the bottom of the mold card */}
-            {op.PRESSAGE_NOTE && (
-              <div className="border-t pt-2 mt-2">
-                <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
-                  {t("production.note")}
-                </div>
-                <p className="text-sm whitespace-pre-wrap">{String(op.PRESSAGE_NOTE)}</p>
-              </div>
+            {Boolean(op.PRESSAGE_NOTE) && (
+              <p className="text-sm whitespace-pre-wrap rounded bg-muted px-3 py-1.5 mt-3">{String(op.PRESSAGE_NOTE)}</p>
             )}
           </CardContent>
         </Card>}

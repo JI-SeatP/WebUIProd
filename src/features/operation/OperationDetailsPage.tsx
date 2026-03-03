@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { useSession } from "@/context/SessionContext";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -14,38 +14,11 @@ import { StatusActionBar } from "./components/StatusActionBar";
 import { PpapAlert } from "./components/PpapAlert";
 import { DoNotPressAlert } from "./components/DoNotPressAlert";
 import { useOperation } from "./hooks/useOperation";
+import { apiGet } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTranslation } from "react-i18next";
 import { W_DRAWING_PANEL } from "@/constants/widths";
-
-// ── Mock panel construction data (replace with API data when available) ──────
-
-const MOCK_PANEL_DETAIL: PanelDetail = {
-  ITEM:        "FWOD-1974-20",
-  PANNEAU:     "FR176-051-P",
-  DESCRIPTION: "FWOD-1974-20-MAPLE FC- SEAT",
-  VER:         1,
-  TYPE:        "Exposed",
-  POIDS:       6.69,
-};
-
-const MOCK_PANEL_LAYERS: PanelLayer[] = [
-  { NIRANG: 1,  NILONGUEUR: 21, NILARGEUR: 21, SPECIES: "FR176-051-P 2-PLY MAPLE 21 X 21 FACE FLAT CUT BOOK MATCH", GRADE: "FC", CUT: "1/21", THICKNESS: "L",  GRAIN: "2-PLY", P_LAM: "",    GLUE: "",    TAPE: "Non", SAND: "Oui" },
-  { NIRANG: 2,  NILONGUEUR: 21, NILARGEUR: 21, SPECIES: "MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT",                 GRADE: "RC", CUT: "1/16", THICKNESS: "L",  GRAIN: "",      P_LAM: "1",  GLUE: "Non", TAPE: "Non", SAND: "Non" },
-  { NIRANG: 3,  NILONGUEUR: 21, NILARGEUR: 21, SPECIES: "MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT",                 GRADE: "RC", CUT: "1/16", THICKNESS: "X",  GRAIN: "",      P_LAM: "",   GLUE: "Non", TAPE: "Non", SAND: "Non" },
-  { NIRANG: 4,  NILONGUEUR: 21, NILARGEUR: 21, SPECIES: "MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT",                 GRADE: "RC", CUT: "1/16", THICKNESS: "L",  GRAIN: "",      P_LAM: "1",  GLUE: "Non", TAPE: "Non", SAND: "Non" },
-  { NIRANG: 5,  NILONGUEUR: 21, NILARGEUR: 21, SPECIES: "MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT",                 GRADE: "RC", CUT: "1/16", THICKNESS: "X",  GRAIN: "",      P_LAM: "",   GLUE: "Non", TAPE: "Non", SAND: "Non" },
-  { NIRANG: 6,  NILONGUEUR: 21, NILARGEUR: 21, SPECIES: "MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT",                 GRADE: "RC", CUT: "1/16", THICKNESS: "L",  GRAIN: "",      P_LAM: "1",  GLUE: "Non", TAPE: "Non", SAND: "Non" },
-  { NIRANG: 7,  NILONGUEUR: 21, NILARGEUR: 21, SPECIES: "MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT",                 GRADE: "RC", CUT: "1/16", THICKNESS: "X",  GRAIN: "",      P_LAM: "",   GLUE: "Non", TAPE: "Non", SAND: "Non" },
-  { NIRANG: 8,  NILONGUEUR: 21, NILARGEUR: 21, SPECIES: "MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT",                 GRADE: "RC", CUT: "1/16", THICKNESS: "L",  GRAIN: "",      P_LAM: "1",  GLUE: "Non", TAPE: "Non", SAND: "Non" },
-  { NIRANG: 9,  NILONGUEUR: 21, NILARGEUR: 21, SPECIES: "MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT",                 GRADE: "RC", CUT: "1/16", THICKNESS: "X",  GRAIN: "",      P_LAM: "",   GLUE: "Non", TAPE: "Non", SAND: "Non" },
-  { NIRANG: 10, NILONGUEUR: 21, NILARGEUR: 21, SPECIES: "MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT",                 GRADE: "RC", CUT: "1/16", THICKNESS: "L",  GRAIN: "",      P_LAM: "1",  GLUE: "Non", TAPE: "Non", SAND: "Non" },
-  { NIRANG: 11, NILONGUEUR: 21, NILARGEUR: 21, SPECIES: "MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT",                 GRADE: "RC", CUT: "1/16", THICKNESS: "X",  GRAIN: "",      P_LAM: "",   GLUE: "Non", TAPE: "Non", SAND: "Non" },
-  { NIRANG: 12, NILONGUEUR: 21, NILARGEUR: 21, SPECIES: "MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT",                 GRADE: "RC", CUT: "1/16", THICKNESS: "L",  GRAIN: "",      P_LAM: "1",  GLUE: "Non", TAPE: "Non", SAND: "Non" },
-];
-
-const MOCK_PANEL_GROUP_HEADER = "SEAT EXPOSED MAPLE 21 X 21 X 0.75 (FR176-051-P)";
 
 export function OperationDetailsPage() {
   const { transac, copmachine } = useParams<{ transac: string; copmachine: string }>();
@@ -54,8 +27,106 @@ export function OperationDetailsPage() {
   const { operation, loading, error, refetch } = useOperation(transac!, copmachine!);
   const [localStatus, setLocalStatus] = useState<string | null>(null);
 
+  // Panel data from API
+  const [panelDetail, setPanelDetail] = useState<PanelDetail | null>(null);
+  const [panelLayers, setPanelLayers] = useState<PanelLayer[]>([]);
+  const [panelGroupHeader, setPanelGroupHeader] = useState<{ code: string; desc: string } | string>("");
+
+  // Drawing data from API
+  const [drawingUrls, setDrawingUrls] = useState<string[] | undefined>(undefined);
+  const [activeDrawingSeq, setActiveDrawingSeq] = useState<number | null>(null);
+
   const handleStatusChanged = useCallback((newStatus: string) => {
     setLocalStatus(newStatus);
+  }, []);
+
+  // Fetch panel data when operation loads
+  useEffect(() => {
+    if (!operation) return;
+
+    const fetchPanelData = async () => {
+      try {
+        const panelNiSeq = (operation as Record<string, unknown>).Panel_NiSeq;
+        const res = await apiGet<{
+          panelDetail: Record<string, unknown> | null;
+          layers: PanelLayer[];
+          groupHeader: string;
+        }>(`getPanelData.cfm?transac=${operation.TRANSAC}&panelNiSeq=${panelNiSeq || 0}`);
+
+        if (res.success && res.data) {
+          if (res.data.panelDetail) {
+            const pd = res.data.panelDetail;
+            setPanelDetail({
+              ITEM: String(pd.ITEM || ""),
+              ITEM_SEQ: pd.ITEM_SEQ as number | undefined,
+              PANNEAU: String(pd.PANNEAU || ""),
+              PANNEAU_SEQ: pd.PANNEAU_SEQ as number | undefined,
+              DESCRIPTION: String(pd.DESCRIPTION_P || ""),
+              VER: pd.VER ?? "",
+              TYPE: String(pd.TYPE || ""),
+              POIDS: pd.POIDS ?? "",
+            });
+          }
+          setPanelLayers(res.data.layers || []);
+          setPanelGroupHeader(res.data.groupHeader || "");
+        }
+      } catch (err) {
+        console.error("Failed to fetch panel data:", err);
+      }
+    };
+
+    fetchPanelData();
+  }, [operation]);
+
+  // Fetch drawings when operation loads
+  useEffect(() => {
+    if (!operation) return;
+
+    const fetchDrawings = async () => {
+      try {
+        const op = operation as Record<string, unknown>;
+        const params = new URLSearchParams();
+        if (op.PRODUIT_SEQ) params.set("produitSeq", String(op.PRODUIT_SEQ));
+        if (op.INVENTAIRE_SEQ) params.set("inventaireSeq", String(op.INVENTAIRE_SEQ));
+        if (op.KIT_SEQ) params.set("kitSeq", String(op.KIT_SEQ));
+
+        const res = await apiGet<{ doseq: number; url: string }[]>(
+          `getDrawings.cfm?${params.toString()}`
+        );
+
+        if (res.success && res.data && res.data.length > 0) {
+          // Convert API-relative URLs to full proxy URLs
+          const urls = res.data.map((d) => `/api${d.url}`);
+          setDrawingUrls(urls);
+        } else {
+          setDrawingUrls(undefined);
+        }
+      } catch (err) {
+        console.error("Failed to fetch drawings:", err);
+        setDrawingUrls(undefined);
+      }
+    };
+
+    fetchDrawings();
+  }, [operation]);
+
+  const handleViewDrawing = useCallback(async (inventaireSeq: number) => {
+    try {
+      const res = await apiGet<{ doseq: number; url: string }[]>(
+        `getDrawings.cfm?inventaireSeq=${inventaireSeq}`
+      );
+      if (res.success && res.data && res.data.length > 0) {
+        setDrawingUrls(res.data.map((d) => `/api${d.url}`));
+        setActiveDrawingSeq(inventaireSeq);
+      } else {
+        setDrawingUrls(undefined);
+        setActiveDrawingSeq(null);
+      }
+    } catch (err) {
+      console.error("Failed to fetch drawings:", err);
+      setDrawingUrls(undefined);
+      setActiveDrawingSeq(null);
+    }
   }, []);
 
   if (loading) {
@@ -119,15 +190,15 @@ export function OperationDetailsPage() {
                     <CardTitle className="text-[0.8rem]">{t("operation.nextStep")}</CardTitle>
                   </CardHeader>
                   <CardContent className="px-4 pb-3">
-                    <div className="text-sm text-muted-foreground">
-                      {op.NEXT_OPERATION
-                        ? loc(op.NEXT_OPERATION_P, op.NEXT_OPERATION_S)
-                        : t("common.noResults")}
-                    </div>
-                    {!!op.NEXT_MACHINE_P && (
-                      <div className="text-sm mt-1">
-                        {t("operation.machine")}: {loc(op.NEXT_MACHINE_P, op.NEXT_MACHINE_S)}
+                    {op.NEXT_OPERATION ? (
+                      <div className="text-sm">
+                        <span className="font-medium">{loc(op.NEXT_MACHINE_P, op.NEXT_MACHINE_S)}</span>
+                        {op.NEXT_DEPT_P && (
+                          <span className="text-muted-foreground"> — {loc(op.NEXT_DEPT_P, op.NEXT_DEPT_S)}</span>
+                        )}
                       </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">{t("common.noResults")}</div>
                     )}
                   </CardContent>
                 </Card>
@@ -137,16 +208,18 @@ export function OperationDetailsPage() {
             {/* Operation-specific detail cards */}
             {isPress && (
               <>
-                <PanelDetailsTable detail={MOCK_PANEL_DETAIL} />
-                <PanelLayersTable
-                  layers={MOCK_PANEL_LAYERS}
-                  groupHeader={MOCK_PANEL_GROUP_HEADER}
-                />
+                {panelDetail && <PanelDetailsTable detail={panelDetail} onViewDrawing={handleViewDrawing} activeDrawingSeq={activeDrawingSeq} />}
+                {panelLayers.length > 0 && (
+                  <PanelLayersTable
+                    layers={panelLayers}
+                    groupHeader={panelGroupHeader}
+                  />
+                )}
               </>
             )}
             {isCnc && (
               <>
-                <PanelDetailsTable detail={MOCK_PANEL_DETAIL} />
+                {panelDetail && <PanelDetailsTable detail={panelDetail} onViewDrawing={handleViewDrawing} activeDrawingSeq={activeDrawingSeq} />}
                 <div className="flex-1 flex flex-col">
                   <CncInfoSection operation={operation} language={state.language} hideNextStep />
                 </div>
@@ -162,15 +235,7 @@ export function OperationDetailsPage() {
 
           {/* Right 50%: technical drawing */}
           <div className={W_DRAWING_PANEL.container}>
-            <DrawingViewer
-              images={
-                isPress
-                  ? ["/mock/drawing-press.png"]
-                  : isCnc
-                  ? ["/mock/drawing-cnc-1.png", "/mock/drawing-cnc-2.png"]
-                  : undefined
-              }
-            />
+            <DrawingViewer images={drawingUrls} />
           </div>
         </div>
       </div>

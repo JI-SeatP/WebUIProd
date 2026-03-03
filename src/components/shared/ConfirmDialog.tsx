@@ -30,7 +30,7 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel,
   onConfirm,
-  variant = "default",
+  variant: _variant = "default",
 }: ConfirmDialogProps) {
   const { t } = useTranslation();
 

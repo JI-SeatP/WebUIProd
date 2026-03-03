@@ -10,10 +10,14 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { W_PANEL_DETAILS } from "@/constants/widths";
+import { Image } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export interface PanelDetail {
   ITEM: string;
+  ITEM_SEQ?: number;
   PANNEAU: string;
+  PANNEAU_SEQ?: number;
   DESCRIPTION: string;
   VER: number | string;
   TYPE: string;
@@ -22,9 +26,11 @@ export interface PanelDetail {
 
 interface PanelDetailsTableProps {
   detail: PanelDetail;
+  onViewDrawing?: (inventaireSeq: number) => void;
+  activeDrawingSeq?: number | null;
 }
 
-export function PanelDetailsTable({ detail }: PanelDetailsTableProps) {
+export function PanelDetailsTable({ detail, onViewDrawing, activeDrawingSeq }: PanelDetailsTableProps) {
   const { t } = useTranslation();
 
   return (
@@ -43,12 +49,56 @@ export function PanelDetailsTable({ detail }: PanelDetailsTableProps) {
           </TableHeader>
           <TableBody>
             <TableRow className="h-10">
-              <TableCell className={W_PANEL_DETAILS.item}>{detail.ITEM}</TableCell>
-              <TableCell className={W_PANEL_DETAILS.panneau}>{detail.PANNEAU}</TableCell>
+              <TableCell className={W_PANEL_DETAILS.item}>
+                <span className="flex items-center gap-1">
+                  {detail.ITEM}
+                  {detail.ITEM_SEQ && onViewDrawing && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      onClick={() => onViewDrawing(detail.ITEM_SEQ!)}
+                    >
+                      <div
+                        className="flex items-center justify-center rounded-full size-[24px]"
+                        style={{ backgroundColor: activeDrawingSeq === detail.ITEM_SEQ ? "#aeffae" : "transparent" }}
+                      >
+                        <Image
+                          className="size-[19px]"
+                          fill={activeDrawingSeq === detail.ITEM_SEQ ? "#aeffae" : "none"}
+                        />
+                      </div>
+                    </Button>
+                  )}
+                </span>
+              </TableCell>
+              <TableCell className={W_PANEL_DETAILS.panneau}>
+                <span className="flex items-center gap-1">
+                  {detail.PANNEAU}
+                  {detail.PANNEAU_SEQ && onViewDrawing && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      onClick={() => onViewDrawing(detail.PANNEAU_SEQ!)}
+                    >
+                      <div
+                        className="flex items-center justify-center rounded-full size-[24px]"
+                        style={{ backgroundColor: activeDrawingSeq === detail.PANNEAU_SEQ ? "#aeffae" : "transparent" }}
+                      >
+                        <Image
+                          className="size-[19px]"
+                          fill={activeDrawingSeq === detail.PANNEAU_SEQ ? "#aeffae" : "none"}
+                        />
+                      </div>
+                    </Button>
+                  )}
+                </span>
+              </TableCell>
               <TableCell className={W_PANEL_DETAILS.description}>{detail.DESCRIPTION}</TableCell>
               <TableCell className={cn(W_PANEL_DETAILS.version, "text-right tabular-nums")}>{detail.VER}</TableCell>
               <TableCell className={W_PANEL_DETAILS.type}>{detail.TYPE}</TableCell>
-              <TableCell className={cn(W_PANEL_DETAILS.weight, "text-right tabular-nums")}>{detail.POIDS}</TableCell>
+              <TableCell className={cn(W_PANEL_DETAILS.weight, "text-right tabular-nums")}>{typeof detail.POIDS === "number" ? detail.POIDS.toFixed(2) : detail.POIDS}</TableCell>
             </TableRow>
           </TableBody>
         </Table>

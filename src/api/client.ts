@@ -1,4 +1,8 @@
-const API_BASE = "/api";
+// In dev: BASE_URL = "/" → use "/api" (Vite proxy handles it)
+// In prod: BASE_URL = "/STPWEB/WebUIProd_Test/web/" → "/STPWEB/WebUIProd_Test/queries"
+const API_BASE = import.meta.env.DEV
+  ? "/api"
+  : import.meta.env.BASE_URL.replace(/web\/$/, "queries");
 
 interface ApiResponse<T> {
   success: boolean;

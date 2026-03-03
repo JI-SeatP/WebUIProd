@@ -27,6 +27,7 @@ interface DefectRow {
   id: number;
   qty: string;
   typeId: string;
+  notes: string;
 }
 
 interface DefectType {
@@ -63,7 +64,7 @@ export function DefectQuantitySection({
   }, []);
 
   const addRow = useCallback(() => {
-    onDefectsChange([...defects, { id: nextId++, qty: "", typeId: "" }]);
+    onDefectsChange([...defects, { id: nextId++, qty: "", typeId: "", notes: "" }]);
   }, [defects, onDefectsChange]);
 
   const removeRow = useCallback(

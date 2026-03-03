@@ -28,7 +28,14 @@ export interface PanelLayer {
 
 interface PanelLayersTableProps {
   layers: PanelLayer[];
-  groupHeader?: string;
+  groupHeader?: { code: string; desc: string } | string;
+}
+
+function yesNoColor(val: string): string | undefined {
+  const v = val?.trim().toLowerCase();
+  if (v === "oui" || v === "yes") return "#2563EB";
+  if (v === "non" || v === "no") return "#9CA3AF";
+  return undefined;
 }
 
 export function PanelLayersTable({ layers, groupHeader }: PanelLayersTableProps) {
@@ -49,9 +56,9 @@ export function PanelLayersTable({ layers, groupHeader }: PanelLayersTableProps)
               <TableHead className={cn(W_PANEL_LAYERS.width, "text-right")}>{t("panel.width")}</TableHead>
               <TableHead className={W_PANEL_LAYERS.species}>{t("panel.species")}</TableHead>
               <TableHead className={W_PANEL_LAYERS.grade}>{t("panel.grade")}</TableHead>
-              <TableHead className={W_PANEL_LAYERS.cut}>{t("panel.cut")}</TableHead>
-              <TableHead className={cn(W_PANEL_LAYERS.thickness, "text-right")}>{t("panel.thickness")}</TableHead>
-              <TableHead className={W_PANEL_LAYERS.grain}>{t("panel.grain")}</TableHead>
+              <TableHead className={cn(W_PANEL_LAYERS.cut, "text-center")}>{t("panel.cut")}</TableHead>
+              <TableHead className={cn(W_PANEL_LAYERS.thickness, "text-center")}>{t("panel.thickness")}</TableHead>
+              <TableHead className={cn(W_PANEL_LAYERS.grain, "text-center")}>{t("panel.grain")}</TableHead>
               <TableHead className={W_PANEL_LAYERS.pLam}>{t("panel.pLam")}</TableHead>
               <TableHead className={cn(W_PANEL_LAYERS.glue, "text-center")}>{t("panel.glue")}</TableHead>
               <TableHead className={cn(W_PANEL_LAYERS.tape, "text-center")}>{t("panel.tape")}</TableHead>
@@ -61,8 +68,15 @@ export function PanelLayersTable({ layers, groupHeader }: PanelLayersTableProps)
           <TableBody>
             {groupHeader && (
               <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableCell colSpan={colCount} className="py-1.5 px-3 text-sm font-semibold text-foreground">
-                  {groupHeader}
+                <TableCell colSpan={colCount} className="py-1.5 px-3 text-base text-foreground">
+                  {typeof groupHeader === "string" ? (
+                    groupHeader
+                  ) : (
+                    <>
+                      <span className="font-bold">{groupHeader.code}</span>
+                      {groupHeader.desc && <span className="font-normal"> - {groupHeader.desc}</span>}
+                    </>
+                  )}
                 </TableCell>
               </TableRow>
             )}
@@ -81,13 +95,13 @@ export function PanelLayersTable({ layers, groupHeader }: PanelLayersTableProps)
                 <TableCell className={cn(W_PANEL_LAYERS.width, "text-right tabular-nums")}>{layer.NILARGEUR}</TableCell>
                 <TableCell className={W_PANEL_LAYERS.species}>{layer.SPECIES}</TableCell>
                 <TableCell className={W_PANEL_LAYERS.grade}>{layer.GRADE}</TableCell>
-                <TableCell className={W_PANEL_LAYERS.cut}>{layer.CUT}</TableCell>
-                <TableCell className={cn(W_PANEL_LAYERS.thickness, "text-right tabular-nums")}>{layer.THICKNESS}</TableCell>
-                <TableCell className={W_PANEL_LAYERS.grain}>{layer.GRAIN}</TableCell>
+                <TableCell className={cn(W_PANEL_LAYERS.cut, "text-center")}>{layer.CUT}</TableCell>
+                <TableCell className={cn(W_PANEL_LAYERS.thickness, "text-center tabular-nums")}>{layer.THICKNESS}</TableCell>
+                <TableCell className={cn(W_PANEL_LAYERS.grain, "text-center")}>{layer.GRAIN}</TableCell>
                 <TableCell className={W_PANEL_LAYERS.pLam}>{layer.P_LAM}</TableCell>
-                <TableCell className={cn(W_PANEL_LAYERS.glue, "text-center")}>{layer.GLUE}</TableCell>
-                <TableCell className={cn(W_PANEL_LAYERS.tape, "text-center")}>{layer.TAPE}</TableCell>
-                <TableCell className={cn(W_PANEL_LAYERS.sand, "text-center")}>{layer.SAND}</TableCell>
+                <TableCell className={cn(W_PANEL_LAYERS.glue, "text-center")} style={{ color: yesNoColor(layer.GLUE) }}>{layer.GLUE}</TableCell>
+                <TableCell className={cn(W_PANEL_LAYERS.tape, "text-center")} style={{ color: yesNoColor(layer.TAPE) }}>{layer.TAPE}</TableCell>
+                <TableCell className={cn(W_PANEL_LAYERS.sand, "text-center")} style={{ color: yesNoColor(layer.SAND) }}>{layer.SAND}</TableCell>
               </TableRow>
               );
             })}

@@ -251,7 +251,7 @@ export function WorkOrderTable({
                     {order.QTE_PRODUITE ?? 0}
                   </TableCell>
                   <TableCell className={cn(W_WORK_ORDERS.qtyRemaining, "text-right tabular-nums text-base font-semibold")}>
-                    {order.QTE_RESTANTE ?? "—"}
+                    {order.QTE_RESTANTE != null ? Math.round(Number(order.QTE_RESTANTE)) : "—"}
                   </TableCell>
                   <TableCell className={W_WORK_ORDERS.operation}>
                     <div className="truncate">

@@ -61,9 +61,7 @@ export function MachineInfoPanel({ operation }: MachineInfoPanelProps) {
             {/* Group + product type — type wraps to next row when card is narrow */}
             <div className="flex flex-wrap gap-4 min-w-0 flex-1">
               <DateField label={t("order.group")} value={operation.GROUPE} className="flex-1 min-w-[120px] max-w-[220px]" />
-              {isCnc && (
-                <DateField label={t("cnc.productType")} value={op.TYPEPRODUIT as string} className="flex-1 min-w-[120px] max-w-[220px]" />
-              )}
+              <DateField label={t("cnc.productType")} value={op.TYPEPRODUIT as string} className="flex-1 min-w-[120px] max-w-[220px]" />
             </div>
 
             {/* Notes (non-CNC, non-PRESS — PRESS notes are shown in the mold card) */}
@@ -78,8 +76,8 @@ export function MachineInfoPanel({ operation }: MachineInfoPanelProps) {
           </div>
 
           {/* Bottom row: transac note spanning full width (CNC only) */}
-          {isCnc && (
-            <InfoRow label={t("cnc.transacNote")} value={op.TRNOTE as string} className="border-t pt-2" />
+          {isCnc && op.TRNOTE && (
+            <InfoRow label={t("production.note")} value={op.TRNOTE as string} className="border-t pt-2" />
           )}
         </div>
       </CardContent>
