@@ -75,7 +75,7 @@ export const W_PANEL_LAYERS = {
 // WIDTH - DRAWING PANEL (S003 right column)
 // ───────────────────────────────────────
 export const W_DRAWING_PANEL = {
-  container: "w-[760px] shrink-0",
+  container: "w-1/2 shrink-0",
 } as const;
 
 // ───────────────────────────────────────
@@ -100,8 +100,9 @@ export const W_MOLD_INFO = {
 // ───────────────────────────────────────
 export const W_QUESTIONNAIRE = {
   label:     "w-[180px]",
-  input:     "w-[150px]",
+  input:     "w-[135px]",
   dropdown:  "w-[300px]",
+  footerBtn: "w-[300px]",
 } as const;
 
 // ───────────────────────────────────────

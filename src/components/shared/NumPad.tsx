@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Delete, X, CornerDownLeft } from "lucide-react";
@@ -26,8 +26,16 @@ export function NumPad({
   displayValue,
   className,
 }: NumPadProps) {
+  const [flashKey, setFlashKey] = useState<string | null>(null);
+
+  const flash = (id: string) => {
+    setFlashKey(id);
+    setTimeout(() => setFlashKey(null), 150);
+  };
+
   const handleKey = useCallback(
     (key: string) => {
+      flash(key);
       if (key === "backspace") {
         onChange(value.slice(0, -1));
       } else if (key === "clear") {
@@ -44,6 +52,13 @@ export function NumPad({
   );
 
   const numKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+
+  const keyClass = (id: string, extra = "") =>
+    cn(
+      "touch-target h-[58px] !transition-none",
+      flashKey === id ? "!bg-[#aeffae] !border-green-400" : "",
+      extra
+    );
 
   return (
     <div
@@ -65,7 +80,7 @@ export function NumPad({
           <Button
             key={key}
             variant="outline"
-            className="touch-target h-[58px] text-xl font-semibold"
+            className={keyClass(key, "text-xl font-semibold")}
             onClick={() => handleKey(key)}
           >
             {key}
@@ -75,21 +90,21 @@ export function NumPad({
         {/* Bottom row: backspace, 0, clear */}
         <Button
           variant="outline"
-          className="touch-target h-[58px]"
+          className={keyClass("backspace")}
           onClick={() => handleKey("backspace")}
         >
           <Delete size={22} />
         </Button>
         <Button
           variant="outline"
-          className="touch-target h-[58px] text-xl font-semibold"
+          className={keyClass("0", "text-xl font-semibold")}
           onClick={() => handleKey("0")}
         >
           0
         </Button>
         <Button
           variant="outline"
-          className="touch-target h-[58px]"
+          className={keyClass("clear")}
           onClick={() => handleKey("clear")}
         >
           <X size={22} />

@@ -80,7 +80,7 @@ export function FinishedProductsSection({
   }[theme];
 
   return (
-    <Card className={`bg-white ${theme === "dense" ? "border border-gray-200" : ""}`}>
+    <Card className={`min-h-[250px] bg-white ${theme === "dense" ? "border border-gray-200" : ""}`}>
       <div className={headerClasses}>
         <div className={headerTextClasses}>{t("questionnaire.finishedProducts")}</div>
         <Button
@@ -120,7 +120,7 @@ export function FinishedProductsSection({
                         <Input
                           value={row.qty}
                           readOnly
-                          className="touch-target !text-3xl font-mono font-bold cursor-pointer bg-white text-green-600"
+                          className="touch-target !text-3xl font-mono font-bold cursor-pointer bg-white text-green-600 border-green-600"
                           placeholder="0"
                         />
                       </PopoverTrigger>

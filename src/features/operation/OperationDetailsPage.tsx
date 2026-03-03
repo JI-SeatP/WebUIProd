@@ -15,6 +15,7 @@ import { PpapAlert } from "./components/PpapAlert";
 import { DoNotPressAlert } from "./components/DoNotPressAlert";
 import { useOperation } from "./hooks/useOperation";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTranslation } from "react-i18next";
 import { W_DRAWING_PANEL } from "@/constants/widths";
 
@@ -83,7 +84,7 @@ export function OperationDetailsPage() {
 
   return (
     <div className="flex flex-col h-full bg-[#C5E0D4]">
-      <div className="flex-1 overflow-auto space-y-2 p-0 pb-32">
+      <div className="flex-1 overflow-y-auto space-y-2 p-0 pb-20 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5">
         {/* Alerts */}
         {hasPpap && <PpapAlert />}
         {hasDoNotPress && <DoNotPressAlert />}
@@ -91,22 +92,49 @@ export function OperationDetailsPage() {
         {/* Header */}
         <OperationHeader operation={operation} language={state.language} />
 
-        {/* Machine overview: press mold info (left, press only) + machine info panel (right) */}
-        <div className="flex gap-2">
-          {isPress && (
-            <div className="shrink-0">
-              <PressInfoSection operation={operation} />
+        {/* All cards (left 50%) + technical drawing (right 50%) */}
+        <div className="flex gap-2 items-stretch">
+          {/* Left 50%: machine overview + operation-specific detail cards */}
+          <div className="w-1/2 min-w-0 flex flex-col gap-2">
+            {/* Machine overview: materials (left) + machine info panel (right) */}
+            <div className="flex gap-2">
+              {(isPress || isCnc) && (
+                <div className="shrink-0">
+                  <PressInfoSection operation={operation} showMoldInfo={isPress} />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <MachineInfoPanel operation={operation} />
+              </div>
             </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <MachineInfoPanel operation={operation} />
-          </div>
-        </div>
 
-        {/* Operation details (left) + technical drawing (right) */}
-        <div className="flex gap-2 items-start">
-          {/* Left: operation-specific detail cards */}
-          <div className="flex-1 min-w-0 space-y-2">
+            {/* Next step — full width row (CNC only) */}
+            {isCnc && (() => {
+              const op = operation as unknown as Record<string, unknown>;
+              const loc = (fr: unknown, en: unknown) =>
+                String((state.language === "fr" ? fr : en) ?? fr ?? "—");
+              return (
+                <Card className="py-0 gap-0">
+                  <CardHeader className="py-2 px-4">
+                    <CardTitle className="text-[0.8rem]">{t("operation.nextStep")}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3">
+                    <div className="text-sm text-muted-foreground">
+                      {op.NEXT_OPERATION
+                        ? loc(op.NEXT_OPERATION_P, op.NEXT_OPERATION_S)
+                        : t("common.noResults")}
+                    </div>
+                    {!!op.NEXT_MACHINE_P && (
+                      <div className="text-sm mt-1">
+                        {t("operation.machine")}: {loc(op.NEXT_MACHINE_P, op.NEXT_MACHINE_S)}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+            {/* Operation-specific detail cards */}
             {isPress && (
               <>
                 <PanelDetailsTable detail={MOCK_PANEL_DETAIL} />
@@ -116,7 +144,14 @@ export function OperationDetailsPage() {
                 />
               </>
             )}
-            {isCnc && <CncInfoSection operation={operation} language={state.language} />}
+            {isCnc && (
+              <>
+                <PanelDetailsTable detail={MOCK_PANEL_DETAIL} />
+                <div className="flex-1 flex flex-col">
+                  <CncInfoSection operation={operation} language={state.language} hideNextStep />
+                </div>
+              </>
+            )}
             {isVcut && <VcutInfoSection operation={operation} language={state.language} />}
             {!isPress && !isCnc && !isVcut && (
               <div className="text-muted-foreground text-center py-8">
@@ -125,7 +160,7 @@ export function OperationDetailsPage() {
             )}
           </div>
 
-          {/* Right: technical drawing */}
+          {/* Right 50%: technical drawing */}
           <div className={W_DRAWING_PANEL.container}>
             <DrawingViewer
               images={

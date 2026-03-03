@@ -53,25 +53,25 @@ export function EmployeeEntry({
   }, [employeeCode, lookupEmployee]);
 
   const headerClasses = {
-    modern: "border-l-4 border-blue-600 bg-blue-50 py-1.5 px-3",
+    modern: "py-1.5 px-3",
     minimal: "bg-blue-100 py-2.5 px-4",
     dense: "bg-blue-50 py-1 px-3 border-b border-blue-200",
   }[theme];
 
   const headerTextClasses = {
-    modern: "text-xs font-bold text-blue-900 uppercase tracking-wider",
+    modern: "border border-gray-300 bg-gray-100 rounded-lg px-3 py-1 text-2xl font-bold text-gray-600 uppercase tracking-wider w-fit",
     minimal: "text-sm font-semibold text-blue-900",
     dense: "text-xs font-bold text-blue-900 uppercase",
   }[theme];
 
   const contentClasses = {
-    modern: "pt-0.5 pb-2 px-3",
+    modern: "pt-0.5 pb-2 pl-4 pr-3",
     minimal: "pt-0.5 pb-3 px-4",
     dense: "pt-px pb-1.5 px-3",
   }[theme];
 
   return (
-    <Card className={theme === "dense" ? "border border-gray-200" : ""}>
+    <Card className={`min-h-[250px] ${theme === "dense" ? "border border-gray-200" : ""}`}>
       <div className={headerClasses}>
         <div className={headerTextClasses}>{t("timeTracking.employee")}</div>
       </div>

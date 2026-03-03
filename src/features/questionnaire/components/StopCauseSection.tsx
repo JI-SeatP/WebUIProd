@@ -77,19 +77,19 @@ export function StopCauseSection({
     isFr ? opt.description_P : opt.description_S;
 
   const headerClasses = {
-    modern: "border-l-4 border-blue-600 bg-blue-50 py-1.5 px-3",
+    modern: "py-1.5 px-3",
     minimal: "bg-blue-100 py-2.5 px-4",
     dense: "bg-blue-50 py-1 px-3 border-b border-blue-200",
   }[theme];
 
   const headerTextClasses = {
-    modern: "text-xs font-bold text-blue-900 uppercase tracking-wider",
+    modern: "border border-gray-300 bg-gray-100 rounded-lg px-3 py-1 text-2xl font-bold text-gray-600 uppercase tracking-wider w-fit",
     minimal: "text-sm font-semibold text-blue-900",
     dense: "text-xs font-bold text-blue-900 uppercase",
   }[theme];
 
   const contentClasses = {
-    modern: "pt-0.5 pb-2 px-3",
+    modern: "pt-0.5 pb-2 pl-4 pr-3",
     minimal: "pt-0.5 pb-3 px-4",
     dense: "pt-px pb-1.5 px-3",
   }[theme];
@@ -100,9 +100,9 @@ export function StopCauseSection({
         <div className={headerTextClasses}>{t("questionnaire.stopCause")}</div>
       </div>
       <CardContent className={contentClasses}>
-        <div className="flex gap-4 items-start">
-          {/* Left col: Primary + Secondary stacked */}
-          <div className="flex flex-col gap-1.5 shrink-0">
+        <div className="flex flex-col gap-3">
+          {/* Row 1: Primary + Secondary selects */}
+          <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-2">
               <Label className={`${W_QUESTIONNAIRE.label} text-sm text-muted-foreground shrink-0`}>
                 {t("questionnaire.primaryCause")}:
@@ -152,16 +152,16 @@ export function StopCauseSection({
             )}
           </div>
 
-          {/* Right col: Notes full height */}
-          <div className="flex items-stretch flex-1 min-w-0 gap-2">
-            <Label className="text-sm text-muted-foreground shrink-0 self-start pt-1">
+          {/* Row 2: Notes — full card width */}
+          <div className="flex items-start gap-2">
+            <Label className="text-sm text-muted-foreground shrink-0 pt-1">
               {t("questionnaire.notes")}:
             </Label>
             <Textarea
               value={notes}
               readOnly
               onClick={() => setKeyboardOpen(true)}
-              className="flex-1 min-w-0 text-base resize-none cursor-pointer"
+              className="flex-1 min-w-0 !text-lg resize-none cursor-pointer"
               placeholder={t("questionnaire.otherSpecify")}
             />
           </div>

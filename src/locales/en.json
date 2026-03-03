@@ -53,6 +53,10 @@
     "materialsReady": "Materials Ready",
     "inPlace": "In Place"
   },
+  "cnc": {
+    "productType": "Product Type",
+    "transacNote": "Note"
+  },
   "panel": {
     "seq": "Seq",
     "length": "L",

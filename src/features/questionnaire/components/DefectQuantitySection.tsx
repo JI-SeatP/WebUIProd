@@ -101,7 +101,7 @@ export function DefectQuantitySection({
   }[theme];
 
   return (
-    <Card className={`bg-white ${theme === "dense" ? "border border-gray-200" : ""}`}>
+    <Card className={`min-h-[250px] bg-white ${theme === "dense" ? "border border-gray-200" : ""}`}>
       <div className={headerClasses}>
         <div className={headerTextClasses}>{t("questionnaire.defectQuantity")}</div>
         <Button
@@ -140,7 +140,7 @@ export function DefectQuantitySection({
                         <Input
                           value={row.qty}
                           readOnly
-                          className="touch-target !text-3xl font-mono font-bold cursor-pointer text-red-600 bg-white"
+                          className="touch-target !text-3xl font-mono font-bold cursor-pointer text-red-600 bg-white border-red-600"
                           placeholder="0"
                         />
                       </PopoverTrigger>

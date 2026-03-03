@@ -24,9 +24,14 @@ export function DrawingViewer({ images }: DrawingViewerProps) {
 
   return (
     <Card className="py-0 gap-0">
-      <CardContent className="px-4 pt-3 pb-4">
+      <CardContent className="px-4 pt-3 pb-4 flex flex-col gap-3">
+        <img
+          src={images[page]}
+          alt={`Drawing page ${page + 1}`}
+          className="w-full rounded border object-contain max-h-[600px]"
+        />
         {total > 1 && (
-          <div className="flex items-center justify-end gap-2 mb-2">
+          <div className="flex items-center justify-center gap-2">
             <Button
               variant="outline"
               size="icon"
@@ -50,11 +55,6 @@ export function DrawingViewer({ images }: DrawingViewerProps) {
             </Button>
           </div>
         )}
-        <img
-          src={images[page]}
-          alt={`Drawing page ${page + 1}`}
-          className="w-full rounded border object-contain max-h-[600px]"
-        />
       </CardContent>
     </Card>
   );

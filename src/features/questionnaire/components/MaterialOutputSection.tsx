@@ -45,7 +45,7 @@ export function MaterialOutputSection({ materials, theme = "modern" }: MaterialO
   }[theme];
 
   return (
-    <Card className={theme === "dense" ? "border border-gray-200" : ""}>
+    <Card className={`min-h-[315px] ${theme === "dense" ? "border border-gray-200" : ""}`}>
       <div className={headerClasses}>
         <div className={headerTextClasses}>{t("questionnaire.materialOutput")}</div>
       </div>

@@ -13,7 +13,7 @@ function Field({ label, value, className }: { label: string; value: React.ReactN
   return (
     <div className={cn("space-y-0.5", className)}>
       <div className="text-xs text-muted-foreground uppercase tracking-wide">{label}</div>
-      <div className="text-base font-medium">{value ?? "—"}</div>
+      <div className="text-[1.2rem] font-medium">{value ?? "—"}</div>
     </div>
   );
 }
@@ -62,7 +62,19 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
 
   return (
     <Card className="p-4 flex flex-col justify-start">
-      <div className="grid gap-2 items-start" style={{ gridTemplateColumns: "12% 15% 12.5% 8% 26% 24%" }}>
+      <div className="grid gap-2 items-start" style={{ gridTemplateColumns: "80px 24px 12% 15% 12.5% 8% 26% 1fr" }}>
+        {/* Priority */}
+        <div className="flex items-center justify-center h-full bg-muted rounded-lg">
+          {(operation as unknown as Record<string, unknown>).DCPRIORITE != null ? (
+            <span className="text-[1.95rem] font-bold text-blue-600">
+              #{String((operation as unknown as Record<string, unknown>).DCPRIORITE)}
+            </span>
+          ) : null}
+        </div>
+
+        {/* Spacer */}
+        <div />
+
         {/* Order */}
         <div className="space-y-1">
           <div className="text-xs text-muted-foreground uppercase tracking-wide">
@@ -76,7 +88,7 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
         <div>
           <Field label={t("order.client")} value={operation.NOM_CLIENT} />
           {operation.CONOPO && (
-            <div className="text-xs text-muted-foreground mt-0.5">
+            <div className="text-sm text-muted-foreground mt-0.5">
               PO: {operation.CONOPO}
             </div>
           )}
@@ -141,6 +153,7 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
             {loc(operation.MACHINE_P, operation.MACHINE_S) ?? "—"}
           </div>
         </div>
+
 
       </div>
     </Card>

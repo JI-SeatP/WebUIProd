@@ -1,6 +1,8 @@
 import { useTranslation } from "react-i18next";
+import { ArrowRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge, statusCodeToEnum } from "@/components/shared/StatusBadge";
+import type { OperationStatus } from "@/components/shared/StatusBadge";
 import type { OperationData } from "@/features/operation/hooks/useOperation";
 
 interface OrderInfoBlockProps {
@@ -8,9 +10,10 @@ interface OrderInfoBlockProps {
   language: string;
   label?: string;
   theme?: "modern" | "minimal" | "dense";
+  targetStatus?: OperationStatus;
 }
 
-export function OrderInfoBlock({ operation, language, label, theme = "modern" }: OrderInfoBlockProps) {
+export function OrderInfoBlock({ operation, language, label, theme = "modern", targetStatus }: OrderInfoBlockProps) {
   const { t } = useTranslation();
   const isFr = language === "fr";
 
@@ -41,22 +44,31 @@ export function OrderInfoBlock({ operation, language, label, theme = "modern" }:
         <div className="flex items-center justify-between">
           <div className="flex items-start justify-between w-full px-4">
             {/* Work Order — always big */}
-            <div className="flex flex-col">
+            <div className="flex flex-col gap-1">
               <span className="text-xs text-muted-foreground uppercase tracking-wide">{t("order.number")}</span>
-              <span className="text-[2.25rem] font-bold leading-none">{operation.NO_PROD}</span>
+              <span className="text-[1.8rem] font-bold leading-none">{operation.NO_PROD}</span>
+              {targetStatus ? (
+                <div className="flex items-center gap-1.5">
+                  <StatusBadge status={statusCodeToEnum(operation.STATUT_CODE)} />
+                  <ArrowRight className="size-4 text-muted-foreground shrink-0" />
+                  <StatusBadge status={targetStatus} />
+                </div>
+              ) : (
+                <StatusBadge status={statusCodeToEnum(operation.STATUT_CODE)} />
+              )}
             </div>
 
             {/* Machine — always big */}
             <div className="flex flex-col">
               <span className="text-xs text-muted-foreground uppercase tracking-wide">{t("operation.machine")}</span>
-              <span className="text-[2rem] text-muted-foreground leading-none">{machine}</span>
+              <span className="text-[1.6rem] text-muted-foreground leading-none">{machine}</span>
             </div>
 
             {/* Panel — big for PRESS */}
             {showPanelBig && (
               <div className="flex flex-col">
                 <span className="text-xs text-muted-foreground uppercase tracking-wide">{t("press.panel")}</span>
-                <span className="text-[2rem] font-bold leading-none">{operation.Panneau}</span>
+                <span className="text-[1.6rem] font-bold leading-none">{operation.Panneau}</span>
               </div>
             )}
 
@@ -64,7 +76,7 @@ export function OrderInfoBlock({ operation, language, label, theme = "modern" }:
             {showProductBig && (
               <div className="flex flex-col">
                 <span className="text-xs text-muted-foreground uppercase tracking-wide">{t("order.product")}</span>
-                <span className="text-[2rem] font-bold leading-none">{product ?? "—"}</span>
+                <span className="text-[1.6rem] font-bold leading-none">{product ?? "—"}</span>
               </div>
             )}
 
@@ -133,7 +145,6 @@ export function OrderInfoBlock({ operation, language, label, theme = "modern" }:
               </div>
             </div>
           </div>
-          <StatusBadge status={statusCodeToEnum(operation.STATUT_CODE)} />
         </div>
 
         </div>

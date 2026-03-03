@@ -7,6 +7,7 @@ import type { OperationData } from "../hooks/useOperation";
 
 interface PressInfoSectionProps {
   operation: OperationData;
+  showMoldInfo?: boolean;
 }
 
 function MoldField({ label, value }: { label: string; value: React.ReactNode }) {
@@ -40,7 +41,7 @@ function ReadyCheck({ ready, label }: { ready: boolean; label: string }) {
   );
 }
 
-export function PressInfoSection({ operation }: PressInfoSectionProps) {
+export function PressInfoSection({ operation, showMoldInfo = true }: PressInfoSectionProps) {
   const { t } = useTranslation();
 
   // These fields come from the extended operation data
@@ -48,11 +49,11 @@ export function PressInfoSection({ operation }: PressInfoSectionProps) {
   const op = operation as unknown as Record<string, unknown>;
 
   return (
-    <div className="space-y-3">
-      {/* Top row: Materials Ready + Machine Info + Mold Info */}
-      <div className="flex gap-3">
+    <div className="space-y-3 h-full">
+      {/* Top row: Materials Ready + Mold Info */}
+      <div className="flex gap-3 h-full">
         {/* Materials Ready */}
-        <Card className={cn(W_PRESS_SECTION.materialsCard, "py-0 gap-0")}>
+        <Card className={cn(W_PRESS_SECTION.materialsCard, "py-0 gap-0 h-full")}>
           <CardHeader className="py-2 px-4">
             <CardTitle className="text-[0.8rem]">{t("press.materialsReady")}</CardTitle>
           </CardHeader>
@@ -61,15 +62,17 @@ export function PressInfoSection({ operation }: PressInfoSectionProps) {
               ready={!!op.MATERIEL_EN_PLACE}
               label={t("material.rawMaterial")}
             />
-            <ReadyCheck
-              ready={!!op.MOULE_EN_PLACE}
-              label={t("press.mold")}
-            />
+            {showMoldInfo && (
+              <ReadyCheck
+                ready={!!op.MOULE_EN_PLACE}
+                label={t("press.mold")}
+              />
+            )}
           </CardContent>
         </Card>
 
-        {/* Mold Info */}
-        <Card className={cn(W_PRESS_SECTION.moldCard, "py-0 gap-0")}>
+        {/* Mold Info (PRESS only) */}
+        {showMoldInfo && <Card className={cn(W_PRESS_SECTION.moldCard, "py-0 gap-0")}>
           <CardContent className="px-4 pt-3 pb-3">
             <div className="grid grid-cols-[29%_27%_22%_22%]">
               {/* Col 1: Code + Type */}
@@ -98,8 +101,18 @@ export function PressInfoSection({ operation }: PressInfoSectionProps) {
                 <MoldField label={t("press.coolTime")} value={op.PRESSAGE_TEST_APRES as string} />
               </div>
             </div>
+
+            {/* Note — spans full width at the bottom of the mold card */}
+            {op.PRESSAGE_NOTE && (
+              <div className="border-t pt-2 mt-2">
+                <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                  {t("production.note")}
+                </div>
+                <p className="text-sm whitespace-pre-wrap">{String(op.PRESSAGE_NOTE)}</p>
+              </div>
+            )}
           </CardContent>
-        </Card>
+        </Card>}
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ import { FinishedProductsSection } from "./components/FinishedProductsSection";
 import { MaterialOutputSection } from "./components/MaterialOutputSection";
 import { Button } from "@/components/ui/button";
 import { X, Check } from "lucide-react";
+import { W_QUESTIONNAIRE } from "@/constants/widths";
 import type { Employee } from "@/types/employee";
 import type { FinishedProductRow } from "./components/FinishedProductsSection";
 import type { MaterialRow } from "./components/MaterialOutputSection";
@@ -41,6 +42,7 @@ export function QuestionnairePage() {
 
   const isStop = type === "stop";
   const isComp = type === "comp";
+  const targetStatus = isStop ? "STOP" : isComp ? "COMP" : undefined;
 
   // Form state
   const [employeeCode, setEmployeeCode] = useState(
@@ -145,7 +147,7 @@ export function QuestionnairePage() {
   const showDefects = !isVcut;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Scrollable content */}
       <div className="flex-1 overflow-auto space-y-2 px-3 pb-3 pt-0">
         {/* Order info */}
@@ -153,6 +155,7 @@ export function QuestionnairePage() {
           operation={operation}
           language={state.language}
           label={isStop ? t("questionnaire.stopSurvey") : t("questionnaire.completionSurvey")}
+          targetStatus={targetStatus}
         />
 
         {/* Mold action (PRESS/CNC on COMP only) */}
@@ -160,9 +163,9 @@ export function QuestionnairePage() {
           <MoldActionSection value={moldAction} onChange={setMoldAction} />
         )}
 
-        {/* Employee + Stop cause side by side */}
+        {/* Row 1: Employee | QTÉ PRODUITE | QUANTITÉ DÉFECTUEUSE — 3 × 1/3 */}
         <div className="flex gap-4 items-start">
-          <div className={isStop ? "w-1/3" : "w-full"}>
+          <div className="flex-1">
             <EmployeeEntry
               employeeCode={employeeCode}
               employeeName={employeeName}
@@ -171,8 +174,31 @@ export function QuestionnairePage() {
               error={errors.employeeCode}
             />
           </div>
+          <div className="flex-1">
+            {showFinishedProducts ? (
+              <FinishedProductsSection
+                products={finishedProducts}
+                onProductsChange={setFinishedProducts}
+              />
+            ) : (
+              <GoodQuantitySection value={goodQty} onChange={setGoodQty} />
+            )}
+          </div>
+          {showDefects && (
+            <div className="flex-1">
+              <DefectQuantitySection
+                language={state.language}
+                defects={defects}
+                onDefectsChange={setDefects}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Row 2: Stop Cause (isStop, 1/3) | Material Output (2/3) */}
+        <div className="flex gap-4 items-start">
           {isStop && (
-            <div className="w-2/3">
+            <div className="flex-1">
               <StopCauseSection
                 language={state.language}
                 primaryCause={primaryCause}
@@ -185,42 +211,20 @@ export function QuestionnairePage() {
               />
             </div>
           )}
-        </div>
-
-        {/* Finished/Good products + Defect quantities + Material output — side by side */}
-        <div className="flex gap-4 items-start">
-          <div className="flex-1">
-            {showFinishedProducts ? (
-              <FinishedProductsSection
-                products={finishedProducts}
-                onProductsChange={setFinishedProducts}
-              />
-            ) : (
-              <GoodQuantitySection value={goodQty} onChange={setGoodQty} />
-            )}
-          </div>
-
-          {showDefects && (
-            <div className="flex-1">
-              <DefectQuantitySection
-                language={state.language}
-                defects={defects}
-                onDefectsChange={setDefects}
-              />
-            </div>
-          )}
-
-          <div className="flex-1">
+          <div className="flex-[2]">
             <MaterialOutputSection materials={materials} />
           </div>
         </div>
       </div>
 
       {/* Fixed footer */}
-      <div className="flex items-center justify-between px-3 py-2 border-t bg-background shrink-0">
+      <div
+        className="flex items-center justify-center gap-6 px-6 py-3 shrink-0 border border-white/20 backdrop-blur rounded-2xl w-[680px] mx-auto mb-3"
+        style={{ backgroundColor: "rgba(64, 75, 79, 0.65)", boxShadow: "0 8px 10px rgba(0,0,0,0.5)" }}
+      >
         <Button
           variant="outline"
-          className="touch-target gap-2 text-lg text-destructive"
+          className={`${W_QUESTIONNAIRE.footerBtn} touch-target gap-2 text-lg text-destructive`}
           onClick={handleCancel}
           disabled={submitLoading}
         >
@@ -229,7 +233,7 @@ export function QuestionnairePage() {
         </Button>
 
         <Button
-          className="touch-target gap-2 text-lg bg-green-600 hover:bg-green-700 text-white"
+          className={`${W_QUESTIONNAIRE.footerBtn} touch-target gap-2 text-lg bg-green-600 hover:bg-green-700 text-white`}
           onClick={handleSubmit}
           disabled={submitLoading}
         >

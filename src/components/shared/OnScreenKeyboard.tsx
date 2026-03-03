@@ -10,6 +10,8 @@ interface OnScreenKeyboardProps {
   onClose: () => void;
   locale?: "en" | "fr";
   className?: string;
+  /** When false, physical keyboard events are not captured (use in global mode so the focused input handles them natively). Default: true */
+  capturePhysicalKeys?: boolean;
 }
 
 // ── EN-CA layout ────────────────────────────────────────────────────────────
@@ -40,11 +42,17 @@ export function OnScreenKeyboard({
   onClose,
   locale: localeProp = "en",
   className,
+  capturePhysicalKeys = true,
 }: OnScreenKeyboardProps) {
   type SpecialMode = "numbers" | "special" | "accents";
 
   const [draft, setDraft] = useState(value);
   const [shifted, setShifted] = useState(false);
+
+  // Keep draft in sync when the parent updates `value` (e.g. physical keyboard input)
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
   const [locale, setLocale] = useState<"en" | "fr">(localeProp);
   const [specialMode, setSpecialMode] = useState<SpecialMode>("numbers");
   const [isClosing, setIsClosing] = useState(false);
@@ -90,17 +98,25 @@ export function OnScreenKeyboard({
 
   const handleKey = useCallback(
     (key: string) => {
-      setDraft((prev) => prev + key);
+      setDraft((prev) => {
+        const next = prev + key;
+        onChange(next);
+        return next;
+      });
       if (shifted) setShifted(false);
       flash(key);
     },
-    [shifted]
+    [shifted, onChange]
   );
 
   const handleBackspace = useCallback(() => {
-    setDraft((prev) => prev.slice(0, -1));
+    setDraft((prev) => {
+      const next = prev.slice(0, -1);
+      onChange(next);
+      return next;
+    });
     flash("⌫");
-  }, []);
+  }, [onChange]);
 
   const handleDone = useCallback(() => {
     commit();
@@ -109,12 +125,17 @@ export function OnScreenKeyboard({
     setTimeout(() => onClose(), ANIM_MS);
   }, [commit, onSubmit, onClose]);
 
-  // Physical keyboard support
+  // Physical keyboard support (disabled in global mode — the focused input handles keystrokes natively)
   useEffect(() => {
+    if (!capturePhysicalKeys) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Backspace") {
         e.preventDefault();
-        setDraft((prev) => prev.slice(0, -1));
+        setDraft((prev) => {
+          const next = prev.slice(0, -1);
+          onChange(next);
+          return next;
+        });
       } else if (e.key === "Enter") {
         e.preventDefault();
         handleDone();
@@ -122,12 +143,16 @@ export function OnScreenKeyboard({
         e.preventDefault();
         triggerClose();
       } else if (e.key.length === 1) {
-        setDraft((prev) => prev + e.key);
+        setDraft((prev) => {
+          const next = prev + e.key;
+          onChange(next);
+          return next;
+        });
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleDone, triggerClose]);
+  }, [capturePhysicalKeys, handleDone, triggerClose, onChange]);
 
   // Key button base style — light gray glass keys (bg applied conditionally per-key for flash)
   const keyBtnBase =
@@ -156,6 +181,7 @@ export function OnScreenKeyboard({
         opacity: isClosing ? 0 : undefined,
         transition: isClosing ? `opacity ${ANIM_MS}ms ease` : undefined,
       }}
+      onMouseDown={(e) => e.preventDefault()}
     >
       {/* ── Draft preview bar ── */}
       <div className="px-4 py-2 shrink-0 border-b border-white/10 flex justify-center">
