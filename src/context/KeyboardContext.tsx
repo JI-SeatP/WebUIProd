@@ -1,10 +1,12 @@
-import { createContext, useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { OnScreenKeyboard } from "@/components/shared/OnScreenKeyboard";
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-const KeyboardContext = createContext<{}>({});
+const KeyboardContext = createContext<{ isKeyboardOpen: boolean }>({ isKeyboardOpen: false });
 export { KeyboardContext };
+export function useKeyboard() {
+  return useContext(KeyboardContext);
+}
 
 /** Input types that should trigger the on-screen keyboard */
 const TEXT_INPUT_TYPES = new Set(["text", "search", "email", "url", "tel", ""]);
@@ -90,8 +92,17 @@ export function KeyboardProvider({ children }: { children: ReactNode }) {
     activeInputRef.current = null;
   }, []);
 
+  const handleSubmit = useCallback(() => {
+    // Dispatch Enter key on the active input so onKeyDown handlers (e.g. search) fire
+    if (activeInputRef.current) {
+      activeInputRef.current.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+      );
+    }
+  }, []);
+
   return (
-    <KeyboardContext.Provider value={{}}>
+    <KeyboardContext.Provider value={{ isKeyboardOpen: !!activeInput }}>
       {children}
       {activeInput &&
         createPortal(
@@ -99,6 +110,7 @@ export function KeyboardProvider({ children }: { children: ReactNode }) {
             key={keyboardKey}
             value={keyboardValue}
             onChange={handleChange}
+            onSubmit={handleSubmit}
             onClose={handleClose}
             capturePhysicalKeys={false}
           />,

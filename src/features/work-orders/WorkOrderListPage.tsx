@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,11 @@ export function WorkOrderListPage() {
   const [filters, setFilters] = useState<WorkOrderFilters>({
     departement: state.department?.DESEQ,
   });
+
+  // Sync department filter when header dropdown changes
+  useEffect(() => {
+    setFilters((prev) => ({ ...prev, departement: state.department?.DESEQ }));
+  }, [state.department?.DESEQ]);
 
   const {
     orders,
@@ -33,7 +38,7 @@ export function WorkOrderListPage() {
         <span className="text-muted-foreground text-base shrink-0">
           ({orders.length})
         </span>
-        <FilterBar filters={filters} onFiltersChange={setFilters} allOrders={allOrders} />
+        <FilterBar filters={filters} onFiltersChange={setFilters} allOrders={allOrders} onSearchSubmit={refetch} />
       </div>
 
       {/* Content */}
@@ -47,7 +52,7 @@ export function WorkOrderListPage() {
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-lg p-1.5 flex-1 min-h-0">
+        <div className="bg-white rounded-lg p-1.5 flex-1 min-h-0 flex flex-col">
           <WorkOrderTable
             orders={orders}
             sortField={sortField}

@@ -27,6 +27,11 @@ export function InfoBar() {
   return (
     <div className="flex items-center gap-3 text-[1.05rem] ml-3 text-white">
       <span className="font-semibold">{employee.EMNOM}</span>
+      {import.meta.env.VITE_DB_ENV === "test" && (
+        <span className="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
+          TEST ENV
+        </span>
+      )}
       {teamName && (
         <span className="text-gray-400">
           {t("timeTracking.shift")}: {teamName}

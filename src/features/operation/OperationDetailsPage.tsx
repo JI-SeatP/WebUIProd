@@ -79,10 +79,17 @@ export function OperationDetailsPage() {
   }, [operation]);
 
   // Fetch drawings when operation loads
+  // For PRESS operations, wait for panel data and default to panel drawing
   useEffect(() => {
     if (!operation) return;
 
-    const fetchDrawings = async () => {
+    const fmcode = operation.FMCODE ?? "";
+    const operationIsPress = fmcode.toUpperCase().includes("PRESS");
+
+    // For PRESS, skip initial fetch — we'll load panel drawing once panelDetail is ready
+    if (operationIsPress) return;
+
+    const fetchProductDrawings = async () => {
       try {
         const op = operation as Record<string, unknown>;
         const params = new URLSearchParams();
@@ -95,7 +102,6 @@ export function OperationDetailsPage() {
         );
 
         if (res.success && res.data && res.data.length > 0) {
-          // Convert API-relative URLs to full proxy URLs
           const urls = res.data.map((d) => `/api${d.url}`);
           setDrawingUrls(urls);
         } else {
@@ -107,8 +113,52 @@ export function OperationDetailsPage() {
       }
     };
 
-    fetchDrawings();
+    fetchProductDrawings();
   }, [operation]);
+
+  // For PRESS: load panel drawing by default once panel data is available
+  useEffect(() => {
+    if (!operation || !panelDetail) return;
+
+    const fmcode = operation.FMCODE ?? "";
+    if (!fmcode.toUpperCase().includes("PRESS")) return;
+
+    const panneauSeq = panelDetail.PANNEAU_SEQ;
+    if (!panneauSeq) return;
+
+    const fetchPanelDrawing = async () => {
+      try {
+        const res = await apiGet<{ doseq: number; url: string }[]>(
+          `getDrawings.cfm?inventaireSeq=${panneauSeq}`
+        );
+        if (res.success && res.data && res.data.length > 0) {
+          setDrawingUrls(res.data.map((d) => `/api${d.url}`));
+          setActiveDrawingSeq(panneauSeq);
+        } else {
+          // Fallback to product drawing
+          const op = operation as Record<string, unknown>;
+          const params = new URLSearchParams();
+          if (op.PRODUIT_SEQ) params.set("produitSeq", String(op.PRODUIT_SEQ));
+          if (op.INVENTAIRE_SEQ) params.set("inventaireSeq", String(op.INVENTAIRE_SEQ));
+          if (op.KIT_SEQ) params.set("kitSeq", String(op.KIT_SEQ));
+
+          const fallback = await apiGet<{ doseq: number; url: string }[]>(
+            `getDrawings.cfm?${params.toString()}`
+          );
+          if (fallback.success && fallback.data && fallback.data.length > 0) {
+            setDrawingUrls(fallback.data.map((d) => `/api${d.url}`));
+          } else {
+            setDrawingUrls(undefined);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch panel drawing:", err);
+        setDrawingUrls(undefined);
+      }
+    };
+
+    fetchPanelDrawing();
+  }, [operation, panelDetail]);
 
   const handleViewDrawing = useCallback(async (inventaireSeq: number) => {
     try {

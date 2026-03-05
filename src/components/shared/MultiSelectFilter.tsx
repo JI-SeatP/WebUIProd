@@ -22,6 +22,10 @@ interface MultiSelectFilterProps {
   searchable?: boolean;
   popoverWidth?: string;
   disabledValues?: Set<string>;
+  /** Number of columns for the options list (default: 1) */
+  columns?: number;
+  /** Show a "Select All" toggle at the top of the list */
+  showSelectAll?: boolean;
 }
 
 export function MultiSelectFilter({
@@ -33,6 +37,8 @@ export function MultiSelectFilter({
   searchable = false,
   popoverWidth,
   disabledValues,
+  columns = 1,
+  showSelectAll = false,
 }: MultiSelectFilterProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -89,7 +95,29 @@ export function MultiSelectFilter({
             </div>
           </div>
         )}
-        <div className="max-h-[300px] overflow-auto p-1">
+        <div className={cn("max-h-[300px] overflow-auto p-1", columns >= 2 && "grid grid-cols-2 gap-x-2")}>
+          {showSelectAll && filteredOptions.length > 1 && (
+            <label
+              className={cn(
+                "flex items-center gap-2 px-2 py-2 rounded-md hover:bg-muted cursor-pointer border-b mb-1 pb-2 font-medium",
+                columns >= 2 && "col-span-2"
+              )}
+            >
+              <Checkbox
+                checked={filteredOptions.every((opt) => selected.includes(opt.value))}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    const allValues = filteredOptions.map((opt) => opt.value);
+                    onChange([...new Set([...selected, ...allValues])]);
+                  } else {
+                    const optValues = new Set(filteredOptions.map((opt) => opt.value));
+                    onChange(selected.filter((v) => !optValues.has(v)));
+                  }
+                }}
+              />
+              <span className="text-sm">{t("actions.selectAll")}</span>
+            </label>
+          )}
           {filteredOptions.map((opt) => {
             const isDisabled = disabledValues?.has(opt.value);
             return (

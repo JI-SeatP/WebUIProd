@@ -22,7 +22,7 @@ export interface SessionState {
 type SessionAction =
   | { type: "LOGIN"; payload: { employee: Employee } }
   | { type: "LOGOUT" }
-  | { type: "SET_DEPARTMENT"; payload: { department: Department } }
+  | { type: "SET_DEPARTMENT"; payload: { department: Department | undefined } }
   | { type: "SET_MACHINES"; payload: { machines: Machine[] } }
   | { type: "SET_LANGUAGE"; payload: { language: "fr" | "en" } }
   | { type: "SET_ACTIVE_OPERATION"; payload: { operation: ActiveOperation | null } };
@@ -47,7 +47,7 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
     case "LOGOUT":
       return { ...initialState };
     case "SET_DEPARTMENT":
-      return { ...state, department: action.payload.department };
+      return { ...state, department: action.payload.department ?? null };
     case "SET_MACHINES":
       return { ...state, machines: action.payload.machines };
     case "SET_LANGUAGE":

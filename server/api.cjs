@@ -271,6 +271,7 @@ app.get(
         MA.FAMILLEMACHINE,
         TRANSFERT.TREPOSTER AS TREPOSTER_TRANSFERT,
         VBE.DCQTE_A_FAB AS VBE_DCQTE_A_FAB, VBE.DCQTE_A_PRESSER, VBE.DCQTE_PRESSED, VBE.DCQTE_PENDING_TO_PRESS, VBE.DCQTE_PENDING_TO_MACHINE, VBE.DCQTE_FINISHED, VBE.DCQTE_REJET, VBE.PCS_PER_PANEL, VBE.CONOPO, VBE.SHARE_PRESSING, VBE.PAGE_COMPO, VBE.Panel_NiSeq,
+        (SELECT SUM(TP.TJQTEDEFECT) FROM TEMPSPROD TP WHERE TP.TRANSAC = T.TRSEQ AND TP.CNOMENCOP = CNOP.NOPSEQ) AS NOPQTESCRAP,
         VBE.Mold AS MOULE_CODE,
         VBE.NUM_PER_PACK AS PANNEAU_CAVITE,
         VBE.OPENING AS MOULE_CAVITE,
@@ -722,6 +723,141 @@ app.get(
       ORDER BY DEDESCRIPTION_P
     `);
     res.json({ success: true, data: result.recordset });
+  })
+);
+
+// ─── GET /getLabelPdf.cfm ────────────────────────────────────────────────────
+app.get(
+  "/getLabelPdf.cfm",
+  handler(async (req, res) => {
+    // Dev mock: return sample PDF served by Vite dev server
+    res.json({
+      success: true,
+      data: { pdfUrl: "/sample-label.pdf" },
+      message: "Label PDF generated",
+    });
+  })
+);
+
+// ─── GET /getOrderLabels.cfm ─────────────────────────────────────────────────
+app.get(
+  "/getOrderLabels.cfm",
+  handler(async (req, res) => {
+    let transac = parseInt(req.query.transac) || 0;
+    const copmachine = parseInt(req.query.copmachine) || 0;
+    const noProdParam = req.query.noProd ? String(req.query.noProd).trim() : "";
+
+    // Look up TRANSAC by NO_PROD if no transac provided
+    if (!transac && noProdParam) {
+      const pool = await getPool();
+      const lookupResult = await pool
+        .request()
+        .input("noProd", sql.VarChar(30), noProdParam)
+        .query(`
+          SELECT TOP 1 TRSEQ
+          FROM TRANSAC
+          WHERE DBO.FctFormatNoProd(TRNO, TRITEM) = @noProd
+          ORDER BY TRSEQ DESC
+        `);
+      if (lookupResult.recordset.length > 0) {
+        transac = lookupResult.recordset[0].TRSEQ;
+      } else {
+        return res.json({ success: false, error: "Order not found" });
+      }
+    }
+
+    if (!transac) {
+      return res.json({ success: false, error: "transac or noProd parameter is required" });
+    }
+
+    const pool = await getPool();
+
+    // Derive NOPSEQ and OPCODE from copmachine if provided
+    let nopseq = 0;
+    let currentOpcode = null;
+    if (copmachine) {
+      const nopResult = await pool
+        .request()
+        .input("copmachine", sql.Int, copmachine)
+        .query(`
+          SELECT TOP 1 cm.CNOMENCOP, tp.OPERATION_OPCODE
+          FROM CNOMENCOP_MACHINE cm
+          LEFT JOIN TEMPSPROD tp ON tp.CNOMENCOP = cm.CNOMENCOP
+            AND tp.OPERATION_OPCODE IN ('PRESS','CNC','SAND','PACK')
+          WHERE cm.CNOM_SEQ = @copmachine
+        `);
+      if (nopResult.recordset.length > 0) {
+        nopseq = nopResult.recordset[0].CNOMENCOP;
+        currentOpcode = nopResult.recordset[0].OPERATION_OPCODE ?? null;
+      }
+    }
+
+    // Table 1: Finished product container labels (LesContenants + LesDetails merged)
+    const fpQuery = pool.request().input("transac", sql.Int, transac);
+    let fpSql = `
+      SELECT DISTINCT
+        dc.CONTENANT, dc.DCO_QTE_INV, dc.INVENTAIRE,
+        con.CON_NUMERO, i.INDESC1, i.INDESC2,
+        T_EPF.TRSEQ AS TRSEQ_EPF, T_EPF.TRQTEUNINV,
+        DTR_EPF.DTRQTE, DTR_EPF.NO_SERIE_NSNO_SERIE,
+        (SELECT TOP 1 TP2.TJFINDATE FROM TEMPSPROD TP2
+         WHERE TP2.TRANSAC = T_CO.TRSEQ AND TP2.OPERATION_OPCODE = 'PACK'
+         ORDER BY TP2.TJFINDATE DESC) AS PACK_DATE
+      FROM COMMANDE CO
+      INNER JOIN TRANSAC T_CO ON T_CO.TRNO = CO.CONOTRANS
+      INNER JOIN TEMPSPROD TP ON T_CO.TRSEQ = TP.TRANSAC
+      INNER JOIN CNOMENCLATURE CNO ON CNO.TRANSAC = T_CO.TRSEQ
+      LEFT JOIN CNOMENCOP COP ON CNO.NISEQ = COP.CNOMENCLATURE
+      INNER JOIN TRANSAC T_EPF ON T_EPF.TRANSAC = T_CO.TRSEQ AND T_EPF.TRNO_EQUATE = 5
+      INNER JOIN DET_TRANS DTR_EPF ON DTR_EPF.TRANSAC = T_EPF.TRSEQ
+      INNER JOIN DET_CONTENANT dc ON DTR_EPF.CONTENANT = dc.CONTENANT
+        AND DTR_EPF.NO_SERIE_NSNO_SERIE = dc.NO_SERIE_NSNO_SERIE
+      INNER JOIN CONTENANT con ON con.CON_SEQ = dc.CONTENANT
+      INNER JOIN INVENTAIRE i ON dc.INVENTAIRE = i.INSEQ
+      WHERE T_CO.TRSEQ = @transac
+        AND dc.DCO_QTE_INV > 0
+    `;
+    if (nopseq) {
+      fpQuery.input("nopseq", sql.Int, nopseq);
+      fpSql += ` AND TP.CNOMENCOP = @nopseq`;
+    }
+    const fpResult = await fpQuery.query(fpSql);
+
+    // Table 2: Operation labels — PRESS, CNC, SAND, PACK from TEMPSPROD
+    const opResult = await pool
+      .request()
+      .input("transac2", sql.Int, transac)
+      .query(`
+        SELECT TJSEQ, TRANSAC, OPERATION, OPERATION_OPCODE,
+               OPERATION_OPDESC_P, OPERATION_OPDESC_S,
+               TJDEBUTDATE, TJFINDATE, TJQTEPROD, TJQTEDEFECT,
+               CNOMENCOP, cNomencOp_Machine,
+               TRANSAC_TRNO, TRANSAC_TRITEM,
+               MACHINE_MACODE, MACHINE_MADESC_P, MACHINE_MADESC_S
+        FROM TEMPSPROD
+        WHERE TRANSAC = @transac2
+          AND TJQTEPROD <> 0
+          AND (MODEPROD_MPCODE = 'PROD' OR MODEPROD_MPCODE = 'STOP' OR MODEPROD_MPCODE = 'COMP')
+          AND OPERATION_OPCODE IN ('PRESS', 'CNC', 'SAND', 'PACK')
+        ORDER BY CNOMENCOP, TJFINDATE
+      `);
+
+    const noProdResult = await pool
+      .request()
+      .input("transac3", sql.Int, transac)
+      .query(`SELECT DBO.FctFormatNoProd(TRNO, TRITEM) AS NO_PROD FROM TRANSAC WHERE TRSEQ = @transac3`);
+    const noProd = noProdResult.recordset[0]?.NO_PROD ?? null;
+
+    res.json({
+      success: true,
+      data: {
+        finishedProducts: fpResult.recordset,
+        operations: opResult.recordset,
+        currentOpcode,
+        noProd,
+      },
+      message: "Labels retrieved",
+    });
   })
 );
 

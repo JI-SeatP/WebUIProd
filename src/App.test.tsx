@@ -5,6 +5,6 @@ describe("App", () => {
   it("renders the login page by default", () => {
     // App includes its own BrowserRouter, so render directly without test-utils wrapper
     render(<App />);
-    expect(screen.getByText("Prod")).toBeInTheDocument();
+    expect(screen.getAllByText("Connexion").length).toBeGreaterThan(0);
   });
 });

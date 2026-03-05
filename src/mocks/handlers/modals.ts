@@ -47,39 +47,21 @@ export const modalsHandlers = [
     });
   }),
 
-  // Labels for a specific order (order details context)
-  http.get("/api/getOrderLabels.cfm", async ({ request }) => {
-    const labels = await loadLabels();
-    const url = new URL(request.url);
-    const transac = Number(url.searchParams.get("transac"));
-    // In the real system this returns all labels for the order's containers.
-    // For mock, return labels matching the transac or just return all labels to simulate.
-    const matched = labels.filter((l) => l.TRANSAC === transac);
-    // If exact match found, return it; otherwise return all labels as mock data
-    const result = matched.length > 0 ? matched : labels;
-
+  // Labels for a specific order (order details context) — returns two tables
+  http.get("/api/getOrderLabels.cfm", async () => {
     return HttpResponse.json({
       success: true,
-      data: result,
-      message: `Found ${result.length} labels for order`,
+      data: { finishedProducts: [], operations: [], currentOpcode: null, noProd: null },
+      message: "Labels retrieved",
     });
   }),
 
-  // Label search
-  http.get("/api/searchLabels.cfm", async ({ request }) => {
-    const labels = await loadLabels();
-    const url = new URL(request.url);
-    const search = (url.searchParams.get("search") ?? "").toLowerCase();
-    const filtered = labels.filter(
-      (l) =>
-        l.NO_PROD.toLowerCase().includes(search) ||
-        l.NOM_CLIENT.toLowerCase().includes(search)
-    );
-
+  // Get label PDF URL for preview
+  http.get("/api/getLabelPdf.cfm", async () => {
     return HttpResponse.json({
       success: true,
-      data: filtered,
-      message: `Found ${filtered.length} labels`,
+      data: { pdfUrl: "/sample-label.pdf" },
+      message: "Label PDF generated",
     });
   }),
 

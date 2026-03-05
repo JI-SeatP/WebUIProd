@@ -2,13 +2,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -57,6 +51,7 @@ export function Header() {
   const { state, dispatch } = useSession();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
+  const [deptOpen, setDeptOpen] = useState(false);
 
   useEffect(() => {
     apiGet<Department[]>("getDepartments.cfm").then((res) => {
@@ -67,9 +62,12 @@ export function Header() {
   const isOnOrders = location.pathname === "/orders";
   const isOnOperation = location.pathname.includes("/operation/");
 
-  // Extract transac from URL when on operation details page
+  // Extract transac and copmachine from URL when on operation details page
   const operationTransac = isOnOperation
     ? Number(location.pathname.match(/\/orders\/(\d+)\//)?.[1]) || undefined
+    : undefined;
+  const operationCopmachine = isOnOperation
+    ? Number(location.pathname.match(/\/operation\/(\d+)/)?.[1]) || undefined
     : undefined;
 
   const handleLogout = () => {
@@ -78,6 +76,10 @@ export function Header() {
   };
 
   const handleDepartmentChange = (value: string) => {
+    if (value === "ALL") {
+      dispatch({ type: "SET_DEPARTMENT", payload: { department: undefined } });
+      return;
+    }
     const dept = departments.find((d) => d.DESEQ === Number(value));
     if (dept) {
       dispatch({ type: "SET_DEPARTMENT", payload: { department: dept } });
@@ -169,21 +171,73 @@ export function Header() {
         <InfoBar />
 
         {/* Department dropdown */}
-        <Select
-          value={state.department ? String(state.department.DESEQ) : ""}
-          onValueChange={handleDepartmentChange}
-        >
-          <SelectTrigger className="!h-[48px] w-[200px] ml-2 bg-white !text-lg">
-            <SelectValue placeholder={t("operation.department")} />
-          </SelectTrigger>
-          <SelectContent position="popper" className="!max-h-none">
-            {departments.map((dept) => (
-              <SelectItem key={dept.DESEQ} value={String(dept.DESEQ)} className="!text-lg">
-                {state.language === "fr" ? dept.DEDESCRIPTION_P : dept.DEDESCRIPTION_S}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {(() => {
+          const deptBySeq = Object.fromEntries(departments.map((d) => [d.DESEQ, d]));
+          const deptLabel = (deseq: number) => {
+            const d = deptBySeq[deseq];
+            return d ? (state.language === "fr" ? d.DEDESCRIPTION_P : d.DEDESCRIPTION_S) : "";
+          };
+          const col1: (number | "divider")[] = [5, 4, 2, 3];
+          const col2: (number | "divider")[] = [7, "divider", 12, 18, 23];
+          const col3: (number | "divider")[] = [11, 9, 10, "divider", 20];
+          const selectedLabel = state.department
+            ? (state.language === "fr" ? state.department.DEDESCRIPTION_P : state.department.DEDESCRIPTION_S)
+            : (state.language === "fr" ? "Toutes les cellules" : "All cells");
+
+          const renderItem = (deseq: number) => {
+            const isActive = state.department?.DESEQ === deseq;
+            return (
+              <button
+                key={deseq}
+                type="button"
+                className={cn(
+                  "w-full text-left px-3 py-2 rounded-md text-base hover:bg-muted cursor-pointer transition-colors",
+                  isActive && "font-semibold"
+                )}
+                style={isActive ? { backgroundColor: "#aeffae" } : undefined}
+                onClick={() => { handleDepartmentChange(String(deseq)); setDeptOpen(false); }}
+              >
+                {deptLabel(deseq)}
+              </button>
+            );
+          };
+
+          const renderCol = (items: (number | "divider")[]) =>
+            items.map((item, i) =>
+              item === "divider"
+                ? <div key={`div-${i}`} className="border-t my-1" />
+                : deptBySeq[item] ? renderItem(item) : null
+            );
+
+          return (
+            <Popover open={deptOpen} onOpenChange={setDeptOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="!h-[48px] w-[200px] ml-2 bg-white !text-lg justify-center font-normal">
+                  <span className="truncate">{selectedLabel}</span>
+                  <ChevronRight className="size-4 opacity-50 shrink-0 rotate-90" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-2" align="start">
+                <button
+                  type="button"
+                  className={cn(
+                    "w-full text-left px-3 py-2 rounded-md text-base font-medium hover:bg-muted cursor-pointer transition-colors mb-1 border-b pb-2",
+                    !state.department && "font-semibold"
+                  )}
+                  style={!state.department ? { backgroundColor: "#aeffae" } : undefined}
+                  onClick={() => { handleDepartmentChange("ALL"); setDeptOpen(false); }}
+                >
+                  {state.language === "fr" ? "Toutes les cellules" : "All cells"}
+                </button>
+                <div className="flex gap-4">
+                  <div className="flex flex-col min-w-[180px]">{renderCol(col1)}</div>
+                  <div className="flex flex-col min-w-[140px]">{renderCol(col2)}</div>
+                  <div className="flex flex-col min-w-[120px]">{renderCol(col3)}</div>
+                </div>
+              </PopoverContent>
+            </Popover>
+          );
+        })()}
 
         {/* Spacer */}
         <div className="flex-1" />
@@ -248,6 +302,7 @@ export function Header() {
         open={activeModal === "label"}
         onOpenChange={(open) => !open && setActiveModal(null)}
         transac={operationTransac}
+        copmachine={operationCopmachine}
       />
       <MessageModal
         open={activeModal === "message"}

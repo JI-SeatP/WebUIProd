@@ -7,7 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
+import { cn, pressQtyDisplay } from "@/lib/utils";
 import { W_WORK_ORDERS } from "@/constants/widths";
 import {
   StatusBadge,
@@ -86,7 +86,7 @@ export function WorkOrderTable({
   return (
     <div
       ref={scrollRef}
-      className="flex-1 min-h-0 overflow-y-auto overflow-x-auto"
+      className="flex-1 min-h-0 overflow-y-auto overflow-x-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent"
       onScroll={(e) => setIsScrolled((e.currentTarget as HTMLDivElement).scrollTop > 0)}
     >
       <table className="w-full caption-bottom text-sm">
@@ -196,7 +196,7 @@ export function WorkOrderTable({
                 <TableRow
                   key={`${order.TRANSAC}-${order.NOPSEQ}-${idx}`}
                   className={cn(
-                    "h-[56px] cursor-pointer no-select",
+                    "h-[56px] cursor-pointer no-select hover:!bg-[#aeffae]",
                     statusRowColor(status)
                   )}
                 >
@@ -245,7 +245,7 @@ export function WorkOrderTable({
                     {order.MOULE_CODE ?? "—"}
                   </TableCell>
                   <TableCell className={cn(W_WORK_ORDERS.qtyTotal, "text-right tabular-nums text-base")}>
-                    {order.QTE_A_FAB}
+                    {pressQtyDisplay(order.QTE_A_FAB, order.DCQTE_A_PRESSER, order.DCQTE_REJET, order.FMCODE)}
                   </TableCell>
                   <TableCell className={cn(W_WORK_ORDERS.qtyProduced, "text-right tabular-nums text-base")}>
                     {order.QTE_PRODUITE ?? 0}

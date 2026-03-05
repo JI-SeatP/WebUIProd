@@ -53,7 +53,7 @@ export function LoginPage() {
             <LoadingSpinner />
           ) : (
             <>
-              <div className="bg-muted rounded-md px-4 py-3 w-full text-right text-2xl font-mono tabular-nums min-h-[52px] flex items-center justify-end">
+              <div className="bg-muted rounded-md px-4 py-3 w-full text-center text-5xl font-mono tabular-nums min-h-[80px] flex items-center justify-center">
                 {code || "0"}
               </div>
               <NumPad

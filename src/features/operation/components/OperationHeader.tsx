@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { StatusBadge, statusCodeToEnum } from "@/components/shared/StatusBadge";
-import { cn } from "@/lib/utils";
+import { cn, pressQtyDisplay } from "@/lib/utils";
 import type { OperationData } from "../hooks/useOperation";
 
 interface OperationHeaderProps {
@@ -124,9 +124,9 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
 
         {/* Quantities */}
         <div className="flex items-start gap-[19px]">
-          <QtyField 
-            label={t("order.qtyToMake")} 
-            value={operation.QTE_A_FAB}
+          <QtyField
+            label={t("order.qtyToMake")}
+            value={pressQtyDisplay(operation.QTE_A_FAB, operation.DCQTE_A_PRESSER, operation.DCQTE_REJET, operation.FMCODE)}
             backgroundColor="#F2F2F2"
           />
           <QtyField 
@@ -135,9 +135,9 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
             textColor="#008000"
             backgroundColor="#F2F2F2"
           />
-          <QtyField 
-            label={t("order.qtyDefect")} 
-            value={operation.DCQTE_REJET ?? 0}
+          <QtyField
+            label={t("order.qtyDefect")}
+            value={operation.NOPQTESCRAP ?? 0}
             textColor="#BF0000"
             backgroundColor="#F2F2F2"
           />

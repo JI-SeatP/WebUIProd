@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ interface FilterBarProps {
   filters: WorkOrderFilters;
   onFiltersChange: (filters: WorkOrderFilters) => void;
   allOrders: WorkOrder[];
+  onSearchSubmit?: () => void;
 }
 
 const OPERATION_TYPES: FilterOption[] = [
@@ -55,10 +56,16 @@ function matchesMachines(wo: WorkOrder, machines?: number[]): boolean {
   return machines.includes(wo.MACHINE);
 }
 
-export function FilterBar({ filters, onFiltersChange, allOrders }: FilterBarProps) {
+
+export function FilterBar({ filters, onFiltersChange, allOrders, onSearchSubmit }: FilterBarProps) {
   const { t } = useTranslation();
   const { state } = useSession();
   const [searchInput, setSearchInput] = useState(filters.search ?? "");
+
+  // Sync local input when filters.search changes externally (e.g. clear, department change)
+  useEffect(() => {
+    setSearchInput(filters.search ?? "");
+  }, [filters.search]);
 
   // Base orders excluding PRESS_NS (same exclusion as useWorkOrders)
   const baseOrders = useMemo(
@@ -116,15 +123,19 @@ export function FilterBar({ filters, onFiltersChange, allOrders }: FilterBarProp
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [baseOrders, filters.operationTypes, filters.statuses, state.language]);
 
-  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      onFiltersChange({ ...filters, search: searchInput || undefined });
+  // Cascading: cell (GROUPE) options based on active operation type + status + machine filters
+  const handleSearchSubmit = () => {
+    const newSearch = searchInput || undefined;
+    if (newSearch !== filters.search) {
+      onFiltersChange({ ...filters, search: newSearch });
+    } else {
+      onSearchSubmit?.();
     }
   };
 
-  const handleSearchBlur = () => {
-    if (searchInput !== (filters.search ?? "")) {
-      onFiltersChange({ ...filters, search: searchInput || undefined });
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSearchSubmit();
     }
   };
 
@@ -149,6 +160,7 @@ export function FilterBar({ filters, onFiltersChange, allOrders }: FilterBarProp
     });
   };
 
+
   return (
     <div className="flex items-center gap-4">
       {/* Operation Type */}
@@ -171,17 +183,19 @@ export function FilterBar({ filters, onFiltersChange, allOrders }: FilterBarProp
 
       {/* Search */}
       <div className="relative">
-        <Search
-          size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-        />
+        <button
+          type="button"
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          onClick={handleSearchSubmit}
+        >
+          <Search size={16} />
+        </button>
         <Input
-          className="h-[48px] pl-9 pr-9 text-base w-[330px] bg-white"
+          className="h-[48px] pl-9 pr-9 !text-lg w-[396px] bg-white"
           placeholder={t("actions.search")}
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           onKeyDown={handleSearchKeyDown}
-          onBlur={handleSearchBlur}
         />
         {searchInput && (
           <button
@@ -205,7 +219,8 @@ export function FilterBar({ filters, onFiltersChange, allOrders }: FilterBarProp
         onChange={handleMachinesChange}
         className="w-[330px]"
         searchable
-        popoverWidth="w-[330px]"
+        popoverWidth={machineOptions.length > 7 ? "w-[620px]" : "w-[330px]"}
+        columns={machineOptions.length > 7 ? 2 : 1}
       />
     </div>
   );

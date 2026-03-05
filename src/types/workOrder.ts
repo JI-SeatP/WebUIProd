@@ -53,6 +53,9 @@ export interface WorkOrder {
   STATUT_P: string | null;
   STATUT_S: string | null;
   DCPRIORITE: number;
+  DCQTE_A_PRESSER: number | null;
+  DCQTE_REJET: number | null;
+  PCS_PER_PANEL: number | null;
   ESTKIT: number;
   ENTREPOT: number;
   ENTREPOT_CODE: string | null;
@@ -73,6 +76,7 @@ export interface WorkOrderDetail {
   DCQTE_FINISHED: number;
   DCQTE_REJET: number;
   PCS_PER_PANEL: number | null;
+  NOPQTESCRAP: number | null;
   CONOPO: string | null;
   SHARE_PRESSING: number | null;
   PAGE_COMPO: string | null;

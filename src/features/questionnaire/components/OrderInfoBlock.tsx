@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { ArrowRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge, statusCodeToEnum } from "@/components/shared/StatusBadge";
+import { pressQtyDisplay } from "@/lib/utils";
 import type { OperationStatus } from "@/components/shared/StatusBadge";
 import type { OperationData } from "@/features/operation/hooks/useOperation";
 
@@ -122,7 +123,7 @@ export function OrderInfoBlock({ operation, language, label, theme = "modern", t
               <div className="flex flex-col items-center gap-1">
                 <div className="text-xs font-semibold uppercase tracking-wide">{t("order.qtyToMake")}</div>
                 <div className="rounded-lg px-6 py-2.5 text-center min-w-[80px]" style={{ backgroundColor: "#F2F2F2" }}>
-                  <div className="text-2xl font-bold">{operation.QTE_A_FAB ?? "—"}</div>
+                  <div className="text-2xl font-bold">{pressQtyDisplay(operation.QTE_A_FAB, operation.DCQTE_A_PRESSER, operation.DCQTE_REJET, operation.FMCODE)}</div>
                 </div>
               </div>
               <div className="flex flex-col items-center gap-1">

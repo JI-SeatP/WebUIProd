@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Delete, ArrowBigUp, CornerDownLeft } from "lucide-react";
+import { Delete, ArrowBigUp, CornerDownLeft, ChevronDown } from "lucide-react";
 
 interface OnScreenKeyboardProps {
   value: string;
@@ -182,6 +182,7 @@ export function OnScreenKeyboard({
         transition: isClosing ? `opacity ${ANIM_MS}ms ease` : undefined,
       }}
       onMouseDown={(e) => e.preventDefault()}
+      onPointerDown={(e) => e.stopPropagation()}
     >
       {/* ── Draft preview bar ── */}
       <div className="px-4 py-2 shrink-0 border-b border-white/10 flex justify-center">
@@ -291,6 +292,15 @@ export function OnScreenKeyboard({
             onClick={() => handleKey(" ")}
           >
             espace / space
+          </Button>
+
+          {/* Hide keyboard */}
+          <Button
+            variant="outline"
+            className="touch-target !h-full w-20 text-2xl !bg-white/50 hover:!bg-white/80 !border-gray-300/50 !text-gray-800 !shadow-sm"
+            onClick={triggerClose}
+          >
+            <ChevronDown className="size-6" />
           </Button>
 
           {/* Done / OK */}

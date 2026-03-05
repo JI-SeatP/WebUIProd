@@ -1,5 +1,5 @@
 import { apiGet, apiPost } from "./client";
-import type { SkidInfo, LabelInfo, TransferInfo } from "@/types/modals";
+import type { SkidInfo, LabelInfo, TransferInfo, OrderLabelsResponse } from "@/types/modals";
 
 export function getSkidInfo(skidNo: string) {
   return apiGet<SkidInfo>(`getSkidInfo.cfm?skid=${encodeURIComponent(skidNo)}`);
@@ -13,8 +13,20 @@ export function searchLabels(search: string) {
   return apiGet<LabelInfo[]>(`searchLabels.cfm?search=${encodeURIComponent(search)}`);
 }
 
-export function getOrderLabels(transac: number) {
-  return apiGet<LabelInfo[]>(`getOrderLabels.cfm?transac=${transac}`);
+export function getOrderLabels(transac: number, copmachine?: number) {
+  const params = new URLSearchParams({ transac: String(transac) });
+  if (copmachine) params.set("copmachine", String(copmachine));
+  return apiGet<OrderLabelsResponse>(`getOrderLabels.cfm?${params}`);
+}
+
+export function getOrderLabelsByNoProd(noProd: string) {
+  const params = new URLSearchParams({ noProd });
+  return apiGet<OrderLabelsResponse>(`getOrderLabels.cfm?${params}`);
+}
+
+export function getLabelPdf(type: "operation" | "pack", key: number, lang: string) {
+  const params = new URLSearchParams({ type, key: String(key), lang });
+  return apiGet<{ pdfUrl: string }>(`getLabelPdf.cfm?${params}`);
 }
 
 export function printLabel(transac: number, qtyPerSkid: number) {

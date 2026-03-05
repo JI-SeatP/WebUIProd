@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { apiGet } from "@/api/client";
 import { statusCodeToEnum } from "@/components/shared/StatusBadge";
 import type { WorkOrder } from "@/types/workOrder";
@@ -35,33 +35,45 @@ export function useWorkOrders(filters: WorkOrderFilters) {
   const [sortField, setSortField] = useState<SortField>("NO_PROD");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
+  // Version counter to discard stale responses and support forced refetch
+  const fetchVersionRef = useRef(0);
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+
   const fetchOrders = useCallback(async () => {
+    const version = ++fetchVersionRef.current;
+    const f = filtersRef.current;
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (filters.departement) params.set("departement", String(filters.departement));
-      if (filters.search) params.set("search", filters.search);
+      if (f.departement) params.set("departement", String(f.departement));
+      if (f.search) params.set("search", f.search);
 
       const query = params.toString();
       const endpoint = query ? `getWorkOrders.cfm?${query}` : "getWorkOrders.cfm";
       const res = await apiGet<WorkOrder[]>(endpoint);
 
+      if (version !== fetchVersionRef.current) return; // stale response
       if (res.success) {
         setOrders(res.data);
       } else {
         setError(res.error ?? "Failed to load work orders");
       }
     } catch (err) {
+      if (version !== fetchVersionRef.current) return; // stale response
       setError(err instanceof Error ? err.message : "Failed to load work orders");
     } finally {
-      setLoading(false);
+      if (version === fetchVersionRef.current) {
+        setLoading(false);
+      }
     }
-  }, [filters.departement, filters.search]);
+  }, []);
 
+  // Auto-fetch when server-side filter params change
   useEffect(() => {
     fetchOrders();
-  }, [fetchOrders]);
+  }, [filters.departement, filters.search, fetchOrders]);
 
   const handleSort = useCallback(
     (field: SortField) => {
