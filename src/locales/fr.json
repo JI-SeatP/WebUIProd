@@ -55,7 +55,10 @@
   },
   "cnc": {
     "productType": "Type produit",
-    "transacNote": "Note"
+    "transacNote": "Note",
+    "operationSteps": "Étapes de production",
+    "stepNumber": "#",
+    "stepDescription": "Étapes de production"
   },
   "panel": {
     "seq": "Séq.",

@@ -1,7 +1,7 @@
 # MIGRATION TODO
 
-> Last updated: 2026-02-25
-> Progress: 55/70+ features completed (Phases 1-4 done)
+> Last updated: 2026-03-06
+> Progress: 56/70+ features completed (Phases 1-4 done)
 
 ---
 
@@ -102,6 +102,9 @@
 - [x] **S003-07-F002** Create useOperation hook `Completed`
 - [x] **S003-07-F003** Create MSW handler for operations `Completed`
 
+### S003-08 CNC Operation Special blocks
+- [ ] S003-08-F001 Operation Steps
+- [ ] S003-08-F002 Components
 ---
 
 ## S004 - Production Questionnaire
@@ -153,7 +156,7 @@
 
 ### S009-01 Modal Screens
 - [ ] **S009-01-F001** SKID Scanner modal `Not Started`
-- [ ] **S009-01-F002** Label Printing modal `Not Started`
+- [x] **S009-01-F002** Label Printing modal `Completed`
 - [ ] **S009-01-F003** Message modal `Not Started`
 - [ ] **S009-01-F004** Warehouse Transfer modal `Not Started`
 - [ ] **S009-01-F005** Machine Selection modal `Not Started`

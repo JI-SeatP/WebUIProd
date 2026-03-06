@@ -6,6 +6,22 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ─── Document path conversion (mirrors CF's CheminFichier → RacineDocuments) ──
+// Test env: c:\sites\test\EcransSeatply\documents\ → http://10.4.80.6:800/AUTOFAB_SEATPLY_TEST/documents/
+const CF_DOC_SERVER_PATH = "c:\\sites\\test\\ecransseatply\\documents\\"; // lowercased for comparison
+const CF_DOC_BASE_URL    = "http://10.4.80.6:800/AUTOFAB_SEATPLY_TEST/documents/";
+
+function convertDocPath(raw) {
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw; // already a URL
+  // Normalize to backslashes and lowercase for case-insensitive match (like CF's ReplaceNoCase)
+  const normalized = raw.replace(/\//g, "\\").toLowerCase();
+  if (normalized.startsWith(CF_DOC_SERVER_PATH)) {
+    return CF_DOC_BASE_URL + raw.slice(CF_DOC_SERVER_PATH.length).replace(/\\/g, "/");
+  }
+  return raw; // unknown format, pass through
+}
+
 // Helper: wrap handler with try/catch and standard response envelope
 function handler(fn) {
   return async (req, res) => {
@@ -383,6 +399,53 @@ app.get(
       } catch (nsErr) {
         console.warn("Next step query failed:", nsErr.message);
       }
+    }
+
+    // Fetch operation steps from INSTRUCTION/METHODE tables
+    try {
+      const cnomenclature = row.CNOMENCLATURE ? parseInt(row.CNOMENCLATURE) : 0;
+      const stepsReq = pool.request().input("transacSteps", sql.Int, row.TRANSAC);
+      let stepsSql;
+      if (cnomenclature) {
+        stepsReq.input("cnomenclature", sql.Int, cnomenclature);
+        stepsSql = `
+          SELECT MET.METSEQ, MET.METNUMERO, MET.METDESC_P, MET.METDESC_S,
+                 MET.METFICHIER_PDF_P, MET.METFICHIER_PDF_S,
+                 MET.METVIDEO_P, MET.METVIDEO_S,
+                 MET.METRTF_P, MET.METRTF_S,
+                 (SELECT COUNT(*) FROM DET_METHODE DM WHERE DM.METHODE = MET.METSEQ) AS IMAGE_COUNT
+          FROM INSTRUCTION INST
+          INNER JOIN METHODE MET ON MET.METSEQ = INST.METHODE
+          WHERE INST.INSNOM_TABLE = 'CNOMENCLATURE'
+            AND INST.INSSEQ_REFERENCE = @cnomenclature
+          ORDER BY INST.INSORDRE
+        `;
+      } else {
+        stepsSql = `
+          SELECT MET.METSEQ, MET.METNUMERO, MET.METDESC_P, MET.METDESC_S,
+                 MET.METFICHIER_PDF_P, MET.METFICHIER_PDF_S,
+                 MET.METVIDEO_P, MET.METVIDEO_S,
+                 MET.METRTF_P, MET.METRTF_S,
+                 (SELECT COUNT(*) FROM DET_METHODE DM WHERE DM.METHODE = MET.METSEQ) AS IMAGE_COUNT
+          FROM INSTRUCTION INST
+          INNER JOIN METHODE MET ON MET.METSEQ = INST.METHODE
+          WHERE INST.INSNOM_TABLE = 'TRANSAC'
+            AND INST.INSSEQ_REFERENCE = @transacSteps
+          ORDER BY INST.INSORDRE
+        `;
+      }
+      const stepsResult = await stepsReq.query(stepsSql);
+      // Convert server file paths → web URLs for PDF and video fields
+      row.steps = stepsResult.recordset.map((s) => ({
+        ...s,
+        METFICHIER_PDF_P: convertDocPath(s.METFICHIER_PDF_P),
+        METFICHIER_PDF_S: convertDocPath(s.METFICHIER_PDF_S),
+        METVIDEO_P:       convertDocPath(s.METVIDEO_P),
+        METVIDEO_S:       convertDocPath(s.METVIDEO_S),
+      }));
+    } catch (stepsErr) {
+      console.warn("Steps query failed:", stepsErr.message);
+      row.steps = [];
     }
 
     res.json({

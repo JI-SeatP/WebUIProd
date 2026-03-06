@@ -55,9 +55,23 @@ export function Header() {
 
   useEffect(() => {
     apiGet<Department[]>("getDepartments.cfm").then((res) => {
-      if (res.success) setDepartments(res.data);
+      if (res.success) {
+        setDepartments(res.data);
+        // Auto-select Cell 1 on first load if no department is already selected
+        if (!state.department) {
+          const cell1 = res.data.find(
+            (d) =>
+              d.DEDESCRIPTION_S?.toLowerCase() === "cell 1" ||
+              d.DEDESCRIPTION_P?.toLowerCase() === "cellule 1" ||
+              d.DECODE?.toLowerCase() === "c1"
+          );
+          if (cell1) {
+            dispatch({ type: "SET_DEPARTMENT", payload: { department: cell1 } });
+          }
+        }
+      }
     });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isOnOrders = location.pathname === "/orders";
   const isOnOperation = location.pathname.includes("/operation/");

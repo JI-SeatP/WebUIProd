@@ -63,6 +63,30 @@ export interface WorkOrder {
   ENTREPOT_S: string | null;
 }
 
+export interface StepImage {
+  descP: string;
+  descS: string;
+  url: string;
+}
+
+export interface StepDetails {
+  images: StepImage[];
+}
+
+export interface OperationStep {
+  METSEQ: number;
+  METNUMERO: number;
+  METDESC_P: string;
+  METDESC_S: string;
+  METFICHIER_PDF_P: string | null;
+  METFICHIER_PDF_S: string | null;
+  METVIDEO_P: string | null;
+  METVIDEO_S: string | null;
+  METRTF_P: string | null;
+  METRTF_S: string | null;
+  IMAGE_COUNT: number;
+}
+
 export interface WorkOrderDetail {
   TRANSAC: number;
   COPMACHINE: number | null;
@@ -81,4 +105,5 @@ export interface WorkOrderDetail {
   SHARE_PRESSING: number | null;
   PAGE_COMPO: string | null;
   Panel_NiSeq: number;
+  steps: OperationStep[];
 }

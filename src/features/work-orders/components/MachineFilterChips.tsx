@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiGet } from "@/api/client";
 import { Toggle } from "@/components/ui/toggle";
 import { cn } from "@/lib/utils";
@@ -18,16 +18,26 @@ export function MachineFilterChips({
   language,
 }: MachineFilterChipsProps) {
   const [machines, setMachines] = useState<Machine[]>([]);
+  const defaultApplied = useRef(false);
 
   useEffect(() => {
     const params = departement ? `?departement=${departement}` : "";
     apiGet<Machine[]>(`getMachines.cfm${params}`).then((res) => {
       if (res.success) {
-        // Filter out "0 Pressing not scheduled" (MACODE = "PRESS_NS")
-        setMachines(res.data.filter((m) => m.MACODE !== "PRESS_NS"));
+        const filtered = res.data.filter((m) => m.MACODE !== "PRESS_NS");
+        setMachines(filtered);
+
+        // On initial load only: pre-select Cell 1 machines (FMCODE starts with "C1_")
+        if (!defaultApplied.current && selectedMachines.length === 0) {
+          defaultApplied.current = true;
+          const cell1 = filtered
+            .filter((m) => m.FMCODE.toUpperCase().startsWith("C1_"))
+            .map((m) => m.MASEQ);
+          if (cell1.length > 0) onMachinesChange(cell1);
+        }
       }
     });
-  }, [departement]);
+  }, [departement]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleToggle = (maseq: number) => {
     if (selectedMachines.includes(maseq)) {
