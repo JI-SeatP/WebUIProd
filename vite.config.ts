@@ -18,6 +18,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, "/AutoFAB_SEATPLY_TEST/queries"),
       },
+      "/api/getLabelData.cfm": {
+        target: "http://10.4.80.6",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, "/AutoFAB_SEATPLY_TEST/queries"),
+      },
       "/api": {
         target: "http://localhost:3001",
         changeOrigin: true,

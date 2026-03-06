@@ -14,9 +14,10 @@
 <cfset response["error"] = "Not initialized">
 
 <cftry>
-	<cfparam name="url.type" default="operation">
-	<cfparam name="url.key"  default="0">
-	<cfparam name="url.lang" default="fr">
+	<cfparam name="url.type"   default="operation">
+	<cfparam name="url.key"    default="0">
+	<cfparam name="url.lang"   default="fr">
+	<cfparam name="url.opcode" default="">
 
 	<cfif Val(url.key) EQ 0>
 		<cfthrow message="key parameter is required">
@@ -25,23 +26,29 @@
 	<!--- ── 1. Resolve Crystal Report file name ───────────────────────────── --->
 	<cfif url.type EQ "operation">
 
-		<cfquery name="qOp" datasource="AF_SEATPLY_TEST">
-			SELECT OPERATION_OPCODE
-			FROM TEMPSPROD
-			WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(url.key)#">
-		</cfquery>
-
-		<cfif qOp.RecordCount EQ 0>
-			<cfthrow message="TJSEQ #Val(url.key)# not found">
+		<!--- Use opcode passed by frontend to skip the DB query.
+		      Falls back to a DB lookup only if opcode is missing. --->
+		<cfif Len(Trim(url.opcode)) GT 0>
+			<cfset sOpcode = UCase(Trim(url.opcode))>
+		<cfelse>
+			<cfquery name="qOp" datasource="AF_SEATPLY_TEST">
+				SELECT OPERATION_OPCODE
+				FROM TEMPSPROD
+				WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(url.key)#">
+			</cfquery>
+			<cfif qOp.RecordCount EQ 0>
+				<cfthrow message="TJSEQ #Val(url.key)# not found">
+			</cfif>
+			<cfset sOpcode = qOp.OPERATION_OPCODE>
 		</cfif>
 
-		<cfswitch expression="#qOp.OPERATION_OPCODE#">
+		<cfswitch expression="#sOpcode#">
 			<cfcase value="PRESS"><cfset sRapport = "stp-PressingLabel4x6_003.rpt"></cfcase>
 			<cfcase value="CNC"><cfset sRapport = "STP-MachiningLabel4x6_002.rpt"></cfcase>
 			<cfcase value="SAND"><cfset sRapport = "STP-SandingLabel4x6_001.rpt"></cfcase>
 			<cfcase value="PACK"><cfset sRapport = "STP-PackagingtoAssemblyLabel4x6_SKID_002.rpt"></cfcase>
 			<cfdefaultcase>
-				<cfthrow message="Unsupported OPCODE: #qOp.OPERATION_OPCODE#">
+				<cfthrow message="Unsupported OPCODE: #sOpcode#">
 			</cfdefaultcase>
 		</cfswitch>
 
@@ -51,16 +58,20 @@
 		<cfthrow message="Unknown type: #url.type#">
 	</cfif>
 
-	<!--- ── 2. Get AutoFAB service connection info from DB ────────────────── --->
-	<cfquery name="qParam" datasource="AF_SEATPLY_TEST">
-		SELECT TOP 1 PAWS_PORT, PAWS_IP FROM vPARAMETRE ORDER BY PASEQ
-	</cfquery>
-
-	<cfif qParam.RecordCount EQ 0>
-		<cfthrow message="vPARAMETRE returned no rows — cannot reach AutoFAB service">
+	<!--- ── 2. Get AutoFAB service connection info (cached in application scope) ── --->
+	<cfif NOT StructKeyExists(application, "autofabParams") OR NOT IsStruct(application.autofabParams)>
+		<cfquery name="qParam" datasource="AF_SEATPLY_TEST">
+			SELECT TOP 1 PAWS_PORT, PAWS_IP FROM vPARAMETRE ORDER BY PASEQ
+		</cfquery>
+		<cfif qParam.RecordCount EQ 0>
+			<cfthrow message="vPARAMETRE returned no rows — cannot reach AutoFAB service">
+		</cfif>
+		<cflock scope="application" type="exclusive" timeout="5">
+			<cfset application.autofabParams = { ip = qParam.PAWS_IP, port = qParam.PAWS_PORT }>
+		</cflock>
 	</cfif>
 
-	<cfset sAutoFabServeur = "http://#qParam.PAWS_IP#:#qParam.PAWS_PORT#/AutofabAPI">
+	<cfset sAutoFabServeur = "http://#application.autofabParams.ip#:#application.autofabParams.port#/AutofabAPI">
 
 	<!--- ── 3. Report file path and public URL base (test env) ────────────── --->
 	<!--- These match InitialiseConstantes.cfm for isEnvTest = True           --->
@@ -103,9 +114,7 @@
 		<cfhttpparam type="xml" name="parameter" value="#Trim(soapRequest)#">
 	</cfhttp>
 
-	<cfset sleep(2000)>
-
-	<!--- ── 6. Parse XML response (plain XML, no SOAP wrapper) ──────────── --->
+	<!--- ── 6. Parse XML response immediately (no fixed sleep) ──────────── --->
 	<cfset xmlResultat = XmlParse(REReplace(oClient.FileContent, "^[^<]+", "", "one"))>
 	<cfset xmlRoot = xmlResultat.XmlRoot>
 
@@ -120,6 +129,23 @@
 
 	<cfif retJob LT 0 OR leURL EQ "">
 		<cfthrow message="Report service error — nRetJob=#retJob#, URL=#leURL#. FileContent: #Left(oClient.FileContent, 500)#">
+	</cfif>
+
+	<!--- ── 7. Poll for the PDF file to be written to disk ───────────────── --->
+	<!--- AutoFAB returns the URL before finishing the write; poll instead   --->
+	<!--- of sleeping a fixed 2 seconds.                                     --->
+	<cfset pdfFilePath = "#sCheminRapport##leURL#">
+	<cfset maxWait  = 5000>
+	<cfset interval = 150>
+	<cfset waited   = 0>
+
+	<cfloop condition="waited LT maxWait AND NOT FileExists(pdfFilePath)">
+		<cfset sleep(interval)>
+		<cfset waited = waited + interval>
+	</cfloop>
+
+	<cfif NOT FileExists(pdfFilePath)>
+		<cfthrow message="PDF not ready after #maxWait#ms — AutoFAB may still be rendering. URL=#leURL#">
 	</cfif>
 
 	<cfset response["success"] = true>
