@@ -12,6 +12,16 @@
 <cftry>
 	<cfset response = StructNew()>
 
+	<!--- Set datasources based on environment ----->
+	<cfset isProduction = (GetEnvironmentVariable("CF_ENVIRONMENT", "test") EQ "production")>
+	<cfif isProduction>
+		<cfset datasourcePrimary = "AF_SEATPLY">
+		<cfset datasourceExt = "AF_SEATPLY_EXT">
+	<cfelse>
+		<cfset datasourcePrimary = "TS_SEATPL">
+		<cfset datasourceExt = "TS_SEATPL_EXT">
+	</cfif>
+
 	<!--- Required parameters --->
 	<cfparam name="url.transac" default="0">
 	<cfparam name="url.copmachine" default="0">
@@ -24,13 +34,15 @@
 	</cfif>
 
 	<!--- Step 1: Look up TJSEQ from vEcransProduction (EXT datasource) --->
-	<cfquery name="qLookup" datasource="AF_SEATPLY_TEST_EXT">
+	<cfquery name="qLookup" datasource="#datasourcePrimary#">
 		SELECT TOP 1 v.TJSEQ
 		FROM vEcransProduction v
 		WHERE v.TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(url.transac)#">
+		AND v.OPERATION <> 'FINSH'
 		<cfif Val(url.copmachine) NEQ 0>
 			AND v.COPMACHINE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(url.copmachine)#">
 		</cfif>
+		ORDER BY v.TJSEQ DESC
 	</cfquery>
 
 	<cfif qLookup.RecordCount EQ 0 OR Val(qLookup.TJSEQ) EQ 0>
@@ -44,7 +56,7 @@
 
 	<!--- Step 2: Exact RequeteAlternative.cfm query from legacy code (datasource = primary DB)
 	      Cross-database reference to EXT for VSP_BonTravail_Entete and FctGet_PANNEAUX --->
-	<cfquery name="trouveOperation" datasource="AF_SEATPLY_TEST">
+	<cfquery name="trouveOperation" datasource="#datasourcePrimary#">
 		SELECT DISTINCT
 		PL.PR_ORDO_DEBUT AS DATE_DEBUT_PREVU,
 		PL.PR_ORDO_FIN AS DATE_FIN_PREVU,
@@ -105,7 +117,7 @@
 			CEILING(CN_FAB.NIQTE / FLOOR( ( SRC.INLONGUEUR_MSE / CN_FAB.NILONGUEUR) * ( SRC.INLARGEUR_MSE / CN_FAB.NILARGEUR)))
 			END
 		AS QTY_REQ,
-		TS_SEATPL_EXT.DBO.FctGet_PANNEAUX(CNOP.TRANSAC,CNOP.CNOMENCLATURE) AS Panneau,
+		#datasourceExt#.DBO.FctGet_PANNEAUX(CNOP.TRANSAC,CNOP.CNOMENCLATURE) AS Panneau,
 		PC.PPINNOINV,
 		f.FMCODE,
 		MA.FAMILLEMACHINE,
@@ -116,7 +128,7 @@
 		INNER JOIN TRANSAC T ON T.TRNO = CO.CONOTRANS
 		INNER JOIN DET_COMM DC ON DC.TRANSAC = T.TRSEQ
 		INNER JOIN CNOMENCOP CNOP ON CNOP.TRANSAC = T.TRSEQ
-		LEFT OUTER JOIN TS_SEATPL_EXT.dbo.VSP_BonTravail_Entete AS VBE ON VBE.TRANSAC = (SELECT TOP 1 TRANSAC FROM TS_SEATPL_EXT.dbo.VSP_BonTravail_Entete VBE2 WHERE VBE2.TRANSAC = T.TRSEQ)
+		LEFT OUTER JOIN #datasourceExt#.dbo.VSP_BonTravail_Entete AS VBE ON VBE.TRANSAC = (SELECT TOP 1 TRANSAC FROM #datasourceExt#.dbo.VSP_BonTravail_Entete VBE2 WHERE VBE2.TRANSAC = T.TRSEQ)
 		LEFT OUTER JOIN PL_RESULTAT PL ON CNOP.NOPSEQ = PL.CNOMENCOP
 		LEFT OUTER JOIN INVENTAIRE INVENTAIRE_FAB ON CNOP.INVENTAIRE_P=INVENTAIRE_FAB.INSEQ
 		LEFT OUTER JOIN CNOMENCLATURE CN_FAB ON CN_FAB.NISEQ = CNOP.CNOMENCLATURE

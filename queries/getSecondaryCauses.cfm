@@ -12,6 +12,14 @@
 <cftry>
 	<cfset response = StructNew()>
 
+	<!--- Set datasources based on environment ----->
+	<cfset isProduction = (GetEnvironmentVariable("CF_ENVIRONMENT", "test") EQ "production")>
+	<cfif isProduction>
+		<cfset datasourcePrimary = "AF_SEATPLY">
+	<cfelse>
+		<cfset datasourcePrimary = "TS_SEATPL">
+	</cfif>
+
 	<cfparam name="url.primaryId" default="0">
 
 	<cfif Val(url.primaryId) EQ 0>
@@ -24,7 +32,7 @@
 
 	<!--- Secondary stop causes from QA_CAUSES table, filtered by QA_CAUSEP foreign key
 	      Source: operation.cfc — exact table/column names from legacy code --->
-	<cfquery name="qCauses" datasource="AF_SEATPLY_TEST">
+	<cfquery name="qCauses" datasource="#datasourcePrimary#">
 		SELECT QACSSEQ, QACSDESCRIPTION_P, QACSDESCRIPTION_S
 		FROM QA_CAUSES
 		WHERE QA_CAUSEP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(url.primaryId)#">

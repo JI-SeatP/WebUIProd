@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { StatusBadge, statusCodeToEnum } from "@/components/shared/StatusBadge";
-import { cn, pressQtyDisplay } from "@/lib/utils";
+import { cn, pressQtyDisplay, computeQteRestante } from "@/lib/utils";
 import type { OperationData } from "../hooks/useOperation";
 
 interface OperationHeaderProps {
@@ -126,7 +126,7 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
         <div className="flex items-start gap-[19px]">
           <QtyField
             label={t("order.qtyToMake")}
-            value={pressQtyDisplay(operation.QTE_A_FAB, operation.DCQTE_A_PRESSER, operation.DCQTE_REJET, operation.FMCODE)}
+            value={pressQtyDisplay(operation.QTE_A_FAB, operation.DCQTE_A_PRESSER, operation.DCQTE_REJET, operation.FMCODE, operation.VBE_DCQTE_A_FAB)}
             backgroundColor="#F2F2F2"
           />
           <QtyField 
@@ -141,9 +141,9 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
             textColor="#BF0000"
             backgroundColor="#F2F2F2"
           />
-          <QtyField 
-            label={t("order.qtyRemaining")} 
-            value={typeof operation.QTE_RESTANTE === "number" ? Math.round(operation.QTE_RESTANTE) : (operation.QTE_RESTANTE ?? "—")}
+          <QtyField
+            label={t("order.qtyRemaining")}
+            value={computeQteRestante(operation)}
             backgroundColor="#FFF88E"
           />
         </div>

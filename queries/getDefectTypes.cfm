@@ -12,9 +12,17 @@
 <cftry>
 	<cfset response = StructNew()>
 
+	<!--- Set datasources based on environment ----->
+	<cfset isProduction = (GetEnvironmentVariable("CF_ENVIRONMENT", "test") EQ "production")>
+	<cfif isProduction>
+		<cfset datasourcePrimary = "AF_SEATPLY">
+	<cfelse>
+		<cfset datasourcePrimary = "TS_SEATPL">
+	</cfif>
+
 	<!--- Defect types from RAISON table, filtered by RRTYPE LIKE '%14%'
 	      Source: QteDefect.cfc — exact table/column names from legacy code --->
-	<cfquery name="qDefects" datasource="AF_SEATPLY_TEST">
+	<cfquery name="qDefects" datasource="#datasourcePrimary#">
 		SELECT RRSEQ, RRCODE, RRDESC_P, RRDESC_S, RRTYPE
 		FROM RAISON
 		WHERE RRTYPE LIKE '%14%'

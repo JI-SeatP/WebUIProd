@@ -12,9 +12,17 @@
 <cftry>
 	<cfset response = StructNew()>
 
+	<!--- Set datasources based on environment ----->
+	<cfset isProduction = (GetEnvironmentVariable("CF_ENVIRONMENT", "test") EQ "production")>
+	<cfif isProduction>
+		<cfset datasourcePrimary = "AF_SEATPLY">
+	<cfelse>
+		<cfset datasourcePrimary = "TS_SEATPL">
+	</cfif>
+
 	<!--- Primary stop causes from QA_CAUSEP table
 	      Source: operation.cfc — exact table/column names from legacy code --->
-	<cfquery name="qCauses" datasource="AF_SEATPLY_TEST">
+	<cfquery name="qCauses" datasource="#datasourcePrimary#">
 		SELECT QACPSEQ, QACPDESCRIPTION_P, QACPDESCRIPTION_S
 		FROM QA_CAUSEP
 		ORDER BY QACPDESCRIPTION_P

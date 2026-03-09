@@ -7,7 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn, pressQtyDisplay } from "@/lib/utils";
+import { cn, pressQtyDisplay, computeQteRestante } from "@/lib/utils";
 import { W_WORK_ORDERS } from "@/constants/widths";
 import {
   StatusBadge,
@@ -245,13 +245,13 @@ export function WorkOrderTable({
                     {order.MOULE_CODE ?? "—"}
                   </TableCell>
                   <TableCell className={cn(W_WORK_ORDERS.qtyTotal, "text-right tabular-nums text-base")}>
-                    {pressQtyDisplay(order.QTE_A_FAB, order.DCQTE_A_PRESSER, order.DCQTE_REJET, order.FMCODE)}
+                    {pressQtyDisplay(order.QTE_A_FAB, order.DCQTE_A_PRESSER, order.DCQTE_REJET, order.FMCODE, order.VBE_DCQTE_A_FAB)}
                   </TableCell>
                   <TableCell className={cn(W_WORK_ORDERS.qtyProduced, "text-right tabular-nums text-base")}>
                     {order.QTE_PRODUITE ?? 0}
                   </TableCell>
                   <TableCell className={cn(W_WORK_ORDERS.qtyRemaining, "text-right tabular-nums text-base font-semibold")}>
-                    {order.QTE_RESTANTE != null ? Math.round(Number(order.QTE_RESTANTE)) : "—"}
+                    {computeQteRestante(order)}
                   </TableCell>
                   <TableCell className={W_WORK_ORDERS.operation}>
                     <div className="truncate">

@@ -13,6 +13,14 @@
 <cfset response["success"] = false>
 <cfset response["error"] = "Not initialized">
 
+<!--- Set datasources based on environment ----->
+<cfset isProduction = (GetEnvironmentVariable("CF_ENVIRONMENT", "test") EQ "production")>
+<cfif isProduction>
+	<cfset datasourcePrimary = "AF_SEATPLY">
+<cfelse>
+	<cfset datasourcePrimary = "TS_SEATPL">
+</cfif>
+
 <cftry>
 	<cfparam name="url.type"   default="operation">
 	<cfparam name="url.key"    default="0">
@@ -31,7 +39,7 @@
 		<cfif Len(Trim(url.opcode)) GT 0>
 			<cfset sOpcode = UCase(Trim(url.opcode))>
 		<cfelse>
-			<cfquery name="qOp" datasource="AF_SEATPLY_TEST">
+			<cfquery name="qOp" datasource="#datasourcePrimary#">
 				SELECT OPERATION_OPCODE
 				FROM TEMPSPROD
 				WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(url.key)#">
@@ -60,7 +68,7 @@
 
 	<!--- ── 2. Get AutoFAB service connection info (cached in application scope) ── --->
 	<cfif NOT StructKeyExists(application, "autofabParams") OR NOT IsStruct(application.autofabParams)>
-		<cfquery name="qParam" datasource="AF_SEATPLY_TEST">
+		<cfquery name="qParam" datasource="#datasourcePrimary#">
 			SELECT TOP 1 PAWS_PORT, PAWS_IP FROM vPARAMETRE ORDER BY PASEQ
 		</cfquery>
 		<cfif qParam.RecordCount EQ 0>

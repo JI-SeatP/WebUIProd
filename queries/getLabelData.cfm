@@ -25,16 +25,12 @@
 		<cfthrow message="transac parameter is required">
 	</cfif>
 
-	<!--- ── Environment detection ─────────────────────────────────────────── --->
-	<!--- Matches InitialiseConstantes.cfm path-based pattern:               --->
-	<!---   D:\NBA\sites\test\  → AF_SEATPLY_TEST_EXT  (DB: TS_SEATPL_EXT)  --->
-	<!---   D:\NBA\sites\prod\  → AF_SEATPLY_EXT       (DB: AF_SEATPLY_EXT) --->
-	<cfif FindNoCase("sites\test", cgi.PATH_TRANSLATED)
-	   OR FindNoCase("AUTOFABTEST", cgi.PATH_TRANSLATED)
-	   OR FindNoCase("SEATPLY_TEST", cgi.PATH_TRANSLATED)>
-		<cfset dsExt = "AF_SEATPLY_TEST_EXT">
-	<cfelse>
+	<!--- ── Environment detection based on CF_ENVIRONMENT variable ──────── --->
+	<cfset isProduction = (GetEnvironmentVariable("CF_ENVIRONMENT", "test") EQ "production")>
+	<cfif isProduction>
 		<cfset dsExt = "AF_SEATPLY_EXT">
+	<cfelse>
+		<cfset dsExt = "TS_SEATPL_EXT">
 	</cfif>
 
 	<cfset labelData = StructNew()>

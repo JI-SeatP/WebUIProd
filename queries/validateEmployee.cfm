@@ -12,6 +12,14 @@
 <cftry>
 	<cfset response = StructNew()>
 
+	<!--- Set datasources based on environment ----->
+	<cfset isProduction = (GetEnvironmentVariable("CF_ENVIRONMENT", "test") EQ "production")>
+	<cfif isProduction>
+		<cfset datasourcePrimary = "AF_SEATPLY">
+	<cfelse>
+		<cfset datasourcePrimary = "TS_SEATPL">
+	</cfif>
+
 	<!--- Read JSON body --->
 	<cfset requestBody = DeserializeJSON(GetHttpRequestData().content)>
 	<cfset employeeCode = requestBody["employeeCode"]>
@@ -19,7 +27,7 @@
 	<!--- Exact query from initialise.cfc → initialiseEmploye()
 	      Tables: EMPLOYE, EQUIPE, MACHINE, EMP_FCT
 	      Returns both _P and _S descriptions so frontend can pick by language --->
-	<cfquery name="trouveEmploye" datasource="AF_SEATPLY_TEST">
+	<cfquery name="trouveEmploye" datasource="#datasourcePrimary#">
 		SELECT em.EMSEQ, em.EMNO, em.EMNOM, em.EMACTIF, em.EMNOIDENT, em.MACHINE, em.EMEMAIL, em.EQUIPE,
 			e.EQDESC_P AS NOMEQUIPE_P, e.EQDESC_S AS NOMEQUIPE_S, e.EQDEBUTQUART, e.EQFINQUART,
 			m.DEPARTEMENT, m.ENTREPOT, m.POSTE,

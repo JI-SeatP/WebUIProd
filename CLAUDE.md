@@ -64,3 +64,16 @@ Always read the relevant skill from `ai/skills/` BEFORE doing work:
 - .cfm endpoint files go in `queries/` and are manually deployed
 - Use bracket notation for struct keys to preserve JSON casing: `response["success"]` not `response.success`
 - Always wrap logic in try/catch to prevent HTML error pages leaking into JSON responses
+- **Database selection** — All new queries MUST use environment-driven datasource switching:
+  ```coldfusion
+  <!--- At start of <cftry> block --->
+  <cfset isProduction = (GetEnvironmentVariable("CF_ENVIRONMENT", "test") EQ "production")>
+  <cfif isProduction>
+    <cfset datasourcePrimary = "AF_SEATPLY">
+    <cfset datasourceExt = "AF_SEATPLY_EXT">
+  <cfelse>
+    <cfset datasourcePrimary = "TS_SEATPL">
+    <cfset datasourceExt = "TS_SEATPL_EXT">
+  </cfif>
+  ```
+  Then use `datasource="#datasourcePrimary#"` or `datasource="#datasourceExt#"` in all cfqueries. Never hardcode `AF_SEATPLY_TEST` or `TS_SEATPL_EXT`.

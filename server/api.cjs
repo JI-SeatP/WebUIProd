@@ -160,7 +160,7 @@ app.get(
         v.STATUT_CODE, v.STATUT_P, v.STATUT_S,
         dc.DCPRIORITE,
         v.ESTKIT, v.ENTREPOT, v.ENTREPOT_CODE, v.ENTREPOT_P, v.ENTREPOT_S,
-        VBE.DCQTE_A_FAB AS DCQTE_A_FAB,
+        VBE.DCQTE_A_FAB AS VBE_DCQTE_A_FAB,
         VBE.DCQTE_A_PRESSER, VBE.DCQTE_PRESSED,
         VBE.DCQTE_PENDING_TO_PRESS, VBE.DCQTE_PENDING_TO_MACHINE,
         VBE.DCQTE_FINISHED, VBE.DCQTE_REJET,
@@ -200,11 +200,13 @@ app.get(
     try {
       const poolExt = await getPoolExt();
       const lookupReq = poolExt.request().input("transac", sql.Int, transac);
-      let lookupSql = `SELECT TOP 1 v.TJSEQ, v.NOPSEQ FROM vEcransProduction v WHERE v.TRANSAC = @transac`;
+      let lookupSql = `SELECT TOP 1 v.TJSEQ, v.NOPSEQ FROM vEcransProduction v WHERE v.TRANSAC = @transac`
+        + ` AND v.OPERATION <> 'FINSH'`;
       if (copmachine) {
         lookupReq.input("copmachine", sql.Int, copmachine);
         lookupSql += ` AND v.COPMACHINE = @copmachine`;
       }
+      lookupSql += ` ORDER BY v.TJSEQ DESC`;
       const lookup = await lookupReq.query(lookupSql);
       if (lookup.recordset.length) {
         tjseq = lookup.recordset[0].TJSEQ || null;
@@ -265,7 +267,7 @@ app.get(
         INVENTAIRE_FAB.IN_QTE_PAR_EMBAL AS QTE_PAR_EMBAL,
         INVENTAIRE_FAB.IN_QTE_PAR_CONT AS QTE_PAR_CONT,
         CN_FAB.NIQTE,
-        ISNULL(VBE.DCQTE_A_FAB, PR_QUANTITE_A_FAB) AS QTE_A_FAB,
+        PR_QUANTITE_A_FAB AS QTE_A_FAB,
         MA.MASEQ AS MACHINE,
         MA.MACODE,
         MA.MADESC_P AS MACHINE_P,

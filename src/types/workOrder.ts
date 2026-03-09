@@ -55,6 +55,7 @@ export interface WorkOrder {
   DCPRIORITE: number;
   DCQTE_A_PRESSER: number | null;
   DCQTE_REJET: number | null;
+  VBE_DCQTE_A_FAB: number | null;
   PCS_PER_PANEL: number | null;
   ESTKIT: number;
   ENTREPOT: number;

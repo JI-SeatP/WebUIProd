@@ -12,6 +12,14 @@
 <cftry>
 	<cfset response = StructNew()>
 
+	<!--- Set datasources based on environment ----->
+	<cfset isProduction = (GetEnvironmentVariable("CF_ENVIRONMENT", "test") EQ "production")>
+	<cfif isProduction>
+		<cfset datasourceExt = "AF_SEATPLY_EXT">
+	<cfelse>
+		<cfset datasourceExt = "TS_SEATPL_EXT">
+	</cfif>
+
 	<!--- Read optional query parameters --->
 	<cfparam name="url.departement" default="">
 	<cfparam name="url.machine" default="">
@@ -21,7 +29,7 @@
 	<!--- Main work order list query
 	      Uses vEcransProduction view (EXT db) + AUTOFAB_DET_COMM for priority + VSP_BonTravail_Entete for detail quantities.
 	      Inline SQL for now — will be moved to stored procedure after testing. --->
-	<cfquery name="qWorkOrders" datasource="AF_SEATPLY_TEST_EXT">
+	<cfquery name="qWorkOrders" datasource="#datasourceExt#">
 		SELECT DISTINCT
 			v.TRANSAC,
 			v.COPMACHINE,
