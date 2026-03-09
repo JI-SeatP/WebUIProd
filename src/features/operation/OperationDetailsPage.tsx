@@ -10,6 +10,7 @@ import { CncInfoSection } from "./components/CncInfoSection";
 import { VcutInfoSection } from "./components/VcutInfoSection";
 import { MachineInfoPanel } from "./components/MachineInfoPanel";
 import { DrawingViewer } from "./components/DrawingViewer";
+import { StepDetailsViewer } from "./components/StepDetailsViewer";
 import { StatusActionBar } from "./components/StatusActionBar";
 import { PpapAlert } from "./components/PpapAlert";
 import { DoNotPressAlert } from "./components/DoNotPressAlert";
@@ -19,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTranslation } from "react-i18next";
 import { W_DRAWING_PANEL } from "@/constants/widths";
+import type { OperationStep } from "@/types/workOrder";
 
 export function OperationDetailsPage() {
   const { transac, copmachine } = useParams<{ transac: string; copmachine: string }>();
@@ -35,6 +37,10 @@ export function OperationDetailsPage() {
   // Drawing data from API
   const [drawingUrls, setDrawingUrls] = useState<string[] | undefined>(undefined);
   const [activeDrawingSeq, setActiveDrawingSeq] = useState<number | null>(null);
+
+  // Step details (shown inline in drawing pane)
+  const [activeStep, setActiveStep] = useState<OperationStep | null>(null);
+  const [activeStepNumber, setActiveStepNumber] = useState<number>(0);
 
   const handleStatusChanged = useCallback((newStatus: string) => {
     setLocalStatus(newStatus);
@@ -161,6 +167,8 @@ export function OperationDetailsPage() {
   }, [operation, panelDetail]);
 
   const handleViewDrawing = useCallback(async (inventaireSeq: number) => {
+    // Clear step details when switching to drawings
+    setActiveStep(null);
     try {
       const res = await apiGet<{ doseq: number; url: string }[]>(
         `getDrawings.cfm?inventaireSeq=${inventaireSeq}`
@@ -177,6 +185,11 @@ export function OperationDetailsPage() {
       setDrawingUrls(undefined);
       setActiveDrawingSeq(null);
     }
+  }, []);
+
+  const handleViewStepDetails = useCallback((step: OperationStep, stepNumber: number) => {
+    setActiveStep(step);
+    setActiveStepNumber(stepNumber);
   }, []);
 
   if (loading) {
@@ -271,7 +284,13 @@ export function OperationDetailsPage() {
               <>
                 {panelDetail && <PanelDetailsTable detail={panelDetail} onViewDrawing={handleViewDrawing} activeDrawingSeq={activeDrawingSeq} />}
                 <div className="flex-1 flex flex-col">
-                  <CncInfoSection operation={operation} language={state.language} hideNextStep />
+                  <CncInfoSection
+                    operation={operation}
+                    language={state.language}
+                    hideNextStep
+                    onViewStepDetails={handleViewStepDetails}
+                    activeStepSeq={activeStep?.METSEQ ?? null}
+                  />
                 </div>
               </>
             )}
@@ -283,9 +302,18 @@ export function OperationDetailsPage() {
             )}
           </div>
 
-          {/* Right 50%: technical drawing */}
+          {/* Right 50%: technical drawing or step instructions */}
           <div className={W_DRAWING_PANEL.container}>
-            <DrawingViewer images={drawingUrls} />
+            {activeStep ? (
+              <StepDetailsViewer
+                step={activeStep}
+                stepNumber={activeStepNumber}
+                language={state.language}
+                onClose={() => setActiveStep(null)}
+              />
+            ) : (
+              <DrawingViewer images={drawingUrls} />
+            )}
           </div>
         </div>
       </div>

@@ -769,8 +769,126 @@ app.get(
       ".doc": "application/msword",
       ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     };
+    const stat = await fs.promises.stat(filePath);
     res.setHeader("Content-Type", contentTypes[ext] || "application/octet-stream");
+    res.setHeader("Content-Length", stat.size);
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Content-Disposition", "inline");
     fs.createReadStream(filePath).pipe(res);
+  })
+);
+
+// ─── Shared file-serving helper ──────────────────────────────────────────────
+const FILE_CONTENT_TYPES = {
+  ".pdf": "application/pdf",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".bmp": "image/bmp",
+  ".tif": "image/tiff",
+  ".tiff": "image/tiff",
+  ".mp4": "video/mp4",
+  ".mov": "video/quicktime",
+  ".avi": "video/x-msvideo",
+  ".wmv": "video/x-ms-wmv",
+  ".webm": "video/webm",
+};
+
+async function serveFilePath(filePath, res) {
+  let stat;
+  try {
+    stat = await fs.promises.stat(filePath);
+  } catch {
+    return res.status(404).json({ success: false, error: "File not accessible: " + filePath });
+  }
+  const ext = pathModule.extname(filePath).toLowerCase();
+  res.setHeader("Content-Type", FILE_CONTENT_TYPES[ext] || "application/octet-stream");
+  res.setHeader("Content-Length", stat.size);
+  res.setHeader("Accept-Ranges", "bytes");
+  res.setHeader("Content-Disposition", "inline");
+  fs.createReadStream(filePath).pipe(res);
+}
+
+// ─── GET /doc-methode/:metseq/:field — serve METHODE PDF/video file ───────────
+// field: pdf_p | pdf_s | video_p | video_s
+const METHODE_FIELD_MAP = {
+  pdf_p:   "METFICHIER_PDF_P",
+  pdf_s:   "METFICHIER_PDF_S",
+  video_p: "METVIDEO_P",
+  video_s: "METVIDEO_S",
+};
+
+app.get(
+  "/doc-methode/:metseq/:field",
+  handler(async (req, res) => {
+    const metseq = parseInt(req.params.metseq) || 0;
+    const col = METHODE_FIELD_MAP[req.params.field];
+    if (!metseq || !col) {
+      return res.status(400).json({ success: false, error: "Invalid params" });
+    }
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input("metseq", sql.Int, metseq)
+      .query(`SELECT ${col} AS FILEPATH FROM METHODE WHERE METSEQ = @metseq`);
+
+    if (!result.recordset.length || !result.recordset[0].FILEPATH) {
+      return res.status(404).json({ success: false, error: "File path not found" });
+    }
+    await serveFilePath(result.recordset[0].FILEPATH, res);
+  })
+);
+
+// ─── GET /doc-methode-images/:metseq — list DET_METHODE images for a step ────
+app.get(
+  "/doc-methode-images/:metseq",
+  handler(async (req, res) => {
+    const metseq = parseInt(req.params.metseq) || 0;
+    if (!metseq) return res.status(400).json({ success: false, error: "Invalid metseq" });
+
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input("metseq", sql.Int, metseq)
+      .query(`
+        SELECT DMDESC_P, DMDESC_S, DMFICHIER
+        FROM DET_METHODE
+        WHERE METHODE = @metseq
+        ORDER BY DMDESC_P
+      `);
+
+    const images = result.recordset.map((row) => ({
+      descP: row.DMDESC_P,
+      descS: row.DMDESC_S,
+      url: `/api/doc-raw-file?path=${encodeURIComponent(row.DMFICHIER)}`,
+    }));
+
+    res.json({ success: true, data: { images } });
+  })
+);
+
+// ─── GET /doc-raw-file — serve any file by path (validated against doc roots) ─
+// Files must be within the known document root paths (V:\AUTOFAB... or \\seapro\...)
+const ALLOWED_PATH_PREFIXES = [
+  "v:\\autofab",   // V:\AUTOFAB... and V:\AUTOFABTEST...
+  "\\\\seapro\\",  // UNC: \\seapro\...
+  "c:\\sites\\",   // CF server local: c:\sites\...
+];
+
+app.get(
+  "/doc-raw-file",
+  handler(async (req, res) => {
+    const rawPath = decodeURIComponent(req.query.path || "");
+    if (!rawPath) return res.status(400).json({ success: false, error: "Missing path" });
+
+    const lower = rawPath.toLowerCase().replace(/\//g, "\\");
+    const allowed = ALLOWED_PATH_PREFIXES.some((p) => lower.startsWith(p));
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: "Access denied: path not in allowed roots" });
+    }
+
+    await serveFilePath(rawPath, res);
   })
 );
 

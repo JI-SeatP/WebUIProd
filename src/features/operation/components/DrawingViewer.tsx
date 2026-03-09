@@ -7,48 +7,8 @@ interface DrawingViewerProps {
   images?: string[];
 }
 
-const PDF_PARAMS = "#page=1&pagemode=none&view=Fit&toolbar=0&navpanes=0&scrollbar=0";
-
 function isPdf(url: string) {
   return /\.pdf$/i.test(url) || /\/doc\/\d+/.test(url);
-}
-
-function DrawingContent({ url, onClick, className }: { url: string; onClick?: () => void; className?: string }) {
-  if (isPdf(url)) {
-    return (
-      <div className={`relative cursor-pointer ${className ?? ""}`} onClick={onClick}>
-        <object
-          data={`${url}${PDF_PARAMS}`}
-          type="application/pdf"
-          className="w-full h-full rounded border pointer-events-none"
-        >
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
-            <p className="text-sm">PDF preview not available</p>
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-blue-600 underline pointer-events-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              Open PDF in new tab
-            </a>
-          </div>
-        </object>
-        {/* Transparent overlay to capture clicks over the PDF object */}
-        <div className="absolute inset-0" />
-      </div>
-    );
-  }
-
-  return (
-    <img
-      src={url}
-      alt="Drawing"
-      className={`w-full rounded border object-contain cursor-pointer ${className ?? ""}`}
-      onClick={onClick}
-    />
-  );
 }
 
 export function DrawingViewer({ images }: DrawingViewerProps) {
@@ -72,11 +32,34 @@ export function DrawingViewer({ images }: DrawingViewerProps) {
     <>
       <Card className="py-0 gap-0">
         <CardContent className="px-4 pt-3 pb-4 flex flex-col gap-3">
-          <DrawingContent
-            url={currentUrl}
-            onClick={() => setFullscreen(true)}
-            className="h-[600px]"
-          />
+          {isPdf(currentUrl) ? (
+            <object
+              data={`${currentUrl}#toolbar=0`}
+              type="application/pdf"
+              className="w-full rounded border cursor-pointer"
+              style={{ height: "600px" }}
+              onClick={() => setFullscreen(true)}
+            >
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+                <p className="text-sm">PDF preview not available</p>
+                <a
+                  href={currentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-blue-600 underline"
+                >
+                  Open PDF in new tab
+                </a>
+              </div>
+            </object>
+          ) : (
+            <img
+              src={currentUrl}
+              alt="Drawing"
+              className="w-full rounded border object-contain cursor-pointer max-h-[600px]"
+              onClick={() => setFullscreen(true)}
+            />
+          )}
           {total > 1 && (
             <div className="flex items-center justify-center gap-2">
               <Button
@@ -148,10 +131,26 @@ export function DrawingViewer({ images }: DrawingViewerProps) {
             </Button>
           </div>
           <div className="flex-1 min-h-0 p-4 pt-0" onClick={(e) => e.stopPropagation()}>
-            <DrawingContent
-              url={currentUrl}
-              className="h-full"
-            />
+            {isPdf(currentUrl) ? (
+              <object
+                data={`${currentUrl}#toolbar=0`}
+                type="application/pdf"
+                className="w-full h-full rounded border"
+              >
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  PDF preview not available —{" "}
+                  <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+                    Open in new tab
+                  </a>
+                </p>
+              </object>
+            ) : (
+              <img
+                src={currentUrl}
+                alt="Drawing"
+                className="w-full h-full rounded border object-contain"
+              />
+            )}
           </div>
         </div>
       )}

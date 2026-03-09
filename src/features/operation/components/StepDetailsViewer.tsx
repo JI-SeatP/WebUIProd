@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { X } from "lucide-react";
 import { apiGet } from "@/api/client";
 import type { OperationStep, StepDetails } from "@/types/workOrder";
 
-interface StepDetailsDialogProps {
-  step: OperationStep | null;
+interface StepDetailsViewerProps {
+  step: OperationStep;
   stepNumber: number;
   language: "fr" | "en";
   onClose: () => void;
@@ -13,59 +15,61 @@ interface StepDetailsDialogProps {
 
 type TabId = "instructions" | "pdf" | "video" | "images";
 
-export function StepDetailsDialog({ step, stepNumber, language, onClose }: StepDetailsDialogProps) {
+export function StepDetailsViewer({ step, stepNumber, language, onClose }: StepDetailsViewerProps) {
   const { t } = useTranslation();
   const [images, setImages] = useState<StepDetails["images"]>([]);
   const [imagesLoading, setImagesLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("instructions");
 
-  const lang = language.toUpperCase() as "FR" | "EN";
-
   // Determine available media from step data
-  const rtfHtml = step ? (language === "fr" ? step.METRTF_P : step.METRTF_S) : null;
-  const pdfPath = step ? (language === "fr" ? step.METFICHIER_PDF_P : step.METFICHIER_PDF_S) : null;
-  const videoPath = step ? (language === "fr" ? step.METVIDEO_P : step.METVIDEO_S) : null;
+  const rtfHtml = language === "fr" ? step.METRTF_P : step.METRTF_S;
+  const pdfPath = language === "fr" ? step.METFICHIER_PDF_P : step.METFICHIER_PDF_S;
+  const videoPath = language === "fr" ? step.METVIDEO_P : step.METVIDEO_S;
 
   // Build available tabs in priority order
   const tabs: { id: TabId; label: string }[] = [];
-  if (rtfHtml) tabs.push({ id: "instructions", label: language === "fr" ? "INSTRUCTIONS" : "INSTRUCTIONS" });
+  if (rtfHtml) tabs.push({ id: "instructions", label: "INSTRUCTIONS" });
   if (pdfPath) tabs.push({ id: "pdf", label: "PDF" });
   if (videoPath) tabs.push({ id: "video", label: language === "fr" ? "VIDÉO" : "VIDEO" });
-  if (step && step.IMAGE_COUNT > 0) tabs.push({ id: "images", label: "IMAGES" });
+  if (step.IMAGE_COUNT > 0) tabs.push({ id: "images", label: "IMAGES" });
 
   // Set first available tab when step changes
   useEffect(() => {
-    if (!step) return;
     if (tabs.length > 0) setActiveTab(tabs[0].id);
-  }, [step?.METSEQ]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step.METSEQ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch images when images tab is selected
   useEffect(() => {
-    if (activeTab !== "images" || !step || step.IMAGE_COUNT === 0) return;
+    if (activeTab !== "images" || step.IMAGE_COUNT === 0) return;
     setImagesLoading(true);
     apiGet<StepDetails>(`doc-methode-images/${step.METSEQ}`)
       .then((res) => {
         if (res.success) setImages(res.data.images);
       })
       .finally(() => setImagesLoading(false));
-  }, [activeTab, step?.METSEQ]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTab, step.METSEQ]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const open = !!step;
-  const title = step ? (language === "fr" ? step.METDESC_P : step.METDESC_S) : "";
+  const title = language === "fr" ? step.METDESC_P : step.METDESC_S;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent
-        className="flex flex-col"
-        style={{ maxWidth: "900px", height: "85vh" }}
-      >
-        <DialogHeader>
-          <DialogTitle className="text-base">
-            <span className="text-blue-600 font-bold mr-2">{stepNumber}</span>
-            {title}
-          </DialogTitle>
-        </DialogHeader>
+    <Card className="py-0 gap-0 flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
+        <div className="text-sm font-medium truncate mr-2">
+          <span className="text-blue-600 font-bold mr-2">{stepNumber}</span>
+          {title}
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={onClose}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
 
+      <CardContent className="px-4 pt-0 pb-4 flex flex-col flex-1 min-h-0">
         {tabs.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
             {t("common.noResults")}
@@ -98,18 +102,17 @@ export function StepDetailsDialog({ step, stepNumber, language, onClose }: StepD
               {activeTab === "instructions" && rtfHtml && (
                 <div
                   className="prose prose-sm max-w-none p-2 text-sm"
-                  // RTF content is stored as HTML in the database
                   dangerouslySetInnerHTML={{ __html: rtfHtml }}
                 />
               )}
 
               {/* PDF — served through Express file proxy */}
-              {activeTab === "pdf" && pdfPath && step && (
+              {activeTab === "pdf" && pdfPath && (
                 <object
                   data={`/api/doc-methode/${step.METSEQ}/${language === "fr" ? "pdf_p" : "pdf_s"}#toolbar=0`}
                   type="application/pdf"
                   className="w-full rounded"
-                  style={{ height: "calc(85vh - 120px)" }}
+                  style={{ height: "600px" }}
                 >
                   <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground py-8">
                     <p className="text-sm">{t("common.noResults")}</p>
@@ -126,7 +129,7 @@ export function StepDetailsDialog({ step, stepNumber, language, onClose }: StepD
               )}
 
               {/* VIDEO — served through Express file proxy */}
-              {activeTab === "video" && videoPath && step && (
+              {activeTab === "video" && videoPath && (
                 <div className="flex justify-center items-start pt-4">
                   <video
                     src={`/api/doc-methode/${step.METSEQ}/${language === "fr" ? "video_p" : "video_s"}`}
@@ -171,7 +174,7 @@ export function StepDetailsDialog({ step, stepNumber, language, onClose }: StepD
             </div>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+      </CardContent>
+    </Card>
   );
 }

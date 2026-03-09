@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,6 @@ import {
 import { Info } from "lucide-react";
 import type { OperationData } from "../hooks/useOperation";
 import type { OperationStep } from "@/types/workOrder";
-import { StepDetailsDialog } from "./StepDetailsDialog";
 
 /** Returns true if the step has any viewable media in the given language */
 function stepHasMedia(step: OperationStep, language: "fr" | "en"): boolean {
@@ -27,14 +25,13 @@ interface CncInfoSectionProps {
   operation: OperationData;
   language: "fr" | "en";
   hideNextStep?: boolean;
+  onViewStepDetails?: (step: OperationStep, stepNumber: number) => void;
+  activeStepSeq?: number | null;
 }
 
-export function CncInfoSection({ operation, language, hideNextStep = false }: CncInfoSectionProps) {
+export function CncInfoSection({ operation, language, hideNextStep = false, onViewStepDetails, activeStepSeq }: CncInfoSectionProps) {
   const { t } = useTranslation();
   const op = operation as unknown as Record<string, unknown>;
-
-  const [selectedStep, setSelectedStep] = useState<OperationStep | null>(null);
-  const [selectedStepNumber, setSelectedStepNumber] = useState<number>(100);
 
   const loc = (fr: unknown, en: unknown) =>
     String((language === "fr" ? fr : en) ?? fr ?? "—");
@@ -91,7 +88,11 @@ export function CncInfoSection({ operation, language, hideNextStep = false }: Cn
                       {steps.map((step, i) => {
                         const hasMedia = stepHasMedia(step, language);
                         return (
-                          <TableRow key={step.METSEQ} className="h-[52px]">
+                          <TableRow
+                            key={step.METSEQ}
+                            className="h-[52px]"
+                            style={activeStepSeq === step.METSEQ ? { backgroundColor: "#aeffae" } : undefined}
+                          >
                             <TableCell className="text-center font-bold text-base">{100 + i}</TableCell>
                             <TableCell className="text-lg">
                               {language === "fr" ? step.METDESC_P : step.METDESC_S}
@@ -103,7 +104,7 @@ export function CncInfoSection({ operation, language, hideNextStep = false }: Cn
                                     variant="ghost"
                                     size="icon"
                                     className="h-[48px] w-[48px]"
-                                    onClick={() => { setSelectedStep(step); setSelectedStepNumber(100 + i); }}
+                                    onClick={() => onViewStepDetails?.(step, 100 + i)}
                                   >
                                     <Info className="size-[24px] text-blue-600" />
                                   </Button>
@@ -115,12 +116,6 @@ export function CncInfoSection({ operation, language, hideNextStep = false }: Cn
                       })}
                     </TableBody>
                   </Table>
-                  <StepDetailsDialog
-                    step={selectedStep}
-                    stepNumber={selectedStepNumber}
-                    language={language}
-                    onClose={() => setSelectedStep(null)}
-                  />
                 </>
               );
             })()}
