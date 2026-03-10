@@ -458,6 +458,46 @@ app.get(
   })
 );
 
+// ─── GET /getOperationComponents.cfm ──────────────────────────────────────────
+app.get(
+  "/getOperationComponents.cfm",
+  handler(async (req, res) => {
+    const { transac, copmachine } = req.query;
+    const pool = await getPoolExt();
+
+    if (!transac || !copmachine) {
+      return res.json({
+        success: false,
+        error: "Missing transac or copmachine parameter",
+      });
+    }
+
+    const result = await pool
+      .request()
+      .input("transac", sql.Int, parseInt(transac))
+      .input("copmachine", sql.Int, parseInt(copmachine))
+      .query(`
+        SELECT
+          cn.NISEQ, cn.NIQTE, cn.NILONGUEUR, cn.NILARGEUR, cn.NIEPAISSEUR,
+          cn.INVENTAIRE_M_INNOINV, cn.INVENTAIRE_M_INDESC1, cn.INVENTAIRE_M_INDESC2,
+          CI.CRCRITERE_1 AS SPECIES, CI.CRCRITERE_3 AS GRADE, CI.CRCRITERE_4 AS CUT,
+          cn.NIVALEUR_CHAR1, cn.NIVALEUR_CHAR2, cn.NIVALEUR_CHAR3
+        FROM vEcransProduction v
+        INNER JOIN AUTOFAB_cNOMENCLATURE cn ON cn.TRANSAC = v.TRANSAC
+        INNER JOIN AUTOFAB_CRITERE_INV CI ON CI.INVENTAIRE = cn.INVENTAIRE_M
+        WHERE v.TRANSAC = @transac AND v.NOPSEQ = @copmachine
+          AND cn.NIREGRP_PROD1 IN ('FACE', 'VENEER')
+        ORDER BY cn.NISTR_NIVEAU, cn.NIRANG
+      `);
+
+    res.json({
+      success: true,
+      data: result.recordset,
+      message: `Retrieved ${result.recordset.length} components`,
+    });
+  })
+);
+
 // ─── GET /getStopCauses.cfm ──────────────────────────────────────────────────
 app.get(
   "/getStopCauses.cfm",

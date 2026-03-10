@@ -88,6 +88,23 @@ export interface OperationStep {
   IMAGE_COUNT: number;
 }
 
+export interface OperationComponent {
+  NISEQ: number;
+  NIQTE: number;
+  NILONGUEUR: number;
+  NILARGEUR: number;
+  NIEPAISSEUR: number;
+  INVENTAIRE_M_INNOINV: string;
+  INVENTAIRE_M_INDESC1: string;
+  INVENTAIRE_M_INDESC2: string;
+  SPECIES: string;
+  GRADE: string;
+  CUT: string;
+  NIVALEUR_CHAR1: string | null;
+  NIVALEUR_CHAR2: string | null;
+  NIVALEUR_CHAR3: string | null;
+}
+
 export interface WorkOrderDetail {
   TRANSAC: number;
   COPMACHINE: number | null;

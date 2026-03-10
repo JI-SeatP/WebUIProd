@@ -165,3 +165,21 @@ export const W_CORRECTIONS = {
   input:     "w-[200px]",
   qtyField:  "w-[120px]",
 } as const;
+
+// ───────────────────────────────────────
+// WIDTH - COMPONENTS_TABLE (S003 CNC)
+// ───────────────────────────────────────
+export const W_COMPONENTS = {
+  seq:       "w-[50px]",
+  length:    "w-[70px]",
+  width:     "w-[70px]",
+  species:   "w-[100px]",
+  grade:     "w-[70px]",
+  cut:       "w-[100px]",
+  thickness: "w-[90px]",
+  grain:     "w-[80px]",
+  laminate:  "w-[80px]",
+  glue:      "w-[80px]",
+  tape:      "w-[70px]",
+  sand:      "w-[70px]",
+} as const;

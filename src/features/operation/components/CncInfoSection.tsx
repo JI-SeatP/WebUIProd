@@ -12,6 +12,8 @@ import {
 import { Info } from "lucide-react";
 import type { OperationData } from "../hooks/useOperation";
 import type { OperationStep } from "@/types/workOrder";
+import { ComponentsTable } from "./ComponentsTable";
+import { useOperationComponents } from "../hooks/useOperationComponents";
 
 /** Returns true if the step has any viewable media in the given language */
 function stepHasMedia(step: OperationStep, language: "fr" | "en"): boolean {
@@ -122,12 +124,16 @@ export function CncInfoSection({ operation, language, hideNextStep = false, onVi
           </CardContent>
         </Card>
 
-        <Card className="flex-1 flex flex-col py-0 gap-0">
+        <Card className="flex-1 flex flex-col py-0 gap-0 overflow-hidden">
           <CardHeader className="py-2 px-4">
             <CardTitle className="text-[0.8rem]">Components</CardTitle>
           </CardHeader>
-          <CardContent className="px-4 pb-3 flex-1 text-sm text-muted-foreground">
-            Component details will be loaded from CNC operation data.
+          <CardContent className="px-4 pb-3 flex-1 overflow-y-auto">
+            <ComponentsTable
+              components={useOperationComponents(operation.TRANSAC, operation.COPMACHINE).components}
+              language={language}
+              loading={useOperationComponents(operation.TRANSAC, operation.COPMACHINE).loading}
+            />
           </CardContent>
         </Card>
       </div>
