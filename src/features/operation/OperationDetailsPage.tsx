@@ -17,9 +17,10 @@ import { DoNotPressAlert } from "./components/DoNotPressAlert";
 import { useOperation } from "./hooks/useOperation";
 import { apiGet } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { useTranslation } from "react-i18next";
-import { W_DRAWING_PANEL } from "@/constants/widths";
+import { cn } from "@/lib/utils";
+import { W_DRAWING_PANEL, W_PRESS_SECTION } from "@/constants/widths";
 import type { OperationStep } from "@/types/workOrder";
 
 export function OperationDetailsPage() {
@@ -230,47 +231,114 @@ export function OperationDetailsPage() {
         <div className="flex gap-2 items-stretch">
           {/* Left 50%: machine overview + operation-specific detail cards */}
           <div className="w-1/2 min-w-0 flex flex-col gap-2">
-            {/* Machine overview: materials (left) + machine info panel (right) */}
-            <div className="flex gap-2">
+            {/* Machine overview: materials (left) + next step (CNC only, centre) + machine info panel (right) */}
+            <div className="flex gap-2 items-stretch">
               {(isPress || isCnc) && (
                 <div className="shrink-0">
                   <PressInfoSection operation={operation} showMoldInfo={isPress} />
                 </div>
               )}
-              <div className="flex-1 min-w-0">
+
+              {/* Next step — inline card between materials and machine info (CNC only) */}
+              {isCnc && (() => {
+                const op = operation as unknown as Record<string, unknown>;
+                const loc = (fr: unknown, en: unknown) =>
+                  String((state.language === "fr" ? fr : en) ?? fr ?? "—");
+                const panelSource = (op.PANEL_SOURCE as string | null)?.trim() ?? null;
+                const pvPaneau = (op.PV_PANEAU as string | null)?.trim() || null;
+                const panelWarning = pvPaneau
+                  ? panelSource === "LOCAL"
+                    ? state.language === "fr"
+                      ? `UTILISER LE PANNEAU #${pvPaneau} PRESSÉ LOCALEMENT / VÉRIFIEZ AVEC LES INGÉNIEURS`
+                      : `USE LOCALLY PRESSED PANEL #${pvPaneau} / CHECK WITH ENGINEERS`
+                    : state.language === "fr"
+                      ? `UTILISER LE PANNEAU EXTERNALISÉ #${pvPaneau} EN STOCK / VÉRIFIEZ AVEC LES INGÉNIEURS`
+                      : `USE OUTSOURCED PANEL #${pvPaneau} FROM STOCK / CHECK WITH ENGINEERS`
+                  : null;
+                return (
+                  <Card className={cn(W_PRESS_SECTION.moldCard, "py-0 gap-0 flex flex-col justify-center")}>
+                    <CardContent className="px-4 py-3 flex flex-col items-center gap-2">
+                      <div className="flex items-center gap-3">
+                        <span className="text-[0.8rem] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap shrink-0">
+                          {t("operation.nextStep")}
+                        </span>
+                        <div className="border border-blue-500 text-blue-600 rounded px-3 py-1 text-sm font-medium">
+                          {op.NEXT_OPERATION ? (
+                            <>
+                              <span>{loc(op.NEXT_MACHINE_P, op.NEXT_MACHINE_S)}</span>
+                              {op.NEXT_DEPT_P && (
+                                <span> — {loc(op.NEXT_DEPT_P, op.NEXT_DEPT_S)}</span>
+                              )}
+                            </>
+                          ) : (
+                            t("common.noResults")
+                          )}
+                        </div>
+                      </div>
+                      {panelWarning && (
+                        <div className="text-[0.8rem] font-bold text-center tracking-wide">
+                          {panelWarning}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              <div className={cn("flex-1", W_PRESS_SECTION.machineInfoMin)}>
                 <MachineInfoPanel operation={operation} />
               </div>
             </div>
 
-            {/* Next step — full width row (CNC only) */}
-            {isCnc && (() => {
-              const op = operation as unknown as Record<string, unknown>;
-              const loc = (fr: unknown, en: unknown) =>
-                String((state.language === "fr" ? fr : en) ?? fr ?? "—");
-              return (
-                <Card className="py-0 gap-0">
-                  <CardHeader className="py-2 px-4">
-                    <CardTitle className="text-[0.8rem]">{t("operation.nextStep")}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-3">
-                    {op.NEXT_OPERATION ? (
-                      <div className="text-sm">
-                        <span className="font-medium">{loc(op.NEXT_MACHINE_P, op.NEXT_MACHINE_S)}</span>
-                        {op.NEXT_DEPT_P && (
-                          <span className="text-muted-foreground"> — {loc(op.NEXT_DEPT_P, op.NEXT_DEPT_S)}</span>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-sm text-muted-foreground">{t("common.noResults")}</div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })()}
-
             {/* Operation-specific detail cards */}
             {isPress && (
               <>
+                {/* Next step — full-width row for PRESS (inline row already full with mold card) */}
+                {(() => {
+                  const op = operation as unknown as Record<string, unknown>;
+                  const loc = (fr: unknown, en: unknown) =>
+                    String((state.language === "fr" ? fr : en) ?? fr ?? "—");
+                  const panelSource = (op.PANEL_SOURCE as string | null)?.trim() ?? null;
+                  const pvPaneau = (op.PV_PANEAU as string | null)?.trim() || null;
+                  const panelWarning = pvPaneau
+                    ? panelSource === "LOCAL"
+                      ? state.language === "fr"
+                        ? `UTILISER LE PANNEAU #${pvPaneau} PRESSÉ LOCALEMENT / VÉRIFIEZ AVEC LES INGÉNIEURS`
+                        : `USE LOCALLY PRESSED PANEL #${pvPaneau} / CHECK WITH ENGINEERS`
+                      : state.language === "fr"
+                        ? `UTILISER LE PANNEAU EXTERNALISÉ #${pvPaneau} EN STOCK / VÉRIFIEZ AVEC LES INGÉNIEURS`
+                        : `USE OUTSOURCED PANEL #${pvPaneau} FROM STOCK / CHECK WITH ENGINEERS`
+                    : null;
+                  if (!op.NEXT_OPERATION && !panelWarning) return null;
+                  return (
+                    <Card className="py-0 gap-0">
+                      <CardContent className="px-4 py-3 flex flex-col items-center gap-2">
+                        <div className="flex items-center gap-3">
+                          <span className="text-[0.8rem] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap shrink-0">
+                            {t("operation.nextStep")}
+                          </span>
+                          <div className="border border-blue-500 text-blue-600 rounded px-3 py-1 text-sm font-medium">
+                            {op.NEXT_OPERATION ? (
+                              <>
+                                <span>{loc(op.NEXT_MACHINE_P, op.NEXT_MACHINE_S)}</span>
+                                {op.NEXT_DEPT_P && (
+                                  <span> — {loc(op.NEXT_DEPT_P, op.NEXT_DEPT_S)}</span>
+                                )}
+                              </>
+                            ) : (
+                              t("common.noResults")
+                            )}
+                          </div>
+                        </div>
+                        {panelWarning && (
+                          <div className="text-[0.8rem] font-bold text-center tracking-wide">
+                            {panelWarning}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
                 {panelDetail && <PanelDetailsTable detail={panelDetail} onViewDrawing={handleViewDrawing} activeDrawingSeq={activeDrawingSeq} />}
                 {panelLayers.length > 0 && (
                   <PanelLayersTable

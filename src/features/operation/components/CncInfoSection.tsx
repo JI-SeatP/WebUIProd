@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -44,20 +44,22 @@ export function CncInfoSection({ operation, language, hideNextStep = false, onVi
       {/* Next Step (shown here only when not rendered in the overview row) */}
       {!hideNextStep && (
         <Card className="py-0 gap-0">
-          <CardHeader className="py-2 px-4">
-            <CardTitle className="text-[0.8rem]">{t("operation.nextStep")}</CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3">
-            <div className="text-sm text-muted-foreground">
-              {op.NEXT_OPERATION
-                ? loc(op.NEXT_OPERATION_P, op.NEXT_OPERATION_S)
-                : t("common.noResults")}
+          <CardContent className="px-4 py-2 flex items-center gap-3">
+            <span className="text-[0.8rem] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap shrink-0">
+              {t("operation.nextStep")}
+            </span>
+            <div className="border border-blue-500 text-blue-600 rounded px-3 py-1 text-sm font-medium">
+              {op.NEXT_OPERATION ? (
+                <>
+                  <span>{loc(op.NEXT_OPERATION_P, op.NEXT_OPERATION_S)}</span>
+                  {op.NEXT_MACHINE_P && (
+                    <span> — {String(loc(op.NEXT_MACHINE_P, op.NEXT_MACHINE_S))}</span>
+                  )}
+                </>
+              ) : (
+                t("common.noResults")
+              )}
             </div>
-            {!!op.NEXT_MACHINE_P && (
-              <div className="text-sm mt-1">
-                {t("operation.machine")}: {String(loc(op.NEXT_MACHINE_P, op.NEXT_MACHINE_S))}
-              </div>
-            )}
           </CardContent>
         </Card>
       )}

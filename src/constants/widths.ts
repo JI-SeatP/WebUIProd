@@ -82,9 +82,10 @@ export const W_DRAWING_PANEL = {
 // WIDTH - PRESS_SECTION (S003 Press)
 // ───────────────────────────────────────
 export const W_PRESS_SECTION = {
-  materialsCard: "w-[150px]",
-  machineCard:   "w-[228px]",
-  moldCard:      "w-[552px]",
+  materialsCard:    "w-[150px]",
+  machineCard:      "w-[228px]",
+  moldCard:         "w-[461px]",
+  machineInfoMin:   "min-w-[150px]",
 } as const;
 
 // ───────────────────────────────────────

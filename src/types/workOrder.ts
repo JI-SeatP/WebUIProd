@@ -105,6 +105,17 @@ export interface OperationComponent {
   NIVALEUR_CHAR3: string | null;
 }
 
+export interface OrderOperation {
+  TRANSAC: number;
+  COPMACHINE: number | null;
+  OPERATION_SEQ: number;
+  OPERATION_P: string;
+  OPERATION_S: string;
+  MACHINE_P: string;
+  MACHINE_S: string;
+  FMCODE: string;
+}
+
 export interface OperationAccessory {
   qty: number;
   description_fr: string | null;
@@ -129,5 +140,7 @@ export interface WorkOrderDetail {
   SHARE_PRESSING: number | null;
   PAGE_COMPO: string | null;
   Panel_NiSeq: number;
+  PANEL_SOURCE: string | null;
+  PV_PANEAU: string | null;
   steps: OperationStep[];
 }

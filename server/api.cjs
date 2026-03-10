@@ -300,6 +300,8 @@ app.get(
         TS_SEATPL_EXT.DBO.AUTOFAB_FctSelectVarCompo(T.TRSEQ, CNOP.CNOMENCLATURE, '@PRESS_NOTE@') AS PRESSAGE_NOTE,
         VBE.PV_Groupe AS GROUPE,
         VBE.PRODUCT_TYPE AS TYPEPRODUIT,
+        RTRIM(VBE.PANEL_SOURCE) AS PANEL_SOURCE,
+        RTRIM(VBE.PV_PANEAU) AS PV_PANEAU,
         DC.DCPRIORITE`;
 
     // Common joins after CNOP is available (CNOP is joined per-path before this)
@@ -370,6 +372,9 @@ app.get(
     }
 
     const row = result.recordset[0];
+
+    // DEBUG: log panel warning fields
+    console.log(`[getOperation] TRANSAC=${row.TRANSAC} PANEL_SOURCE=${JSON.stringify(row.PANEL_SOURCE)} PV_PANEAU=${JSON.stringify(row.PV_PANEAU)}`);
 
     // Fetch next step from VOperationParTransac (CNC/Sanding)
     if (row.ORDRERECETTE != null) {
@@ -454,6 +459,43 @@ app.get(
       success: true,
       data: row,
       message: "Operation retrieved",
+    });
+  })
+);
+
+// ─── GET /getOrderOperations.cfm ─────────────────────────────────────────────
+// Returns all operations that belong to the same order (NO_PROD).
+// Used by the operation switcher in OperationHeader.
+app.get(
+  "/getOrderOperations.cfm",
+  handler(async (req, res) => {
+    const { noProd } = req.query;
+
+    if (!noProd) {
+      return res.json({ success: false, error: "Missing noProd parameter" });
+    }
+
+    const pool = await getPoolExt();
+    const result = await pool
+      .request()
+      .input("noProd", sql.VarChar(50), noProd)
+      .query(`
+        SELECT DISTINCT
+          v.TRANSAC, v.COPMACHINE, v.OPERATION_SEQ,
+          v.OPERATION_P, v.OPERATION_S,
+          v.MACHINE_P, v.MACHINE_S,
+          v.FMCODE
+        FROM vEcransProduction v
+        INNER JOIN AUTOFAB_DET_COMM dc ON v.TRANSAC = dc.TRANSAC
+        WHERE v.OPERATION <> 'FINSH'
+          AND v.NO_PROD = @noProd
+        ORDER BY v.OPERATION_SEQ
+      `);
+
+    res.json({
+      success: true,
+      data: result.recordset,
+      message: `Retrieved ${result.recordset.length} operations`,
     });
   })
 );

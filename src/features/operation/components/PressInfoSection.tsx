@@ -82,7 +82,7 @@ export function PressInfoSection({ operation, showMoldInfo = true }: PressInfoSe
         {/* Mold Info (PRESS only) */}
         {showMoldInfo && <Card className={cn(W_PRESS_SECTION.moldCard, "py-0 gap-0")}>
           <CardContent className="px-4 pt-3 pb-3">
-            <div className="grid grid-cols-[29%_27%_22%_22%]">
+            <div className="grid grid-cols-[36%_20%_22%_22%]">
               {/* Col 1: Code + Type */}
               <div className="space-y-2 min-w-0">
                 <div className="space-y-0.5">
@@ -107,9 +107,9 @@ export function PressInfoSection({ operation, showMoldInfo = true }: PressInfoSe
               </div>
 
               {/* Col 4: Times */}
-              <div className="space-y-2 min-w-0 text-center">
-                <MoldField label={t("press.cookTime")} value={formatNum(op.PRESSAGE_PRESSAGE)} />
-                <MoldField label={t("press.coolTime")} value={formatNum(op.PRESSAGE_TEST_APRES)} />
+              <div className="space-y-2 min-w-0">
+                <MoldQtyField label={t("press.cookTime")} value={formatNum(op.PRESSAGE_PRESSAGE)} />
+                <MoldQtyField label={t("press.coolTime")} value={formatNum(op.PRESSAGE_TEST_APRES)} />
               </div>
             </div>
 
