@@ -105,6 +105,12 @@ export interface OperationComponent {
   NIVALEUR_CHAR3: string | null;
 }
 
+export interface OperationAccessory {
+  qty: number;
+  description_fr: string | null;
+  description_en: string | null;
+}
+
 export interface WorkOrderDetail {
   TRANSAC: number;
   COPMACHINE: number | null;

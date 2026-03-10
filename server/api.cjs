@@ -498,6 +498,100 @@ app.get(
   })
 );
 
+// ─── GET /getOperationAccessories.cfm ────────────────────────────────────────
+// Returns the "ACCESSOIRES NÉCESSAIRES" list for a CNC operation.
+// Uses AUTOFAB_FctSelectVarCompo() UDF (EXT database) to read accessory quantities
+// stored as component variables, then looks up T-NUT descriptions in INVENTAIRE
+// (primary database).
+app.get(
+  "/getOperationAccessories.cfm",
+  handler(async (req, res) => {
+    const { transac, copmachine } = req.query;
+
+    if (!transac || !copmachine) {
+      return res.json({
+        success: false,
+        error: "Missing transac or copmachine parameter",
+      });
+    }
+
+    const poolExt = await getPoolExt();
+    const poolPrimary = await getPool();
+
+    // Step 1: Retrieve all accessory variable values via the UDF.
+    // VCeduleMachine joins to AUTOFAB_cNOMENCOP to get the CNOMENCLATURE key
+    // needed by AUTOFAB_FctSelectVarCompo.
+    const varResult = await poolExt
+      .request()
+      .input("transac", sql.Int, parseInt(transac))
+      .query(`
+        SELECT TOP 1
+          DBO.AUTOFAB_FctSelectVarCompo(VC.TRANSAC, CNOP.CNOMENCLATURE, '@SA1_ROUTER_BITS@') AS ROUTER_BITS,
+          DBO.AUTOFAB_FctSelectVarCompo(VC.TRANSAC, CNOP.CNOMENCLATURE, '@SA2_DRILL_BITS@') AS DRILL_BITS,
+          DBO.AUTOFAB_FctSelectVarCompo(VC.TRANSAC, CNOP.CNOMENCLATURE, '@SA3_SANDPAPER@')  AS SANDPAPER,
+          DBO.AUTOFAB_FctSelectVarCompo(VC.TRANSAC, CNOP.CNOMENCLATURE, '@SA4_FOAM@')       AS FOAM,
+          DBO.AUTOFAB_FctSelectVarCompo(VC.TRANSAC, CNOP.CNOMENCLATURE, '@SA5_PALETTS@')    AS PALLETS,
+          DBO.AUTOFAB_FctSelectVarCompo(VC.TRANSAC, CNOP.CNOMENCLATURE, '@TNUT1_CODE@')     AS TNUT1_CODE,
+          DBO.AUTOFAB_FctSelectVarCompo(VC.TRANSAC, CNOP.CNOMENCLATURE, '@TNUT1_QTY@')      AS TNUT1_QTY,
+          DBO.AUTOFAB_FctSelectVarCompo(VC.TRANSAC, CNOP.CNOMENCLATURE, '@TNUT2_CODE@')     AS TNUT2_CODE,
+          DBO.AUTOFAB_FctSelectVarCompo(VC.TRANSAC, CNOP.CNOMENCLATURE, '@TNUT2_QTY@')      AS TNUT2_QTY,
+          DBO.AUTOFAB_FctSelectVarCompo(VC.TRANSAC, CNOP.CNOMENCLATURE, '@TNUT3_CODE@')     AS TNUT3_CODE,
+          DBO.AUTOFAB_FctSelectVarCompo(VC.TRANSAC, CNOP.CNOMENCLATURE, '@TNUT3_QTY@')      AS TNUT3_QTY,
+          DBO.AUTOFAB_FctSelectVarCompo(VC.TRANSAC, CNOP.CNOMENCLATURE, '@TNUT4_CODE@')     AS TNUT4_CODE,
+          DBO.AUTOFAB_FctSelectVarCompo(VC.TRANSAC, CNOP.CNOMENCLATURE, '@TNUT4_QTY@')      AS TNUT4_QTY
+        FROM VCeduleMachine VC
+        INNER JOIN AUTOFAB_cNOMENCOP CNOP ON CNOP.NOPSEQ = VC.CNOMENCOP
+        WHERE VC.TRANSAC = @transac
+      `);
+
+    if (!varResult.recordset.length) {
+      return res.json({ success: true, data: [], message: "No accessories found" });
+    }
+
+    const v = varResult.recordset[0];
+    const accessories = [];
+
+    // Step 2: Fixed accessory types — all hidden; only T-NUT lookups are shown
+    const fixedItems = [];
+
+    for (const item of fixedItems) {
+      const qty = Math.ceil(parseFloat(v[item.key]) || 0);
+      if (qty >= 1) {
+        accessories.push({ qty, description_fr: item.fr, description_en: item.en });
+      }
+    }
+
+    // Step 3: T-NUT accessories — look up description in INVENTAIRE (primary DB)
+    for (let i = 1; i <= 4; i++) {
+      const code = (v[`TNUT${i}_CODE`] || "").trim();
+      const qty  = Math.ceil(parseFloat(v[`TNUT${i}_QTY`]) || 0);
+      if (qty >= 1 && code) {
+        const invResult = await poolPrimary
+          .request()
+          .input("code", sql.VarChar(20), code.substring(0, 20))
+          .query(`SELECT INDESC1, INDESC2 FROM INVENTAIRE WHERE INNOINV = @code`);
+        if (invResult.recordset.length) {
+          const inv = invResult.recordset[0];
+          accessories.push({
+            qty,
+            description_fr: inv.INDESC1 ? inv.INDESC1.toUpperCase() : null,
+            description_en: inv.INDESC2 ? inv.INDESC2.toUpperCase() : null,
+          });
+        } else {
+          // Fallback: show the raw code if INVENTAIRE lookup fails
+          accessories.push({ qty, description_fr: code.toUpperCase(), description_en: code.toUpperCase() });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      data: accessories,
+      message: `Retrieved ${accessories.length} accessories`,
+    });
+  })
+);
+
 // ─── GET /getStopCauses.cfm ──────────────────────────────────────────────────
 app.get(
   "/getStopCauses.cfm",

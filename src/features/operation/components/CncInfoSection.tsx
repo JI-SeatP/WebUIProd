@@ -12,8 +12,8 @@ import {
 import { Info } from "lucide-react";
 import type { OperationData } from "../hooks/useOperation";
 import type { OperationStep } from "@/types/workOrder";
-import { ComponentsTable } from "./ComponentsTable";
-import { useOperationComponents } from "../hooks/useOperationComponents";
+import { AccessoriesTable } from "./AccessoriesTable";
+import { useOperationAccessories } from "../hooks/useOperationAccessories";
 
 /** Returns true if the step has any viewable media in the given language */
 function stepHasMedia(step: OperationStep, language: "fr" | "en"): boolean {
@@ -34,6 +34,7 @@ interface CncInfoSectionProps {
 export function CncInfoSection({ operation, language, hideNextStep = false, onViewStepDetails, activeStepSeq }: CncInfoSectionProps) {
   const { t } = useTranslation();
   const op = operation as unknown as Record<string, unknown>;
+  const { accessories, loading: accessoriesLoading } = useOperationAccessories(operation.TRANSAC, operation.COPMACHINE);
 
   const loc = (fr: unknown, en: unknown) =>
     String((language === "fr" ? fr : en) ?? fr ?? "—");
@@ -63,7 +64,7 @@ export function CncInfoSection({ operation, language, hideNextStep = false, onVi
 
       {/* Operation Steps + Components — side by side, grow to fill available height */}
       <div className="flex gap-3 items-stretch flex-1 min-h-0">
-        <Card className="flex-1 flex flex-col py-0 gap-0 min-h-0">
+        <Card className="flex-[9] flex flex-col py-0 gap-0 min-h-0">
           <CardContent className="px-0 pb-0 flex-1 overflow-auto min-h-0 pt-0">
             {(() => {
               const steps = (op.steps ?? []) as OperationStep[];
@@ -80,9 +81,9 @@ export function CncInfoSection({ operation, language, hideNextStep = false, onVi
                 <>
                   <Table>
                     <TableHeader>
-                      <TableRow className="h-[42px]">
-                        <TableHead className="w-[56px] text-center font-bold text-xs">{t("cnc.stepNumber")}</TableHead>
-                        <TableHead className="text-xs font-bold">{t("cnc.stepDescription")}</TableHead>
+                      <TableRow className="h-[44px]">
+                        <TableHead className="w-[56px] text-center font-bold text-[13px] uppercase">{t("cnc.stepNumber")}</TableHead>
+                        <TableHead className="font-bold text-[13px] uppercase">{t("cnc.stepDescription")}</TableHead>
                         {anyHasAction && <TableHead className="w-[56px]" />}
                       </TableRow>
                     </TableHeader>
@@ -92,11 +93,11 @@ export function CncInfoSection({ operation, language, hideNextStep = false, onVi
                         return (
                           <TableRow
                             key={step.METSEQ}
-                            className="h-[52px]"
+                            className="h-[44px]"
                             style={activeStepSeq === step.METSEQ ? { backgroundColor: "#aeffae" } : undefined}
                           >
                             <TableCell className="text-center font-bold text-base">{100 + i}</TableCell>
-                            <TableCell className="text-lg">
+                            <TableCell className="text-lg whitespace-normal break-words">
                               {language === "fr" ? step.METDESC_P : step.METDESC_S}
                             </TableCell>
                             {anyHasAction && (
@@ -124,15 +125,12 @@ export function CncInfoSection({ operation, language, hideNextStep = false, onVi
           </CardContent>
         </Card>
 
-        <Card className="flex-1 flex flex-col py-0 gap-0 overflow-hidden">
-          <CardHeader className="py-2 px-4">
-            <CardTitle className="text-[0.8rem]">Components</CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 flex-1 overflow-y-auto">
-            <ComponentsTable
-              components={useOperationComponents(operation.TRANSAC, operation.COPMACHINE).components}
+        <Card className="flex-[11] flex flex-col py-0 gap-0 overflow-hidden">
+          <CardContent className="px-0 pb-0 flex-1 overflow-y-auto pt-0">
+            <AccessoriesTable
+              accessories={accessories}
               language={language}
-              loading={useOperationComponents(operation.TRANSAC, operation.COPMACHINE).loading}
+              loading={accessoriesLoading}
             />
           </CardContent>
         </Card>
