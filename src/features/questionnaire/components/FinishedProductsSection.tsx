@@ -120,7 +120,7 @@ export function FinishedProductsSection({
                         <Input
                           value={row.qty}
                           readOnly
-                          className="touch-target !text-3xl font-mono font-bold cursor-pointer bg-white text-green-600 border-green-600"
+                          className="touch-target !text-3xl font-sans font-bold cursor-pointer bg-white text-green-600 border-green-600"
                           placeholder="0"
                         />
                       </PopoverTrigger>

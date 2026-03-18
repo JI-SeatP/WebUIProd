@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -58,20 +58,23 @@ export function StopCauseSection({
   }, []);
 
   // Load secondary causes when primary changes
-  const loadSecondary = useCallback(async (primaryId: string) => {
-    if (!primaryId) {
+  const prevPrimary = useRef(primaryCause);
+
+  useEffect(() => {
+    if (!primaryCause) {
       setSecondaryOptions([]);
       return;
     }
-    const res = await apiGet<CauseOption[]>(`getSecondaryCauses.cfm?primaryId=${primaryId}`);
-    if (res.success) setSecondaryOptions(res.data);
-  }, []);
-
-  useEffect(() => {
-    loadSecondary(primaryCause);
-    onSecondaryCauseChange("");
+    apiGet<CauseOption[]>(`getSecondaryCauses.cfm?primaryId=${primaryCause}`).then((res) => {
+      if (res.success) setSecondaryOptions(res.data);
+    });
+    // Only reset secondary when user actually changes the primary cause
+    if (prevPrimary.current !== primaryCause) {
+      prevPrimary.current = primaryCause;
+      onSecondaryCauseChange("");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [primaryCause, loadSecondary]);
+  }, [primaryCause]);
 
   const getLabel = (opt: CauseOption) =>
     isFr ? opt.description_P : opt.description_S;

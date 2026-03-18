@@ -39,11 +39,9 @@ export function ConfirmDialog({
       <AlertDialogContent className="max-w-md !py-8">
         <AlertDialogHeader>
           <AlertDialogTitle className="text-xl">{title}</AlertDialogTitle>
-          {description && (
-            <AlertDialogDescription className="text-lg">
-              {description}
-            </AlertDialogDescription>
-          )}
+          <AlertDialogDescription className={description ? "text-lg" : "sr-only"}>
+            {description || title}
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter className="flex gap-3">
           <AlertDialogCancel className="min-h-[48px] text-lg flex-1">

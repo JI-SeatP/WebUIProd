@@ -1,7 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
+import { apiGet } from "@/api/client";
 import { useOperation } from "@/features/operation/hooks/useOperation";
 import { useQuestionnaireSubmit } from "./hooks/useQuestionnaireSubmit";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -50,16 +51,39 @@ export function QuestionnairePage() {
   );
   const [employeeName, setEmployeeName] = useState(state.employee?.EMNOM ?? "");
   const [moldAction, setMoldAction] = useState("keep");
-  const [primaryCause, setPrimaryCause] = useState("");
-  const [secondaryCause, setSecondaryCause] = useState("");
+  const [primaryCause, setPrimaryCause] = useState("8");       // Production
+  const [secondaryCause, setSecondaryCause] = useState("40");  // Fin de quart de travail
   const [notes, setNotes] = useState("");
   const [goodQty, setGoodQty] = useState("");
   const [defects, setDefects] = useState<DefectRow[]>([]);
   const [finishedProducts, setFinishedProducts] = useState<FinishedProductRow[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Mock materials — in production these would come from the operation data
-  const [materials] = useState<MaterialRow[]>([]);
+  // Material output data fetched from API
+  const [materials, setMaterials] = useState<MaterialRow[]>([]);
+  const [bomRatio, setBomRatio] = useState<number | null>(null);
+  const [hasFinishedProduct, setHasFinishedProduct] = useState(false);
+  const [originalGoodQty, setOriginalGoodQty] = useState(0);
+  const [originalDefectQty, setOriginalDefectQty] = useState(0);
+
+  useEffect(() => {
+    if (!transac) return;
+    apiGet<{
+      materials: MaterialRow[];
+      bomRatio: number | null;
+      hasFinishedProduct: boolean;
+      originalGoodQty: number;
+      originalDefectQty: number;
+    }>(`getMaterialOutput.cfm?transac=${transac}&copmachine=${copmachine}`).then((res) => {
+      if (res.success && res.data) {
+        setMaterials(res.data.materials);
+        setBomRatio(res.data.bomRatio);
+        setHasFinishedProduct(res.data.hasFinishedProduct);
+        setOriginalGoodQty(res.data.originalGoodQty);
+        setOriginalDefectQty(res.data.originalDefectQty);
+      }
+    });
+  }, [transac, copmachine]);
 
   const {
     loading: submitLoading,
@@ -212,7 +236,15 @@ export function QuestionnairePage() {
             </div>
           )}
           <div className="flex-[2]">
-            <MaterialOutputSection materials={materials} />
+            <MaterialOutputSection
+              materials={materials}
+              bomRatio={bomRatio}
+              hasFinishedProduct={hasFinishedProduct}
+              originalGoodQty={originalGoodQty}
+              originalDefectQty={originalDefectQty}
+              goodQty={Number(goodQty) || 0}
+              defectQty={defects.reduce((sum, d) => sum + (Number(d.qty) || 0), 0)}
+            />
           </div>
         </div>
       </div>

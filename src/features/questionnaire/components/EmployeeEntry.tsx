@@ -85,7 +85,7 @@ export function EmployeeEntry({
               <Input
                 value={employeeCode}
                 readOnly
-                className={`${W_QUESTIONNAIRE.input} touch-target !text-3xl font-mono cursor-pointer ${
+                className={`${W_QUESTIONNAIRE.input} touch-target !text-3xl font-sans cursor-pointer ${
                   error || lookupError ? "border-destructive" : ""
                 }`}
                 placeholder="0"

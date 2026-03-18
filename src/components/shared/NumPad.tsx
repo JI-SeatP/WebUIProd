@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Delete, X, CornerDownLeft } from "lucide-react";
@@ -50,6 +50,31 @@ export function NumPad({
     },
     [value, onChange, allowDecimal]
   );
+
+  // Listen for physical keyboard input
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key >= "0" && e.key <= "9") {
+        e.preventDefault();
+        handleKey(e.key);
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        handleKey("backspace");
+      } else if (e.key === "Delete" || e.key === "Escape") {
+        e.preventDefault();
+        if (e.key === "Escape" && onClose) onClose();
+        else handleKey("clear");
+      } else if (e.key === "." && allowDecimal) {
+        e.preventDefault();
+        handleKey(".");
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (onSubmit) onSubmit();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [handleKey, onSubmit, onClose, allowDecimal]);
 
   const numKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 

@@ -15,9 +15,11 @@ export interface TimeEntry {
   OPERATION_S: string;
   DEPARTEMENT: number;
   DECODE: string;
+  MACHINE: number;
   MACODE: string;
   MACHINE_P: string;
   MACHINE_S: string;
+  EMNO: string;
   EMNOM: string;
   EMNOIDENT: number;
   QTE_BONNE: number;
@@ -43,7 +45,7 @@ export interface EmployeeHours {
 export interface TimeTrackingFilters {
   startDate: string;
   endDate: string;
-  selectedOrders: string[];
+  searchText: string;
   selectedDepartments: string[];
   selectedMachines: string[];
   showMode: "all" | "onlyQty";
@@ -71,6 +73,19 @@ export interface EmployeeHoursEntry {
   EMNOM: string;
   EFFORTRATE: number;
   HOURSWORKED: number;
+}
+
+export interface ProductionTimeTotals {
+  totalCount: number;
+  totalQtyGood: number;
+  totalQtyDefect: number;
+}
+
+export interface ProductionTimeResponse {
+  success: boolean;
+  data: TimeEntry[];
+  hasMore: boolean;
+  totals?: ProductionTimeTotals;
 }
 
 export interface UpdateTimeEntryPayload {

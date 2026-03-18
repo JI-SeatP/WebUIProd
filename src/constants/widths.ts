@@ -120,14 +120,16 @@ export const W_DEFECT_TABLE = {
 // WIDTH - TIME_TRACKING (S007)
 // ───────────────────────────────────────
 export const W_TIME_TRACKING = {
-  date:      "w-[120px]",
-  employee:  "w-[180px]",
-  shift:     "w-[100px]",
-  duration:  "w-[100px]",
-  status:    "w-[120px]",
-  order:     "w-[140px]",
-  qty:       "w-[80px]",
-  actions:   "w-[80px]",
+  date:      "w-[10%]",
+  dateEnd:   "w-[7%]",
+  duration:  "w-[7%]",
+  status:    "w-[10%]",
+  statusDropdown: "w-[150px]",
+  order:     "w-[13%]",
+  shift:     "w-[9%]",
+  employee:  "w-[28%]",
+  qty:       "w-[7%]",
+  actions:   "w-[7%]",
 } as const;
 
 // ───────────────────────────────────────

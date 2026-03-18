@@ -1,20 +1,22 @@
 import { apiGet, apiPost } from "./client";
-import type { TimeEntry, EmployeeHoursEntry, UpdateTimeEntryPayload } from "@/types/timeTracking";
+import type { TimeEntry, EmployeeHoursEntry, UpdateTimeEntryPayload, ProductionTimeResponse } from "@/types/timeTracking";
 
 export function getProductionTime(params: {
   startDate?: string;
   endDate?: string;
-  orderSearch?: string;
   department?: string;
   machine?: string;
-}) {
+  offset?: number;
+  limit?: number;
+}): Promise<ProductionTimeResponse> {
   const query = new URLSearchParams();
   if (params.startDate) query.set("startDate", params.startDate);
   if (params.endDate) query.set("endDate", params.endDate);
-  if (params.orderSearch) query.set("orderSearch", params.orderSearch);
   if (params.department) query.set("department", params.department);
   if (params.machine) query.set("machine", params.machine);
-  return apiGet<TimeEntry[]>(`getProductionTime.cfm?${query}`);
+  if (params.offset != null) query.set("offset", String(params.offset));
+  if (params.limit != null) query.set("limit", String(params.limit));
+  return apiGet<TimeEntry[]>(`getProductionTime.cfm?${query}`) as unknown as Promise<ProductionTimeResponse>;
 }
 
 export function updateTimeStatus(tjseq: number, statusCode: number) {

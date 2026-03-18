@@ -141,7 +141,7 @@ export function DefectQuantitySection({
                         <Input
                           value={row.qty}
                           readOnly
-                          className="touch-target !text-3xl font-mono font-bold cursor-pointer text-red-600 bg-white border-red-600"
+                          className="touch-target !text-3xl font-sans font-bold cursor-pointer text-red-600 bg-white border-red-600"
                           placeholder="0"
                         />
                       </PopoverTrigger>

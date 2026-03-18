@@ -1,6 +1,6 @@
-import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/shared/DatePicker";
 import {
@@ -20,7 +20,6 @@ interface ProductionTimeFiltersProps {
   onFiltersChange: (filters: TimeTrackingFilters) => void;
   onSearch: () => void;
   tabsList?: React.ReactNode;
-  orderNumbers?: string[];
   deptOptions?: FilterOption[];
   machineOptions?: FilterOption[];
   disabledDepts?: Set<string>;
@@ -32,18 +31,12 @@ export function ProductionTimeFilters({
   onFiltersChange,
   onSearch,
   tabsList,
-  orderNumbers = [],
   deptOptions = [],
   machineOptions = [],
   disabledDepts,
   disabledMachines,
 }: ProductionTimeFiltersProps) {
   const { t } = useTranslation();
-
-  const orderOptions = useMemo(
-    () => orderNumbers.map((o) => ({ value: o, label: o })),
-    [orderNumbers]
-  );
 
   const updateFilter = <K extends keyof TimeTrackingFilters>(
     key: K,
@@ -74,14 +67,12 @@ export function ProductionTimeFilters({
         />
       </div>
       <div className="flex flex-col gap-1">
-        <Label className="text-sm text-muted-foreground">{t("timeTracking.orderSearch")}</Label>
-        <MultiSelectFilter
-          label={t("timeTracking.showAll")}
-          options={orderOptions}
-          selected={filters.selectedOrders}
-          onChange={(v) => updateFilter("selectedOrders", v)}
-          searchable
-          popoverWidth="w-[250px]"
+        <Label className="text-sm text-muted-foreground">{t("actions.search")}</Label>
+        <Input
+          className="!h-12 w-[200px] !text-base"
+          placeholder={t("timeTracking.searchPlaceholder")}
+          value={filters.searchText}
+          onChange={(e) => updateFilter("searchText", e.target.value)}
         />
       </div>
       <div className="flex flex-col gap-1">
@@ -94,6 +85,7 @@ export function ProductionTimeFilters({
           disabledValues={disabledDepts}
           searchable
           popoverWidth="w-[300px]"
+          triggerWidth={200}
         />
       </div>
       <div className="flex flex-col gap-1">
