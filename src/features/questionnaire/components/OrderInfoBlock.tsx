@@ -37,7 +37,7 @@ export function OrderInfoBlock({ operation, language, label, theme = "modern", t
         </div>
       )}
 
-    <Card className={`!pt-3 !pb-1 ${theme === "dense" ? "border border-gray-200" : ""}`}>
+    <Card className={`!pt-5 !pb-3 ${theme === "dense" ? "border border-gray-200" : ""}`}>
 
       {/* Body: everything else */}
       <CardContent className="pt-0.5 pb-2 px-3">
@@ -123,7 +123,7 @@ export function OrderInfoBlock({ operation, language, label, theme = "modern", t
               <div className="flex flex-col items-center gap-1">
                 <div className="text-xs font-semibold uppercase tracking-wide">{t("order.qtyToMake")}</div>
                 <div className="rounded-lg px-6 py-2.5 text-center min-w-[80px]" style={{ backgroundColor: "#F2F2F2" }}>
-                  <div className="text-2xl font-bold">{pressQtyDisplay(operation.QTE_A_FAB, operation.DCQTE_A_PRESSER, operation.DCQTE_REJET, operation.FMCODE)}</div>
+                  <div className="text-2xl font-bold">{pressQtyDisplay(operation.QTE_A_FAB, operation.DCQTE_A_PRESSER, operation.DCQTE_REJET, operation.FMCODE, undefined, operation.PCS_PER_PANEL)}</div>
                 </div>
               </div>
               <div className="flex flex-col items-center gap-1">

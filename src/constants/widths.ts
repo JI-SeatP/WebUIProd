@@ -50,6 +50,7 @@ export const W_PANEL_DETAILS = {
   description: "w-[320px]",
   version:     "w-[60px]",
   type:        "w-[120px]",
+  thickness:   "w-[90px]",
   weight:      "w-[80px]",
 } as const;
 
@@ -125,8 +126,8 @@ export const W_TIME_TRACKING = {
   duration:  "w-[7%]",
   status:    "w-[10%]",
   statusDropdown: "w-[150px]",
-  order:     "w-[13%]",
-  shift:     "w-[9%]",
+  order:     "w-[10%]",
+  shift:     "w-[12%]",
   employee:  "w-[28%]",
   qty:       "w-[7%]",
   actions:   "w-[7%]",

@@ -100,7 +100,8 @@ export function OnScreenKeyboard({
     (key: string) => {
       setDraft((prev) => {
         const next = prev + key;
-        onChange(next);
+        // Defer parent update to avoid setState-during-render
+        queueMicrotask(() => onChange(next));
         return next;
       });
       if (shifted) setShifted(false);
@@ -112,7 +113,7 @@ export function OnScreenKeyboard({
   const handleBackspace = useCallback(() => {
     setDraft((prev) => {
       const next = prev.slice(0, -1);
-      onChange(next);
+      queueMicrotask(() => onChange(next));
       return next;
     });
     flash("⌫");
@@ -133,7 +134,7 @@ export function OnScreenKeyboard({
         e.preventDefault();
         setDraft((prev) => {
           const next = prev.slice(0, -1);
-          onChange(next);
+          queueMicrotask(() => onChange(next));
           return next;
         });
       } else if (e.key === "Enter") {
@@ -145,7 +146,7 @@ export function OnScreenKeyboard({
       } else if (e.key.length === 1) {
         setDraft((prev) => {
           const next = prev + e.key;
-          onChange(next);
+          queueMicrotask(() => onChange(next));
           return next;
         });
       }

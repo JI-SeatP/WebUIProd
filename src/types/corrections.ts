@@ -47,6 +47,17 @@ export interface CorrectionMaterial {
   code: string;
   description_P: string;
   description_S: string;
+  unit_P: string;
+  unit_S: string;
+  warehouse: string;
+  warehouse_P: string;
+  warehouse_S: string;
   originalQty: number;
   correctedQty: number;
+}
+
+export interface NewDefectRow {
+  tempId: number;
+  qty: string;
+  typeId: string;
 }

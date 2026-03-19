@@ -1,19 +1,20 @@
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useCorrection } from "./hooks/useCorrection";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { CorrectionOrderInfo } from "./components/CorrectionOrderInfo";
-import { CorrectionTimeInfo } from "./components/CorrectionTimeInfo";
 import { CorrectionDefects } from "./components/CorrectionDefects";
 import { CorrectionGoodQty } from "./components/CorrectionGoodQty";
 import { CorrectionFinishedProducts } from "./components/CorrectionFinishedProducts";
 import { CorrectionMaterialOutput } from "./components/CorrectionMaterialOutput";
 import { Button } from "@/components/ui/button";
-import { Check } from "lucide-react";
+import { X, Check } from "lucide-react";
+import { W_QUESTIONNAIRE } from "@/constants/widths";
 
 export function CorrectionsPage() {
   const { tjseq } = useParams<{ tjseq: string }>();
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   const {
     data,
@@ -23,10 +24,10 @@ export function CorrectionsPage() {
     setGoodQty,
     defectQtys,
     updateDefectQty,
+    newDefects,
+    setNewDefects,
     fpQtys,
     updateFpQty,
-    materialQtys,
-    updateMaterialQty,
     handleSubmit,
   } = useCorrection(Number(tjseq));
 
@@ -46,50 +47,62 @@ export function CorrectionsPage() {
   const showFinishedProducts = data.ENTREPF === 1;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Scrollable content */}
-      <div className="flex-1 overflow-auto space-y-3 p-3">
-        <h1 className="text-xl font-bold">{t("corrections.title")}</h1>
-
-        {/* Always show order + time info */}
+      <div className="flex-1 overflow-auto space-y-2 px-3 pb-3 pt-0">
+        {/* Order + time info (combined, matching questionnaire style) */}
         <CorrectionOrderInfo data={data} />
-        <CorrectionTimeInfo data={data} />
 
         {/* Skip qty sections for SETUP */}
         {!isSetup && (
           <>
-            {/* Defects */}
-            <CorrectionDefects
-              defects={data.defects}
-              defectQtys={defectQtys}
-              onQtyChange={updateDefectQty}
-            />
+            {/* Row 1: Good qty / Finished products | Defects */}
+            <div className="flex gap-4 items-start">
+              <div className="flex-1">
+                {showFinishedProducts ? (
+                  <CorrectionFinishedProducts
+                    products={data.finishedProducts}
+                    fpQtys={fpQtys}
+                    onQtyChange={updateFpQty}
+                  />
+                ) : (
+                  <CorrectionGoodQty value={goodQty} onChange={setGoodQty} />
+                )}
+              </div>
+              <div className="flex-1">
+                <CorrectionDefects
+                  defects={data.defects}
+                  defectQtys={defectQtys}
+                  onQtyChange={updateDefectQty}
+                  newDefects={newDefects}
+                  onNewDefectsChange={setNewDefects}
+                />
+              </div>
+            </div>
 
-            {/* Good qty or finished products */}
-            {showFinishedProducts ? (
-              <CorrectionFinishedProducts
-                products={data.finishedProducts}
-                fpQtys={fpQtys}
-                onQtyChange={updateFpQty}
-              />
-            ) : (
-              <CorrectionGoodQty value={goodQty} onChange={setGoodQty} />
-            )}
-
-            {/* Material output */}
-            <CorrectionMaterialOutput
-              materials={data.materials}
-              materialQtys={materialQtys}
-              onQtyChange={updateMaterialQty}
-            />
+            {/* Row 2: Material output (read-only display) */}
+            <CorrectionMaterialOutput materials={data.materials} />
           </>
         )}
       </div>
 
-      {/* Fixed footer */}
-      <div className="flex items-center justify-end px-3 py-2 border-t bg-background shrink-0">
+      {/* Fixed footer — glassmorphism bar matching questionnaire */}
+      <div
+        className="flex items-center justify-center gap-6 px-6 py-3 shrink-0 border border-white/20 backdrop-blur rounded-2xl w-[680px] mx-auto mb-3"
+        style={{ backgroundColor: "rgba(64, 75, 79, 0.65)", boxShadow: "0 8px 10px rgba(0,0,0,0.5)" }}
+      >
         <Button
-          className="touch-target gap-2 text-lg bg-green-600 hover:bg-green-700 text-white"
+          variant="outline"
+          className={`${W_QUESTIONNAIRE.footerBtn} touch-target gap-2 text-lg text-destructive`}
+          onClick={() => navigate(-1)}
+          disabled={submitting}
+        >
+          <X size={20} />
+          {t("actions.cancel")}
+        </Button>
+
+        <Button
+          className={`${W_QUESTIONNAIRE.footerBtn} touch-target gap-2 text-lg bg-green-600 hover:bg-green-700 text-white`}
           onClick={handleSubmit}
           disabled={submitting}
         >

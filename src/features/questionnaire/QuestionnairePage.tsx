@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
-import { apiGet } from "@/api/client";
+import { apiGet, apiPost } from "@/api/client";
 import { useOperation } from "@/features/operation/hooks/useOperation";
 import { useQuestionnaireSubmit } from "./hooks/useQuestionnaireSubmit";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -34,6 +34,7 @@ export function QuestionnairePage() {
   const [searchParams] = useSearchParams();
   const { state } = useSession();
   const { t } = useTranslation();
+  const navigate = useNavigate();
   // Get copmachine from URL query param (passed from status action) or fall back to session state
   const copmachine =
     searchParams.get("copmachine") ??
@@ -43,7 +44,8 @@ export function QuestionnairePage() {
 
   const isStop = type === "stop";
   const isComp = type === "comp";
-  const targetStatus = isStop ? "STOP" : isComp ? "COMP" : undefined;
+  const isSetup = type === "setup";
+  const targetStatus = isStop ? "STOP" : isComp ? "COMP" : isSetup ? "SETUP" : undefined;
 
   // Form state
   const [employeeCode, setEmployeeCode] = useState(
@@ -67,14 +69,15 @@ export function QuestionnairePage() {
   const [originalDefectQty, setOriginalDefectQty] = useState(0);
 
   useEffect(() => {
-    if (!transac) return;
+    if (!transac || !operation) return;
+    const nopseq = (operation as unknown as Record<string, unknown>).NOPSEQ ?? 0;
     apiGet<{
       materials: MaterialRow[];
       bomRatio: number | null;
       hasFinishedProduct: boolean;
       originalGoodQty: number;
       originalDefectQty: number;
-    }>(`getMaterialOutput.cfm?transac=${transac}&copmachine=${copmachine}`).then((res) => {
+    }>(`getMaterialOutput.cfm?transac=${transac}&nopseq=${nopseq}`).then((res) => {
       if (res.success && res.data) {
         setMaterials(res.data.materials);
         setBomRatio(res.data.bomRatio);
@@ -83,7 +86,7 @@ export function QuestionnairePage() {
         setOriginalDefectQty(res.data.originalDefectQty);
       }
     });
-  }, [transac, copmachine]);
+  }, [transac, operation]);
 
   const {
     loading: submitLoading,
@@ -99,7 +102,30 @@ export function QuestionnairePage() {
     setEmployeeCode(String(employee.EMNOIDENT));
   }, []);
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
+    if (isSetup) {
+      // Setup questionnaire: save stop causes to TEMPSPRODEX on the SETUP row
+      setErrors({});
+      try {
+        const res = await apiPost("submitSetupQuestionnaire.cfm", {
+          transac: Number(transac),
+          copmachine: Number(copmachine),
+          primaryCause,
+          secondaryCause,
+          notes,
+        });
+        if (res.success) {
+          const { toast } = await import("sonner");
+          toast.success(t("questionnaire.submitSuccess"));
+          navigate(`/orders/${transac}/operation/${copmachine}`);
+        }
+      } catch {
+        const { toast } = await import("sonner");
+        toast.error(t("questionnaire.submitError"));
+      }
+      return;
+    }
+
     const validationErrors = submit({
       transac: Number(transac),
       copmachine: Number(copmachine),
@@ -131,6 +157,7 @@ export function QuestionnairePage() {
     transac,
     copmachine,
     isStop,
+    isSetup,
     employeeCode,
     primaryCause,
     secondaryCause,
@@ -139,6 +166,8 @@ export function QuestionnairePage() {
     goodQty,
     defects,
     finishedProducts,
+    navigate,
+    t,
   ]);
 
   const handleCancel = useCallback(() => {
@@ -178,51 +207,14 @@ export function QuestionnairePage() {
         <OrderInfoBlock
           operation={operation}
           language={state.language}
-          label={isStop ? t("questionnaire.stopSurvey") : t("questionnaire.completionSurvey")}
+          label={isStop ? t("questionnaire.stopSurvey") : isSetup ? t("questionnaire.setupSurvey") : t("questionnaire.completionSurvey")}
           targetStatus={targetStatus}
         />
 
-        {/* Mold action (PRESS/CNC on COMP only) */}
-        {showMoldAction && (
-          <MoldActionSection value={moldAction} onChange={setMoldAction} />
-        )}
-
-        {/* Row 1: Employee | QTÉ PRODUITE | QUANTITÉ DÉFECTUEUSE — 3 × 1/3 */}
-        <div className="flex gap-4 items-start">
-          <div className="flex-1">
-            <EmployeeEntry
-              employeeCode={employeeCode}
-              employeeName={employeeName}
-              onCodeChange={setEmployeeCode}
-              onEmployeeFound={handleEmployeeFound}
-              error={errors.employeeCode}
-            />
-          </div>
-          <div className="flex-1">
-            {showFinishedProducts ? (
-              <FinishedProductsSection
-                products={finishedProducts}
-                onProductsChange={setFinishedProducts}
-              />
-            ) : (
-              <GoodQuantitySection value={goodQty} onChange={setGoodQty} />
-            )}
-          </div>
-          {showDefects && (
-            <div className="flex-1">
-              <DefectQuantitySection
-                language={state.language}
-                defects={defects}
-                onDefectsChange={setDefects}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Row 2: Stop Cause (isStop, 1/3) | Material Output (2/3) */}
-        <div className="flex gap-4 items-start">
-          {isStop && (
-            <div className="flex-1">
+        {isSetup ? (
+          /* ── SETUP QUESTIONNAIRE: only stop cause section ── */
+          <div className="flex gap-4 items-start">
+            <div className="flex-1 max-w-2xl">
               <StopCauseSection
                 language={state.language}
                 primaryCause={primaryCause}
@@ -234,19 +226,77 @@ export function QuestionnairePage() {
                 error={errors.primaryCause}
               />
             </div>
-          )}
-          <div className="flex-[2]">
-            <MaterialOutputSection
-              materials={materials}
-              bomRatio={bomRatio}
-              hasFinishedProduct={hasFinishedProduct}
-              originalGoodQty={originalGoodQty}
-              originalDefectQty={originalDefectQty}
-              goodQty={Number(goodQty) || 0}
-              defectQty={defects.reduce((sum, d) => sum + (Number(d.qty) || 0), 0)}
-            />
           </div>
-        </div>
+        ) : (
+          /* ── STOP / COMP QUESTIONNAIRE: full form ── */
+          <>
+            {/* Mold action (PRESS/CNC on COMP only) */}
+            {showMoldAction && (
+              <MoldActionSection value={moldAction} onChange={setMoldAction} />
+            )}
+
+            {/* Row 1: Employee | QTÉ PRODUITE | QUANTITÉ DÉFECTUEUSE — 3 × 1/3 */}
+            <div className="flex gap-4 items-start">
+              <div className="flex-1">
+                <EmployeeEntry
+                  employeeCode={employeeCode}
+                  employeeName={employeeName}
+                  onCodeChange={setEmployeeCode}
+                  onEmployeeFound={handleEmployeeFound}
+                  error={errors.employeeCode}
+                />
+              </div>
+              <div className="flex-1">
+                {showFinishedProducts ? (
+                  <FinishedProductsSection
+                    products={finishedProducts}
+                    onProductsChange={setFinishedProducts}
+                  />
+                ) : (
+                  <GoodQuantitySection value={goodQty} onChange={setGoodQty} />
+                )}
+              </div>
+              {showDefects && (
+                <div className="flex-1">
+                  <DefectQuantitySection
+                    language={state.language}
+                    defects={defects}
+                    onDefectsChange={setDefects}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Row 2: Stop Cause (isStop, 1/3) | Material Output (2/3) */}
+            <div className="flex gap-4 items-start">
+              {isStop && (
+                <div className="flex-1">
+                  <StopCauseSection
+                    language={state.language}
+                    primaryCause={primaryCause}
+                    secondaryCause={secondaryCause}
+                    notes={notes}
+                    onPrimaryCauseChange={setPrimaryCause}
+                    onSecondaryCauseChange={setSecondaryCause}
+                    onNotesChange={setNotes}
+                    error={errors.primaryCause}
+                  />
+                </div>
+              )}
+              <div className="flex-[2]">
+                <MaterialOutputSection
+                  materials={materials}
+                  bomRatio={bomRatio}
+                  hasFinishedProduct={hasFinishedProduct}
+                  originalGoodQty={originalGoodQty}
+                  originalDefectQty={originalDefectQty}
+                  goodQty={Number(goodQty) || 0}
+                  defectQty={defects.reduce((sum, d) => sum + (Number(d.qty) || 0), 0)}
+                />
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Fixed footer */}

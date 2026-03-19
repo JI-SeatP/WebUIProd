@@ -8,12 +8,15 @@ export type StatusAction = "SETUP" | "PROD" | "PAUSE" | "STOP" | "COMP" | "ON_HO
 export function useStatusChange(
   transac: number,
   copmachine: number | null,
+  currentStatus: string,
   onStatusChanged?: (newStatus: string) => void
 ) {
   const navigate = useNavigate();
   const { state } = useSession();
   const [loading, setLoading] = useState(false);
   const [confirmAction, setConfirmAction] = useState<StatusAction | null>(null);
+  // Second dialog: "fill Setup Questionnaire?" after PROD-from-SETUP
+  const [showSetupPrompt, setShowSetupPrompt] = useState(false);
 
   const requestChange = useCallback((action: StatusAction) => {
     setConfirmAction(action);
@@ -32,7 +35,7 @@ export function useStatusChange(
         transac,
         copmachine,
         newStatus: confirmAction,
-        employeeCode: state.employee?.EMNOIDENT ?? 0,
+        employeeCode: state.employee?.EMSEQ ?? 0,
       });
 
       if (res.success) {
@@ -45,18 +48,35 @@ export function useStatusChange(
           const copValue = copmachine ?? 0;
           navigate(`/orders/${transac}/questionnaire/${type}?copmachine=${copValue}`);
         }
+        // PROD from SETUP: ask if worker wants to fill Setup Questionnaire
+        else if (confirmAction === "PROD" && currentStatus === "SETUP") {
+          setShowSetupPrompt(true);
+        }
       }
     } finally {
       setLoading(false);
       setConfirmAction(null);
     }
-  }, [confirmAction, transac, copmachine, state.employee, navigate, onStatusChanged]);
+  }, [confirmAction, transac, copmachine, currentStatus, state.employee, navigate, onStatusChanged]);
+
+  const acceptSetupQuestionnaire = useCallback(() => {
+    setShowSetupPrompt(false);
+    const copValue = copmachine ?? 0;
+    navigate(`/orders/${transac}/questionnaire/setup?copmachine=${copValue}`);
+  }, [transac, copmachine, navigate]);
+
+  const declineSetupQuestionnaire = useCallback(() => {
+    setShowSetupPrompt(false);
+  }, []);
 
   return {
     loading,
     confirmAction,
+    showSetupPrompt,
     requestChange,
     cancelChange,
     executeChange,
+    acceptSetupQuestionnaire,
+    declineSetupQuestionnaire,
   };
 }

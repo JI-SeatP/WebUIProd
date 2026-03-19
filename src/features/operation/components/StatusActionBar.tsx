@@ -43,6 +43,7 @@ function getAllActions(status: OperationStatus, t: (key: string) => string): Act
   const inProd     = status === "PROD";
   const paused     = status === "PAUSE";
   const stopped    = status === "STOP";
+  const onHold     = status === "ON_HOLD";
 
   return [
     {
@@ -50,14 +51,14 @@ function getAllActions(status: OperationStatus, t: (key: string) => string): Act
       icon: <Wrench className="size-[24px]" />,
       label: t("actions.setup"),
       bgColor: "#9333ea",
-      active: notStarted || stopped,
+      active: notStarted || stopped || onHold,
     },
     {
       action: "PROD",
       icon: <Play className="size-[24px]" />,
       label: t("actions.start"),
       bgColor: "#16a34a",
-      active: inSetup || paused || stopped,
+      active: inSetup || paused || stopped || onHold,
     },
     {
       action: "PAUSE",
@@ -104,7 +105,16 @@ const STATUS_DISPLAY: Record<OperationStatus, { labelKey: string; bgColor: strin
 export function StatusActionBar({ transac, copmachine, statusCode, orderNumber, onStatusChanged }: StatusActionBarProps) {
   const { t } = useTranslation();
   const status = statusCodeToEnum(statusCode);
-  const { loading, confirmAction, requestChange, cancelChange, executeChange } = useStatusChange(transac, copmachine, onStatusChanged);
+  const {
+    loading,
+    confirmAction,
+    showSetupPrompt,
+    requestChange,
+    cancelChange,
+    executeChange,
+    acceptSetupQuestionnaire,
+    declineSetupQuestionnaire,
+  } = useStatusChange(transac, copmachine, status, onStatusChanged);
 
   const actions = getAllActions(status, t);
 
@@ -122,7 +132,7 @@ export function StatusActionBar({ transac, copmachine, statusCode, orderNumber, 
     <>
       {/* Floating action panel — fixed bottom-center */}
       <div
-        className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 w-[250px] rounded-3xl px-4 py-3 flex flex-col gap-2 backdrop-blur border border-white/20"
+        className="fixed bottom-5 left-5 z-50 w-[250px] rounded-3xl px-4 py-3 flex flex-col gap-2 backdrop-blur border border-white/20"
         style={{ backgroundColor: "rgba(64, 75, 79, 0.65)", boxShadow: "0 8px 10px rgba(0,0,0,0.5)" }}
       >
         {/* Actions dropdown */}
@@ -186,6 +196,14 @@ export function StatusActionBar({ transac, copmachine, statusCode, orderNumber, 
         }
         onConfirm={executeChange}
         variant={confirmAction === "STOP" ? "destructive" : "default"}
+      />
+
+      {/* Setup questionnaire prompt — shown after PROD from SETUP */}
+      <ConfirmDialog
+        open={showSetupPrompt}
+        onOpenChange={(open) => !open && declineSetupQuestionnaire()}
+        title={t("actions.setupQuestionnairePrompt")}
+        onConfirm={acceptSetupQuestionnaire}
       />
     </>
   );

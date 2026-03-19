@@ -126,10 +126,12 @@
     "complete": "Compléter",
     "hold": "Mettre en attente",
     "resetReady": "Remettre prêt",
+    "setupQuestionnairePrompt": "Voulez-vous remplir le questionnaire de mise en course?",
     "title": "Actions"
   },
   "questionnaire": {
     "exitSurvey": "Questionnaire de sortie",
+    "setupSurvey": "Questionnaire de mise en course",
     "stopSurvey": "Questionnaire d'arrêt",
     "completionSurvey": "Questionnaire de complétion",
     "stopCause": "Cause d'arrêt",

@@ -146,16 +146,16 @@ export function ProductionTimeTable({
       <Table>
         <TableHeader>
           <TableRow className="h-[56px]">
-            <TableHead className={`${W_TIME_TRACKING.date} text-right pr-4`}>{t("timeTracking.dateStart")}</TableHead>
+            <TableHead className={`${W_TIME_TRACKING.date} text-center`}>{t("timeTracking.dateStart")}</TableHead>
             <TableHead className={`${W_TIME_TRACKING.dateEnd} text-left`}>{t("timeTracking.dateEnd")}</TableHead>
-            <TableHead className={W_TIME_TRACKING.duration}>{t("timeTracking.duration")}</TableHead>
-            <TableHead className={W_TIME_TRACKING.status}>{t("operation.status")}</TableHead>
-            <TableHead className={W_TIME_TRACKING.order}>{t("order.number")}</TableHead>
-            <TableHead className={W_TIME_TRACKING.shift}>{t("timeTracking.smEpf")}</TableHead>
-            <TableHead className={W_TIME_TRACKING.employee}>{t("timeTracking.deptOpMachine")}</TableHead>
-            <TableHead className={W_TIME_TRACKING.qty}>{t("timeTracking.qtyGood")}</TableHead>
-            <TableHead className={W_TIME_TRACKING.qty}>{t("timeTracking.qtyDefect")}</TableHead>
-            <TableHead className={W_TIME_TRACKING.actions}>{t("common.actions")}</TableHead>
+            <TableHead className={`${W_TIME_TRACKING.duration} text-left`}>{t("timeTracking.duration")}</TableHead>
+            <TableHead className={`${W_TIME_TRACKING.status} text-center`}>{t("operation.status")}</TableHead>
+            <TableHead className={`${W_TIME_TRACKING.order} text-center`}>{t("order.number")}</TableHead>
+            <TableHead className={`${W_TIME_TRACKING.shift} text-center`}>{t("timeTracking.smEpf")}</TableHead>
+            <TableHead className={`${W_TIME_TRACKING.employee} text-center`}>{t("timeTracking.deptOpMachine")}</TableHead>
+            <TableHead className={`${W_TIME_TRACKING.qty} text-left`}>{t("timeTracking.qtyGood")}</TableHead>
+            <TableHead className={`${W_TIME_TRACKING.qty} text-left`}>{t("timeTracking.qtyDefect")}</TableHead>
+            <TableHead className={`${W_TIME_TRACKING.actions} text-center`}>{t("common.actions")}</TableHead>
           </TableRow>
         </TableHeader>
       </Table>
@@ -203,11 +203,16 @@ export function ProductionTimeTable({
                       </SelectContent>
                     </Select>
                   </TableCell>
-                  <TableCell className={`${W_TIME_TRACKING.order} text-base`}>
+                  <TableCell className={`${W_TIME_TRACKING.order} text-base text-center font-bold`}>
                     {entry.NO_PROD}
                   </TableCell>
                   <TableCell className={W_TIME_TRACKING.shift}>
                     {entry.SM_EPF}
+                    {entry.PROD_NOTE && (
+                      <div className="mt-1 bg-gray-100 text-black text-sm rounded-md px-2 py-1">
+                        {entry.PROD_NOTE}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell className={`${W_TIME_TRACKING.employee} text-base`}>
                     <div>{entry.DECODE} / {lang === "fr" ? entry.OPERATION_P : entry.OPERATION_S} / {entry.MACODE}</div>

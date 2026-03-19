@@ -126,10 +126,12 @@
     "complete": "Complete",
     "hold": "On Hold",
     "resetReady": "Reset to Ready",
+    "setupQuestionnairePrompt": "Do you want to fill the Setup Questionnaire?",
     "title": "Actions"
   },
   "questionnaire": {
     "exitSurvey": "Exit Survey",
+    "setupSurvey": "Setup Survey",
     "stopSurvey": "Stop Survey",
     "completionSurvey": "Completion Survey",
     "stopCause": "Stop Cause",

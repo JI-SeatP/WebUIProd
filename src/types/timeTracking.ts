@@ -26,6 +26,7 @@ export interface TimeEntry {
   QTE_DEFAUT: number;
   SM_EPF: string;
   MODEPROD_MPCODE: string;
+  PROD_NOTE: string;
 }
 
 export interface EmployeeHours {

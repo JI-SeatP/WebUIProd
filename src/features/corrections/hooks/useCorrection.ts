@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getCorrection, submitCorrection } from "@/api/corrections";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import type { CorrectionData } from "@/types/corrections";
+import type { CorrectionData, NewDefectRow } from "@/types/corrections";
 
 export function useCorrection(tjseq: number) {
   const navigate = useNavigate();
@@ -15,8 +15,8 @@ export function useCorrection(tjseq: number) {
   // Editable state
   const [goodQty, setGoodQty] = useState<number>(0);
   const [defectQtys, setDefectQtys] = useState<Record<number, number>>({});
+  const [newDefects, setNewDefects] = useState<NewDefectRow[]>([]);
   const [fpQtys, setFpQtys] = useState<Record<number, number>>({});
-  const [materialQtys, setMaterialQtys] = useState<Record<number, number>>({});
 
   useEffect(() => {
     setLoading(true);
@@ -31,9 +31,6 @@ export function useCorrection(tjseq: number) {
           const fq: Record<number, number> = {};
           res.data.finishedProducts.forEach((fp) => { fq[fp.id] = fp.correctedQty; });
           setFpQtys(fq);
-          const mq: Record<number, number> = {};
-          res.data.materials.forEach((m) => { mq[m.id] = m.correctedQty; });
-          setMaterialQtys(mq);
         }
       })
       .catch(() => {
@@ -52,10 +49,6 @@ export function useCorrection(tjseq: number) {
     setFpQtys((prev) => ({ ...prev, [id]: qty }));
   }, []);
 
-  const updateMaterialQty = useCallback((id: number, qty: number) => {
-    setMaterialQtys((prev) => ({ ...prev, [id]: qty }));
-  }, []);
-
   const handleSubmit = useCallback(async () => {
     if (!data) return;
     setSubmitting(true);
@@ -67,13 +60,15 @@ export function useCorrection(tjseq: number) {
           id: d.id,
           correctedQty: defectQtys[d.id] ?? d.correctedQty,
         })),
+        newDefects: newDefects
+          .filter((d) => d.typeId && Number(d.qty) > 0)
+          .map((d) => ({
+            typeId: Number(d.typeId),
+            qty: Number(d.qty),
+          })),
         finishedProducts: data.finishedProducts.map((fp) => ({
           id: fp.id,
           correctedQty: fpQtys[fp.id] ?? fp.correctedQty,
-        })),
-        materials: data.materials.map((m) => ({
-          id: m.id,
-          correctedQty: materialQtys[m.id] ?? m.correctedQty,
         })),
       });
       if (res.success) {
@@ -87,7 +82,7 @@ export function useCorrection(tjseq: number) {
     } finally {
       setSubmitting(false);
     }
-  }, [data, tjseq, goodQty, defectQtys, fpQtys, materialQtys, navigate, t]);
+  }, [data, tjseq, goodQty, defectQtys, newDefects, fpQtys, navigate, t]);
 
   return {
     data,
@@ -97,10 +92,10 @@ export function useCorrection(tjseq: number) {
     setGoodQty,
     defectQtys,
     updateDefectQty,
+    newDefects,
+    setNewDefects,
     fpQtys,
     updateFpQty,
-    materialQtys,
-    updateMaterialQty,
     handleSubmit,
   };
 }

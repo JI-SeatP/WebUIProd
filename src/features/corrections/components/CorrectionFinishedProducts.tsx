@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -9,7 +10,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { W_CORRECTIONS } from "@/constants/widths";
+import { NumPad } from "@/components/shared/NumPad";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { CorrectionFinishedProduct } from "@/types/corrections";
 
 interface CorrectionFinishedProductsProps {
@@ -24,45 +26,60 @@ export function CorrectionFinishedProducts({
   onQtyChange,
 }: CorrectionFinishedProductsProps) {
   const { t } = useTranslation();
+  const [activeNumpad, setActiveNumpad] = useState<number | null>(null);
 
   if (products.length === 0) return null;
 
   return (
-    <Card>
-      <CardHeader className="py-3 px-4">
-        <CardTitle className="text-base">{t("corrections.finishedProducts")}</CardTitle>
-      </CardHeader>
-      <CardContent className="px-4 pb-3">
-        <div className="border rounded-md overflow-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="h-[56px]">
-                <TableHead>{t("order.product")}</TableHead>
-                <TableHead>{t("questionnaire.container")}</TableHead>
-                <TableHead className={W_CORRECTIONS.qtyField}>{t("corrections.originalQty")}</TableHead>
-                <TableHead className={W_CORRECTIONS.qtyField}>{t("corrections.correctedQty")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {products.map((fp) => (
-                <TableRow key={fp.id} className="h-[56px]">
-                  <TableCell>{fp.product}</TableCell>
-                  <TableCell>{fp.container}</TableCell>
-                  <TableCell className="font-mono">{fp.originalQty}</TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={fpQtys[fp.id] ?? fp.correctedQty}
-                      onChange={(e) => onQtyChange(fp.id, Number(e.target.value))}
-                      className={`${W_CORRECTIONS.qtyField} touch-target font-mono`}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+    <Card className="min-h-[250px] bg-white">
+      <div className="py-1.5 px-3">
+        <div className="border border-green-500 bg-green-50 rounded-lg px-3 py-1 text-2xl font-bold text-green-900 uppercase tracking-wider w-fit">
+          {t("corrections.finishedProducts")}
         </div>
+      </div>
+      <CardContent className="px-3 pt-0.5 pb-2">
+        <Table>
+          <TableHeader>
+            <TableRow className="h-[56px]">
+              <TableHead>{t("order.product")}</TableHead>
+              <TableHead>{t("questionnaire.container")}</TableHead>
+              <TableHead className="w-[120px]">{t("corrections.originalQty")}</TableHead>
+              <TableHead className="w-[140px]">{t("corrections.correctedQty")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {products.map((fp) => (
+              <TableRow key={fp.id} className="h-[56px]">
+                <TableCell className="text-base font-medium">{fp.product}</TableCell>
+                <TableCell className="text-base">{fp.container}</TableCell>
+                <TableCell className="text-lg font-bold">{fp.originalQty}</TableCell>
+                <TableCell>
+                  <Popover
+                    open={activeNumpad === fp.id}
+                    onOpenChange={(open) => setActiveNumpad(open ? fp.id : null)}
+                  >
+                    <PopoverTrigger asChild>
+                      <Input
+                        value={String(fpQtys[fp.id] ?? fp.correctedQty)}
+                        readOnly
+                        className="w-[100px] touch-target !text-2xl font-bold cursor-pointer text-green-700 bg-white border-green-600"
+                        placeholder="0"
+                      />
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <NumPad
+                        value={String(fpQtys[fp.id] ?? fp.correctedQty)}
+                        onChange={(v) => onQtyChange(fp.id, Number(v) || 0)}
+                        onSubmit={() => setActiveNumpad(null)}
+                        onClose={() => setActiveNumpad(null)}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   );
