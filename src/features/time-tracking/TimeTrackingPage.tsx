@@ -3,14 +3,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProductionTimeTab } from "./components/ProductionTimeTab";
 import { AddHoursTab } from "./components/AddHoursTab";
 
+const tabTriggerClass =
+  "touch-target text-base px-6 shadow-none after:hidden rounded-md border border-gray-300 bg-white text-gray-900 hover:bg-gray-100 data-[state=active]:border-2 data-[state=active]:border-black data-[state=active]:bg-[#aeffae] data-[state=active]:text-black data-[state=active]:hover:bg-[#aeffae]";
+
 function TabsNav() {
   const { t } = useTranslation();
   return (
-    <TabsList className="shrink-0 bg-transparent">
-      <TabsTrigger value="production" className="touch-target text-base px-6 bg-transparent data-[state=active]:bg-[#aeffae] data-[state=active]:text-black data-[state=active]:border-2 data-[state=active]:border-black">
+    <TabsList className="shrink-0 !h-auto min-h-0 gap-1 bg-transparent p-0 items-center">
+      <TabsTrigger value="production" className={tabTriggerClass}>
         {t("timeTracking.productionTime")}
       </TabsTrigger>
-      <TabsTrigger value="addHours" className="touch-target text-base px-6 bg-transparent data-[state=active]:bg-[#aeffae] data-[state=active]:text-black data-[state=active]:border-2 data-[state=active]:border-black">
+      <TabsTrigger value="addHours" className={tabTriggerClass}>
         {t("timeTracking.addHours")}
       </TabsTrigger>
     </TabsList>

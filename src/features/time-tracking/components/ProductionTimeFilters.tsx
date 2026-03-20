@@ -14,6 +14,7 @@ import { MultiSelectFilter } from "@/components/shared/MultiSelectFilter";
 import type { FilterOption } from "@/components/shared/MultiSelectFilter";
 import { Search } from "lucide-react";
 import type { TimeTrackingFilters } from "@/types/timeTracking";
+import { W_TIME_TRACKING } from "@/constants/widths";
 
 interface ProductionTimeFiltersProps {
   filters: TimeTrackingFilters;
@@ -46,12 +47,14 @@ export function ProductionTimeFilters({
   };
 
   return (
-    <div className="bg-white rounded-lg p-2 pt-4 pb-[14px] space-y-4">
-      <div className="grid grid-cols-[35%_65%]">
-        <div />
-        <div className="flex items-center">{tabsList}</div>
-      </div>
-      <div className="flex items-end gap-3 flex-wrap">
+    <div className="overflow-hidden rounded-lg bg-white pb-[14px]">
+      {tabsList ? (
+        <div className="flex min-h-[52px] items-center justify-center bg-black px-3 py-2 rounded-t-lg">
+          {tabsList}
+        </div>
+      ) : null}
+      <div className="space-y-4 p-2 pt-4">
+      <div className="flex w-full flex-wrap items-end gap-3">
       <div className="flex flex-col gap-1 ml-5">
         <Label className="text-sm text-muted-foreground">{t("timeTracking.dateStart")}</Label>
         <DatePicker
@@ -66,59 +69,66 @@ export function ProductionTimeFilters({
           onChange={(v) => updateFilter("endDate", v)}
         />
       </div>
-      <div className="flex flex-col gap-1">
+      <div className="ml-[30px] mr-10 flex flex-col gap-1">
         <Label className="text-sm text-muted-foreground">{t("actions.search")}</Label>
         <Input
-          className="!h-12 w-[200px] !text-base"
+          className={`!h-12 ${W_TIME_TRACKING.productionFiltersSearch} !text-base`}
           placeholder={t("timeTracking.searchPlaceholder")}
           value={filters.searchText}
           onChange={(e) => updateFilter("searchText", e.target.value)}
         />
       </div>
-      <div className="flex flex-col gap-1">
-        <Label className="text-sm text-muted-foreground">{t("operation.department")}</Label>
-        <MultiSelectFilter
-          label={t("filters.allDepartments")}
-          options={deptOptions}
-          selected={filters.selectedDepartments}
-          onChange={(v) => updateFilter("selectedDepartments", v)}
-          disabledValues={disabledDepts}
-          searchable
-          popoverWidth="w-[300px]"
-          triggerWidth={200}
-        />
+      <div className="flex flex-wrap items-end gap-[18px]">
+        <div className="flex flex-col gap-1">
+          <Label className="text-sm text-muted-foreground">{t("operation.department")}</Label>
+          <MultiSelectFilter
+            label={t("filters.allDepartments")}
+            options={deptOptions}
+            selected={filters.selectedDepartments}
+            onChange={(v) => updateFilter("selectedDepartments", v)}
+            disabledValues={disabledDepts}
+            searchable
+            popoverWidth={W_TIME_TRACKING.productionFiltersDeptPopover}
+            triggerWidth={W_TIME_TRACKING.productionFiltersDeptTriggerPx}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-sm text-muted-foreground">{t("operation.machine")}</Label>
+          <MultiSelectFilter
+            label={t("filters.allMachines")}
+            options={machineOptions}
+            selected={filters.selectedMachines}
+            onChange={(v) => updateFilter("selectedMachines", v)}
+            disabledValues={disabledMachines}
+            searchable
+            popoverWidth={W_TIME_TRACKING.productionFiltersMachinePopover}
+            triggerWidth={W_TIME_TRACKING.productionFiltersMachineTriggerPx}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-sm text-muted-foreground">{t("timeTracking.show")}</Label>
+          <Select
+            value={filters.showMode}
+            onValueChange={(v) => updateFilter("showMode", v as "all" | "onlyQty")}
+          >
+            <SelectTrigger className="w-[200px] !h-12">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("timeTracking.showAll")}</SelectItem>
+              <SelectItem value="onlyQty">{t("timeTracking.showOnlyQty")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
-      <div className="flex flex-col gap-1">
-        <Label className="text-sm text-muted-foreground">{t("operation.machine")}</Label>
-        <MultiSelectFilter
-          label={t("filters.allMachines")}
-          options={machineOptions}
-          selected={filters.selectedMachines}
-          onChange={(v) => updateFilter("selectedMachines", v)}
-          disabledValues={disabledMachines}
-          searchable
-          popoverWidth="w-[330px]"
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <Label className="text-sm text-muted-foreground">{t("timeTracking.show")}</Label>
-        <Select
-          value={filters.showMode}
-          onValueChange={(v) => updateFilter("showMode", v as "all" | "onlyQty")}
-        >
-          <SelectTrigger className="w-[200px] !h-12">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("timeTracking.showAll")}</SelectItem>
-            <SelectItem value="onlyQty">{t("timeTracking.showOnlyQty")}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <Button className="touch-target gap-2" onClick={onSearch}>
+      <Button
+        className={`touch-target text-[calc(1.125rem-1pt)] ml-auto mr-[20px] gap-2 ${W_TIME_TRACKING.productionFiltersSearchButtonMin}`}
+        onClick={onSearch}
+      >
         <Search size={18} />
         {t("actions.search")}
       </Button>
+      </div>
       </div>
     </div>
   );

@@ -96,13 +96,16 @@ export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
 
   return (
   <div className="space-y-3">
-    <div className="bg-white rounded-lg p-2 pt-4 pb-[14px] space-y-4">
-      <div className="grid grid-cols-[35%_65%]">
-        <div className="flex items-center pl-5">
-          {form.employeeName && <span className="text-lg font-semibold">{form.employeeName}</span>}
-        </div>
-        <div className="flex items-center">{tabsList}</div>
+    <div className="overflow-hidden rounded-lg bg-white pb-[14px]">
+      <div className="relative flex min-h-[52px] items-center justify-center bg-black px-3 py-2 rounded-t-lg">
+        {form.employeeName ? (
+          <div className="pointer-events-none absolute left-5 top-1/2 z-10 max-w-[min(38%,260px)] -translate-y-1/2 truncate text-left">
+            <span className="text-lg font-semibold text-white">{form.employeeName}</span>
+          </div>
+        ) : null}
+        <div className="flex shrink-0 items-center">{tabsList}</div>
       </div>
+      <div className="space-y-4 p-2 pt-4">
       <div className="flex items-end gap-3 flex-wrap">
         {/* Employee Code */}
         <div className="flex flex-col gap-1 ml-5">
@@ -302,6 +305,7 @@ export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
         >
           {t("actions.submit")}
         </Button>
+      </div>
       </div>
 
     </div>

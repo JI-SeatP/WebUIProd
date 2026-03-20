@@ -171,6 +171,12 @@ export const W_TIME_TRACKING = {
   employee:  "w-[28%]",
   qty:       "w-[7%]",
   actions:   "w-[7%]",
+  productionFiltersSearch: "w-[351px]",
+  productionFiltersDeptTriggerPx: 240,
+  productionFiltersMachineTriggerPx: 240,
+  productionFiltersDeptPopover: "w-[360px]",
+  productionFiltersMachinePopover: "w-[396px]",
+  productionFiltersSearchButtonMin: "min-w-[10.8rem]",
 } as const;
 
 // ───────────────────────────────────────
