@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,95 +23,40 @@ export interface MaterialRow {
   warehouse_P: string;
   warehouse_S: string;
   container: string;
+  /** Per-material BOM ratio (NIQTE) — kept for type compatibility */
+  bomRatio?: number;
 }
 
 interface MaterialOutputSectionProps {
   materials: MaterialRow[];
-  /** BOM ratio from cNOMENCLATURE.NIQTE */
-  bomRatio: number | null;
-  /** Whether the operation creates finished products */
-  hasFinishedProduct: boolean;
-  /** Original good qty from TEMPSPROD */
-  originalGoodQty: number;
-  /** Original defect qty from TEMPSPROD */
-  originalDefectQty: number;
-  /** Current good qty entered by user */
-  goodQty: number;
-  /** Current defect qty entered by user */
-  defectQty: number;
-}
-
-/**
- * Calculate material output quantity based on legacy logic:
- * - With finished product: (good + defect) × bomRatio
- * - Without: (good + defect) / ratio, where ratio = originalTotal / originalGoodQty
- */
-function calcMaterialQty(
-  originalQty: number,
-  goodQty: number,
-  defectQty: number,
-  bomRatio: number | null,
-  hasFinishedProduct: boolean,
-  originalGoodQty: number,
-  originalDefectQty: number,
-): number {
-  const totalQty = goodQty + defectQty;
-  if (totalQty <= 0) return 0;
-
-  if (hasFinishedProduct && bomRatio != null) {
-    // Scenario A: totalQty × BOM ratio
-    return totalQty * bomRatio;
-  }
-
-  // Scenario B: ratio-based calculation
-  const originalTotal = originalGoodQty + originalDefectQty;
-  let ratio = 1;
-  if (originalGoodQty > 0 && originalTotal > 0 && originalQty > 0) {
-    ratio = originalTotal / originalQty;
-  }
-  if (ratio <= 0) ratio = 1;
-  return totalQty / ratio;
+  /** SM transaction number to display */
+  smnotrans?: string;
 }
 
 export function MaterialOutputSection({
   materials,
-  bomRatio,
-  hasFinishedProduct,
-  originalGoodQty,
-  originalDefectQty,
-  goodQty,
-  defectQty,
+  smnotrans,
 }: MaterialOutputSectionProps) {
   const { t } = useTranslation();
   const { state } = useSession();
   const lang = state.language;
 
-  const calculatedMaterials = useMemo(() => {
-    return materials.map((m) => ({
-      ...m,
-      calculatedQty: calcMaterialQty(
-        m.originalQty,
-        goodQty,
-        defectQty,
-        bomRatio,
-        hasFinishedProduct,
-        originalGoodQty,
-        originalDefectQty,
-      ),
-    }));
-  }, [materials, goodQty, defectQty, bomRatio, hasFinishedProduct, originalGoodQty, originalDefectQty]);
-
   return (
     <Card className="min-h-[315px]">
-      <div className="border-l-4 border-gray-600 bg-gray-50 py-1.5 px-3">
+      <div className="border-l-4 border-gray-600 bg-gray-50 py-1.5 px-3 flex items-center gap-3 min-h-[48px]">
         <div className="text-xs font-bold text-gray-900 uppercase tracking-wider">
           {t("questionnaire.materialOutput")}
         </div>
+        {smnotrans && (
+          <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-100/90 px-3 py-1 text-base font-bold text-blue-800">
+            {smnotrans}
+          </span>
+        )}
       </div>
       <CardContent className="px-3 pt-0.5 pb-2">
         {materials.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">
-            {t("common.noResults")}
+            {t("questionnaire.materialOutputHint")}
           </p>
         ) : (
           <Table className="text-base">
@@ -127,12 +71,12 @@ export function MaterialOutputSection({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {calculatedMaterials.map((row) => (
+              {materials.map((row) => (
                 <TableRow key={row.id} className="h-[56px]">
                   <TableCell className="text-base">{row.code}</TableCell>
                   <TableCell className="text-base">{lang === "fr" ? row.description_P : row.description_S}</TableCell>
                   <TableCell className="text-lg text-right font-bold">
-                    {row.calculatedQty.toFixed(2)}
+                    {row.originalQty.toFixed(2)}
                   </TableCell>
                   <TableCell className="text-base text-muted-foreground">
                     {lang === "fr" ? row.unit_P : row.unit_S}
