@@ -11,7 +11,9 @@ export default defineConfig({
     },
   },
   server: {
-    // Proxy API calls to local Express server (direct SQL Server connection)
+    port: 5173,
+    strictPort: true,
+    // Proxy /api/* → local Express (server/api.cjs). Must be running on 3001 or requests fail with ECONNREFUSED.
     proxy: {
       "/api/getLabelPdf.cfm": {
         target: "http://10.4.80.6",
@@ -29,7 +31,7 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, "/AutoFAB_SEATPLY_TEST/queries"),
       },
       "/api": {
-        target: "http://localhost:3001",
+        target: "http://127.0.0.1:3001",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },

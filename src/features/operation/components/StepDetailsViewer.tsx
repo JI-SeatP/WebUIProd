@@ -55,7 +55,7 @@ export function StepDetailsViewer({ step, stepNumber, language, onClose }: StepD
     <Card className="py-0 gap-0 flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
-        <div className="text-sm font-medium truncate mr-2">
+        <div className="text-base font-medium truncate mr-2">
           <span className="text-blue-600 font-bold mr-2">{stepNumber}</span>
           {title}
         </div>

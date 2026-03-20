@@ -6,6 +6,7 @@ import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { FilterBar } from "./components/FilterBar";
 import { WorkOrderTable } from "./components/WorkOrderTable";
 import { useWorkOrders, type WorkOrderFilters } from "./hooks/useWorkOrders";
+import { useRegisterRefresh } from "@/context/RefreshContext";
 
 export function WorkOrderListPage() {
   const { t } = useTranslation();
@@ -29,6 +30,9 @@ export function WorkOrderListPage() {
     handleSort,
     refetch,
   } = useWorkOrders(filters);
+
+  // Register with global refresh so the Header refresh button re-fetches orders
+  useRegisterRefresh(refetch);
 
   return (
     <div className="flex flex-col h-full gap-3">

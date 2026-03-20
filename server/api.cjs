@@ -585,11 +585,45 @@ app.get(
 app.get(
   "/getDefectTypes.cfm",
   handler(async (req, res) => {
+    const fmcode = (req.query.fmcode || "").toUpperCase();
     const pool = await getPool();
+
+    // Base filter: all defect-type reasons (RRTYPE contains 14)
+    // Plus machine-family-specific types based on fmcode
+    let familyFilter = "";
+    if (fmcode) {
+      const conditions = [
+        // Common types always included when fmcode is provided
+        "RRDESC_S LIKE 'Raw-Material%'",
+        "RRDESC_S LIKE 'Visual%'",
+      ];
+      if (fmcode.includes("PRESS")) {
+        conditions.push("RRCODE LIKE 'SCRAP-PRS%'");
+        conditions.push("RRDESC_P LIKE 'Presse%'");
+      }
+      if (fmcode.includes("CNC")) {
+        conditions.push("RRCODE LIKE 'SCRAP-CNC%'");
+        conditions.push("RRDESC_P LIKE 'Usinage%'");
+      }
+      if (fmcode.includes("SAND")) {
+        conditions.push("RRCODE LIKE 'SCRAP-SND%'");
+      }
+      if (fmcode.includes("PACK")) {
+        conditions.push("RRCODE LIKE 'SCRAP-PKG%'");
+        conditions.push("RRDESC_P LIKE 'Emballage%'");
+      }
+      if (fmcode.includes("VENPR")) {
+        conditions.push("RRTYPE LIKE '%3%'");
+        conditions.push("RRTYPE LIKE '%20%'");
+      }
+      familyFilter = `AND (${conditions.join(" OR ")})`;
+    }
+
     const result = await pool.request().query(`
       SELECT RRSEQ AS id, RRCODE AS code, RRDESC_P AS description_P, RRDESC_S AS description_S, RRTYPE AS type
       FROM RAISON
       WHERE RRTYPE LIKE '%14%'
+      ${familyFilter}
       ORDER BY RRDESC_P
     `);
     res.json({
@@ -611,6 +645,11 @@ app.get(
       return res.json({ success: false, error: "transac parameter is required" });
     }
 
+    // Always log here — check the terminal where `node server/api.cjs` runs (not browser DevTools).
+    console.log(
+      `[getPanelData] transac=${transac} panelNiSeq=${panelNiSeq} | panel detail query will ${panelNiSeq ? "run" : "SKIP (panelNiSeq is 0 — no NISEQ/thickness log)"}`
+    );
+
     const pool = await getPool();
 
     // 1) Panel detail — the PANEL row from cNOMENCLATURE
@@ -629,7 +668,7 @@ app.get(
                  INV_P.INPOIDS AS POIDS,
                  INV.INREV AS VER,
                  CI.CRCRITERE_7 AS TYPE,
-                 cn.NIEPAISSEUR AS THICKNESS
+                 CI.CRCRITERE_5 AS THICKNESS
           FROM cNOMENCLATURE cn
           LEFT JOIN CRITERE_INV CI ON CI.INVENTAIRE = cn.INVENTAIRE_M
           LEFT JOIN INVENTAIRE INV ON INV.INSEQ = cn.INVENTAIRE_M
@@ -638,12 +677,34 @@ app.get(
         `);
       if (detailResult.recordset.length) {
         const raw = detailResult.recordset[0];
+        const rawThickness = raw.THICKNESS;
+        const displayedThickness = (() => {
+          const v = rawThickness;
+          if (v == null || v === "") return null;
+          if (typeof v === "number" && v > 0) return decimalToFraction(v);
+          const s = String(v).trim();
+          // CRCRITERE_5 may already be a fraction string (e.g. "7/16").
+          // parseFloat("7/16") === 7 — would wrongly run decimalToFraction(7) → garbage like "14/2".
+          if (/^\d+\s*\/\s*\d+$/.test(s)) {
+            return s.replace(/\s*\/\s*/, "/");
+          }
+          const n = parseFloat(s.replace(",", "."));
+          if (!Number.isNaN(n) && n > 0) return decimalToFraction(n);
+          return s || null;
+        })();
+        console.log(
+          `[getPanelData] NISEQ=${panelNiSeq} | THICKNESS (CRCRITERE_5) raw=`,
+          rawThickness,
+          "| displayed=",
+          displayedThickness
+        );
         panelDetail = {
           ...raw,
-          THICKNESS: raw.THICKNESS != null && raw.THICKNESS > 0
-            ? decimalToFraction(raw.THICKNESS)
-            : null,
+          THICKNESS_RAW: rawThickness,
+          THICKNESS: displayedThickness,
         };
+      } else {
+        console.log(`[getPanelData] NISEQ=${panelNiSeq} | No row returned from cNOMENCLATURE`);
       }
     }
 
@@ -1151,6 +1212,9 @@ app.get(
 // ─── POST /submitQuestionnaire.cfm ───────────────────────────────────────────
 // Mirrors legacy CF: QuestionnaireSortie.cfc → ModifieTEMPSPROD (lines 599-1293)
 // Uses the EXACT same stored procedures as the old software.
+// AUDIT FIXES: stop-cause row, DET_DEFECT fields, SMNOTRANS pass-through,
+//   employee on both rows, prev-PROD cost recalc, cNOMENCOP qty sync,
+//   TJVALEUR_MATIERE + KPI insert, accept nopseq from frontend.
 app.post(
   "/submitQuestionnaire.cfm",
   handler(async (req, res) => {
@@ -1166,13 +1230,15 @@ app.post(
       moldAction,
       defects,
       finishedProducts,
+      nopseq: frontendNopseq, // Fix 8: accept nopseq from frontend
     } = req.body;
 
     const pool = await getPool();
     const isStop = type === "stop";
     const isComp = type === "comp";
     const qteBonne = Number(goodQty) || 0;
-    const qteDefect = (defects || []).reduce((sum, d) => sum + (Number(d.qty) || 0), 0);
+    // NOTE: With write-as-you-go pattern, defects are already in the DB (via addDefect.cfm).
+    // We read the actual defect total from TEMPSPROD after finding the PROD row below.
 
     // ── Find the last PROD TEMPSPROD record (mirrors CF line 657-668)
     let copWhere = "";
@@ -1192,7 +1258,8 @@ app.post(
       FROM TEMPSPROD TP
       INNER JOIN cNOMENCOP CNOP ON CNOP.NOPSEQ = TP.CNOMENCOP
       WHERE TP.TRANSAC = @transac
-        AND UPPER(TP.MODEPROD_MPCODE) = 'PROD'
+        AND TP.MODEPROD_MPCODE = 'PROD'
+        AND TP.TJNOTE LIKE 'Ecran de production pour Temps prod%'
         ${copWhere}
       ORDER BY TP.TJSEQ DESC
     `);
@@ -1212,10 +1279,37 @@ app.post(
     }
 
     const tp = tpResult.recordset[0];
-    const tjseq = tp.TJSEQ;
-    const nopseq = tp.NOPSEQ || tp.CNOMENCOP;
+    const tjseq = tp.TJSEQ; // This is the PROD row TJSEQ
+    // Fix 8: prefer frontend nopseq, fall back to join result
+    const nopseq = Number(frontendNopseq) || tp.NOPSEQ || tp.CNOMENCOP;
 
-    console.log(`[submitQuestionnaire] TJSEQ=${tjseq} type=${type} good=${qteBonne} defect=${qteDefect} transac=${transac} copmachine=${copmachine} mpcode=${tp.MODEPROD_MPCODE}`);
+    // Read actual defect total from TEMPSPROD (already written by addDefect.cfm in write-as-you-go mode)
+    const qteDefect = tp.TJQTEDEFECT || 0;
+
+    console.log(`[submitQuestionnaire] TJSEQ=${tjseq} type=${type} good=${qteBonne} defect=${qteDefect} transac=${transac} copmachine=${copmachine} mpcode=${tp.MODEPROD_MPCODE} nopseq=${nopseq}`);
+
+    // ── Fix 1: Find the STOP row (MODEPROD=8) for saving causes and employee
+    // The old software finds the STOP row created by changeStatus.cfm
+    let stopTjseq = null;
+    if (isStop) {
+      const stopReq = pool.request().input("transac", sql.Int, transac);
+      stopReq.input("nopseq", sql.Int, nopseq);
+      let stopCopWhere = "";
+      if (copmachine && Number(copmachine) > 0) {
+        stopReq.input("copmachine", sql.Int, Number(copmachine));
+        stopCopWhere = "AND cNOMENCOP_MACHINE = @copmachine";
+      }
+      const stopResult = await stopReq.query(`
+        SELECT TOP 1 TJSEQ FROM TEMPSPROD
+        WHERE TRANSAC = @transac
+          AND CNOMENCOP = @nopseq
+          ${stopCopWhere}
+          AND MODEPROD = 8
+        ORDER BY TJSEQ DESC
+      `);
+      stopTjseq = stopResult.recordset[0]?.TJSEQ || null;
+      console.log(`[submitQuestionnaire] STOP row TJSEQ=${stopTjseq}`);
+    }
 
     // ── STEP 1: Reset TJPROD_TERMINE flag (line 686)
     await pool.request()
@@ -1227,7 +1321,7 @@ app.post(
         WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND TJPROD_TERMINE = 1
       `);
 
-    // ── STEP 2: Update employee on the TEMPSPROD record (line 700)
+    // ── STEP 2: Update employee on BOTH the STOP/COMP row AND the PROD row (Fix 4)
     let employeeSeq = tp.EMPLOYE || 0;
     if (employeeCode) {
       const empResult = await pool.request()
@@ -1236,6 +1330,22 @@ app.post(
       if (empResult.recordset.length) {
         const emp = empResult.recordset[0];
         employeeSeq = emp.EMSEQ;
+
+        // Update employee on the STOP/COMP row first (old software line 700-706)
+        if (stopTjseq) {
+          await pool.request()
+            .input("tjseq", sql.Int, stopTjseq)
+            .input("employe", sql.Int, emp.EMSEQ)
+            .input("emno", sql.VarChar(20), String(emp.EMNO))
+            .input("emnom", sql.VarChar(100), emp.EMNOM)
+            .query(`
+              UPDATE TEMPSPROD
+              SET EMPLOYE = @employe, EMPLOYE_EMNO = @emno, EMPLOYE_EMNOM = @emnom
+              WHERE TJSEQ = @tjseq
+            `);
+        }
+
+        // Update employee on the PROD row (old software ChangeTEMPSPROD line 1670-1678)
         await pool.request()
           .input("tjseq", sql.Int, tjseq)
           .input("employe", sql.Int, emp.EMSEQ)
@@ -1249,21 +1359,22 @@ app.post(
       }
     }
 
-    // ── STEP 3: Record stop causes in TEMPSPRODEX (line 732)
-    if (isStop && primaryCause) {
+    // ── STEP 3: Record stop causes on the STOP row (Fix 1 — was incorrectly on PROD row)
+    // Old software saves causes on the STOP row (MODEPROD=8), not the PROD row
+    if (isStop && primaryCause && stopTjseq) {
       const existsResult = await pool.request()
-        .input("tjseq", sql.Int, tjseq)
+        .input("tjseq", sql.Int, stopTjseq)
         .query(`SELECT TEMPSPROD FROM TEMPSPRODEX WHERE TEMPSPROD = @tjseq`);
       if (existsResult.recordset.length) {
         await pool.request()
-          .input("tjseq", sql.Int, tjseq)
+          .input("tjseq", sql.Int, stopTjseq)
           .input("causeP", sql.Int, Number(primaryCause))
           .input("causeS", sql.Int, Number(secondaryCause) || 0)
           .input("note", sql.VarChar(500), notes || "")
           .query(`UPDATE TEMPSPRODEX SET QA_CAUSEP = @causeP, QA_CAUSES = @causeS, EXTPRD_NOTE = @note WHERE TEMPSPROD = @tjseq`);
       } else {
         await pool.request()
-          .input("tjseq", sql.Int, tjseq)
+          .input("tjseq", sql.Int, stopTjseq)
           .input("causeP", sql.Int, Number(primaryCause))
           .input("causeS", sql.Int, Number(secondaryCause) || 0)
           .input("note", sql.VarChar(500), notes || "")
@@ -1277,29 +1388,156 @@ app.post(
     `);
     const { dateNow, timeNow } = dateTimeResult.recordset[0];
 
-    // ── STEP 4: Update quantities in TEMPSPROD (line 1670)
+    // ── STEP 4: Update quantities on the PROD row (line 1670 — ChangeTEMPSPROD)
+    // Also update CNOMENCOP, INVENTAIRE_C on the PROD row
     await pool.request()
       .input("tjseq", sql.Int, tjseq)
       .input("qteBonne", sql.Float, qteBonne)
       .input("qteDefect", sql.Float, qteDefect)
-      .query(`UPDATE TEMPSPROD SET TJQTEPROD = @qteBonne, TJQTEDEFECT = @qteDefect WHERE TJSEQ = @tjseq`);
+      .input("nopseq", sql.Int, nopseq)
+      .input("inventaireC", sql.Int, tp.INVENTAIRE_C || 0)
+      .query(`
+        UPDATE TEMPSPROD SET
+          TJQTEPROD = @qteBonne, TJQTEDEFECT = @qteDefect,
+          CNOMENCOP = @nopseq, INVENTAIRE_C = @inventaireC
+        WHERE TJSEQ = @tjseq
+      `);
 
-    // ── STEP 5: Insert DET_DEFECT records for each defect row
-    if (defects && defects.length > 0) {
+    // ── Point 3: TJPROD_TERMINE pre-check (mirrors old software lines 708-716)
+    // Before ChangeTEMPSPROD, if remaining qty <= 0, mark PROD row as terminated
+    try {
+      const qteCheckResult = await pool.request()
+        .input("transac", sql.Int, transac)
+        .input("nopseq", sql.Int, nopseq)
+        .query(`
+          SELECT ISNULL(COP.NOPQTEAFAIRE, 0) AS NiQte_A_Fab,
+                 ISNULL((SELECT SUM(TJQTEPROD) FROM TEMPSPROD WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq), 0) AS Qte_Termine
+          FROM CNOMENCOP COP WHERE COP.NOPSEQ = @nopseq
+        `);
+      const qc = qteCheckResult.recordset[0];
+      if (qc && (qc.NiQte_A_Fab - qc.Qte_Termine) <= 0) {
+        await pool.request().input("tjseq", sql.Int, tjseq)
+          .query(`UPDATE TEMPSPROD SET TJPROD_TERMINE = 1 WHERE TJSEQ = @tjseq`);
+        console.log(`[submitQuestionnaire] TJPROD_TERMINE=1 pre-check: remaining <= 0`);
+      }
+    } catch (err) {
+      console.warn("[submitQuestionnaire] TJPROD_TERMINE pre-check skipped:", err.message);
+    }
+
+    // ── Point 2: ChangeTEMPSPROD (mirrors old software lines 1682-1741 exactly)
+    // Old software calls ChangeTEMPSPROD(TJSEQ=LeTJSEQ, Statut=arguments.Statut)
+    // which: (a) updates employee/note/CNOMENCOP/INVENTAIRE_C on the PROD row (already done above)
+    //        (b) finds row WHERE MODEPROD_MPCODE <> @Statut (i.e., NOT the current status)
+    //            and updates its quantities + recalculates costs on it
+    //        (c) recalculates costs on the PROD row (arguments.TJSEQ)
+    try {
+      const statusForQuery = isStop ? "STOP" : isComp ? "COMP" : "PROD";
+      let copWhereChange = "";
+      const diffReq = pool.request()
+        .input("transac", sql.Int, transac)
+        .input("nopseq", sql.Int, nopseq)
+        .input("statut", sql.VarChar(5), statusForQuery);
+      if (copmachine && Number(copmachine) > 0) {
+        diffReq.input("copmachine", sql.Int, Number(copmachine));
+        copWhereChange = "AND cNOMENCOP_MACHINE = @copmachine";
+      }
+      const diffStatusResult = await diffReq.query(`
+        SELECT TOP 1 TJSEQ, MODEPROD_MPCODE FROM TEMPSPROD
+        WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq
+          ${copWhereChange}
+          AND MODEPROD_MPCODE <> @statut
+          AND TJNOTE LIKE 'Ecran de production pour Temps prod%'
+        ORDER BY TJSEQ DESC
+      `);
+      const diffTjseq = diffStatusResult.recordset[0]?.TJSEQ || null;
+      if (diffTjseq) {
+        // Update quantities on the found row (mirrors line 1696-1699)
+        await pool.request()
+          .input("tjseq", sql.Int, diffTjseq)
+          .input("qteBonne", sql.Float, qteBonne)
+          .input("qteDefect", sql.Float, qteDefect)
+          .query(`UPDATE TEMPSPROD SET TJQTEPROD = @qteBonne, TJQTEDEFECT = @qteDefect WHERE TJSEQ = @tjseq`);
+        // Recalculate costs on that row (mirrors line 1702-1712)
+        await pool.request().input("tjseq", sql.Int, diffTjseq).query(`
+          UPDATE TEMPSPROD SET
+            TJSYSTEMPSHOMME = ISNULL(C.CALCSYSTEMPSHOMME, 0), TJTEMPSHOMME = ISNULL(C.CALCTEMPSHOMME, 0),
+            TJEMCOUT = ISNULL(C.CALCEMCOUT, 0), TJOPCOUT = ISNULL(C.CALCOPCOUT, 0), TJMACOUT = ISNULL(C.CALCMACOUT, 0)
+          FROM TEMPSPROD
+          INNER JOIN dbo.FctCalculTempsDeProduction(@tjseq) C ON C.TJSEQ = @tjseq
+          WHERE TEMPSPROD.TJSEQ = @tjseq
+        `);
+        console.log(`[submitQuestionnaire] ChangeTEMPSPROD: updated qty+costs on diffStatus row TJSEQ=${diffTjseq} (MPCODE=${diffStatusResult.recordset[0].MODEPROD_MPCODE})`);
+      }
+    } catch (err) {
+      console.warn("[submitQuestionnaire] ChangeTEMPSPROD diff-status update skipped:", err.message);
+    }
+
+    // ── STEP 5: Insert DET_DEFECT records with all fields (Fix 2)
+    // With write-as-you-go, defects are already in DB via addDefect.cfm.
+    // Only insert if NOT already present (fallback for non-interactive submit).
+    const existingDefectsResult = await pool.request()
+      .input("tjseq", sql.Int, tjseq)
+      .query(`SELECT COUNT(*) AS cnt FROM DET_DEFECT WHERE TEMPSPROD = @tjseq`);
+    const defectsAlreadyInDb = (existingDefectsResult.recordset[0]?.cnt || 0) > 0;
+
+    if (!defectsAlreadyInDb && defects && defects.length > 0) {
+      // Get INVENTAIRE from the TRANSAC row
+      const invResult = await pool.request()
+        .input("transac", sql.Int, transac)
+        .query(`SELECT INVENTAIRE FROM TRANSAC WHERE TRSEQ = @transac`);
+      const inventaire = invResult.recordset[0]?.INVENTAIRE || 0;
+
+      // Calculate cost estimates (mirrors old software)
+      // CoutOperation = TJEMCOUT + TJOPCOUT + TJMACOUT from TEMPSPROD
+      // CoutMatiere = SUM(0 - TRCOUTTRANS) FROM TRANSAC WHERE TRSEQ = @transac
+      const defectCostResult = await pool.request()
+        .input("tjseq", sql.Int, tjseq)
+        .input("transac", sql.Int, transac)
+        .query(`
+          SELECT ISNULL(TP.TJEMCOUT, 0) + ISNULL(TP.TJOPCOUT, 0) + ISNULL(TP.TJMACOUT, 0) AS CoutOperation,
+                 ISNULL(TP.TJQTEPROD, 0) AS TJQTEPROD,
+                 ISNULL((SELECT SUM(0 - TRCOUTTRANS) FROM TRANSAC WHERE TRSEQ = @transac), 0) AS CoutMatiere
+          FROM TEMPSPROD TP WHERE TP.TJSEQ = @tjseq
+        `);
+      const defCosts = defectCostResult.recordset[0] || { CoutOperation: 0, CoutMatiere: 0, TJQTEPROD: 0 };
+      const laValeurEstimeeTotale = defCosts.CoutOperation + defCosts.CoutMatiere;
+      const laValeurEstimeeUnitaire = defCosts.TJQTEPROD !== 0
+        ? laValeurEstimeeTotale / defCosts.TJQTEPROD
+        : 0;
+
       for (const d of defects) {
         const dQty = Number(d.qty) || 0;
         if (dQty <= 0 || !d.typeId) continue;
         await pool.request()
           .input("tempsprod", sql.Int, tjseq)
+          .input("transac", sql.Int, transac)
+          .input("inventaire", sql.Int, inventaire)
+          .input("machine", sql.Int, tp.MACHINE)
+          .input("employe", sql.Int, employeeSeq)
           .input("raison", sql.Int, Number(d.typeId))
           .input("qty", sql.Float, dQty)
-          .query(`INSERT INTO DET_DEFECT (TEMPSPROD, RAISON, DDQTEUNINV, DDDATE) VALUES (@tempsprod, @raison, @qty, GETDATE())`);
+          .input("ddnote", sql.VarChar(500), d.notes || "")
+          .input("costUnit", sql.Float, laValeurEstimeeUnitaire)
+          .input("costTotal", sql.Float, laValeurEstimeeTotale)
+          .query(`
+            INSERT INTO DET_DEFECT
+              (TEMPSPROD, TRANSAC, INVENTAIRE, MACHINE, EMPLOYE,
+               DDQTEUNINV, DDDATE, RAISON, DDNOTE,
+               DDVALEUR_ESTIME_UNITAIRE, DDVALEUR_ESTIME_TOTALE, TRANSAC_PERE)
+            VALUES
+              (@tempsprod, @transac, @inventaire, @machine, @employe,
+               @qty, GETDATE(), @raison, @ddnote,
+               @costUnit, @costTotal, 0)
+          `);
       }
     }
 
-    // ── STEP 5b: Create Sortie Matériel if quantities > 0 (mirrors ajouteSM + calculeQteSMQS)
-    // This creates the SM transaction, links it to TEMPSPROD, and calculates material quantities
+    // ── STEP 5b: Create or reuse Sortie Materiel if quantities > 0
+    // If ajouteSM was already called during the questionnaire (write-as-you-go),
+    // the SM already exists on TEMPSPROD.SMNOTRANS and we just need to post it.
+    // If not (fallback), we create it here as before.
     const totalQte = qteBonne + qteDefect;
+    let createdSmnotrans = ""; // tracks newly created smnotrans (empty if SM already existed)
     if (totalQte > 0) {
       try {
         // Get ConstruitDonneesLocales values needed for SM SPs
@@ -1352,6 +1590,7 @@ app.post(
 
             const insertSmResult = await insertSmReq.execute("Nba_Sp_Insert_Sortie_Materiel");
             smnotrans = (insertSmResult.output.NEWSMNOTRANS || "").trim();
+            createdSmnotrans = smnotrans; // Fix 3: store newly created smnotrans
             console.log(`[submitQuestionnaire] Nba_Sp_Insert_Sortie_Materiel → SMNOTRANS=${smnotrans} err=${insertSmResult.output.SQLERREUR}`);
           }
 
@@ -1451,11 +1690,192 @@ app.post(
       }
     }
 
+    // ── Point 4: Report Finished Products (mirrors old software lines 829-933)
+    // For each EPF (ENTRERPRODFINI) linked to this operation:
+    //   1. Update DET_TRANS costs (NOPValeurEstime_Unitaire from CNOMENCOP)
+    //   2. Report via Nba_ReporteUnTransac (same as SM report but for EPF TRANSAC)
+    //   3. If COMP, mark TJPROD_TERMINE=1 and PL_RESULTAT.PR_TERMINE=1
+    try {
+      // Find all un-posted EPF entries for this operation
+      const epfResult = await pool.request()
+        .input("transac", sql.Int, transac)
+        .input("nopseq", sql.Int, nopseq)
+        .query(`
+          SELECT EPF.PFSEQ, EPF.PFNOTRANS, DT.DTRSEQ, DT.DTRQTE,
+                 T.TRSEQ AS EPF_TRSEQ
+          FROM ENTRERPRODFINI EPF
+          INNER JOIN TRANSAC T ON T.TRNO = EPF.PFNOTRANS
+          INNER JOIN DET_TRANS DT ON DT.TRANSAC = T.TRSEQ
+          WHERE EPF.PFSEQ IN (
+            SELECT DISTINCT EPF2.PFSEQ FROM ENTRERPRODFINI EPF2
+            INNER JOIN TRANSAC T2 ON T2.TRNO = EPF2.PFNOTRANS
+            WHERE T2.TRANSAC_PERE = @transac
+          )
+          AND ISNULL(EPF.PFPOSTER, 0) = 0
+        `);
+      for (const epf of epfResult.recordset) {
+        // Update DET_TRANS costs from CNOMENCOP.NOPValeurEstime_Unitaire
+        const valResult = await pool.request()
+          .input("nopseq", sql.Int, nopseq)
+          .query(`SELECT NOPValeurEstime_Unitaire FROM CNOMENCOP WHERE NOPSEQ = @nopseq`);
+        const valUnit = valResult.recordset[0]?.NOPValeurEstime_Unitaire || 0;
+        if (valUnit > 0 && epf.DTRSEQ) {
+          await pool.request()
+            .input("dtrseq", sql.Int, epf.DTRSEQ)
+            .input("valUnit", sql.Float, valUnit)
+            .query(`
+              UPDATE DET_TRANS SET
+                DTRCOUT_UNIT = dbo.FctNbaRound(@valUnit, 'PANB_DECIMAL_PRIX'),
+                DTRCOUT_TRANS = dbo.FctNbaRound(@valUnit * DTRQTE, 'PANB_DECIMAL_PRIX')
+              WHERE DTRSEQ = @dtrseq
+            `);
+        }
+        // Report the EPF transaction via Nba_ReporteUnTransac (same as SM)
+        if (epf.EPF_TRSEQ) {
+          const epfReportReq = pool.request();
+          epfReportReq.input("pTrSeq", sql.Int, epf.EPF_TRSEQ);
+          epfReportReq.input("LaDate", sql.Char(10), dateNow);
+          epfReportReq.input("LHeure", sql.Char(8), timeNow);
+          epfReportReq.input("DTRORDRE_REPORT", sql.Int, 0);
+          epfReportReq.output("DTRORDRE_REPORT_OUT", sql.Int);
+          epfReportReq.output("SQLERREUR", sql.Int);
+          epfReportReq.output("ERROR", sql.Int);
+          const epfReportResult = await epfReportReq.execute("Nba_ReporteUnTransac");
+          console.log(`[submitQuestionnaire] EPF Report: PFSEQ=${epf.PFSEQ} TRSEQ=${epf.EPF_TRSEQ} err=${epfReportResult.output.ERROR}`);
+        }
+      }
+    } catch (err) {
+      console.warn("[submitQuestionnaire] EPF report skipped:", err.message);
+    }
+
+    // ── Point 5: InsertTacheCariste — warehouse transfers for forklift
+    // Mirrors old software InsertTacheCariste (lines 1932-2113)
+    // When the next operation uses a different warehouse, creates TRANSFENTREP records
+    // for the forklift operators to move material.
+    try {
+      const poolExt2 = await getPoolExt();
+      // Find next operation for this work order (different NOPSEQ, ordered by date)
+      const nextOpResult = await poolExt2.request()
+        .input("transac", sql.Int, transac)
+        .input("nopseq", sql.Int, nopseq)
+        .query(`
+          SELECT TOP 1 ENTREPOT, INVENTAIRE_SEQ, MACHINE, COPMACHINE, NOPSEQ
+          FROM vEcransProduction
+          WHERE TRANSAC = @transac AND NOPSEQ <> @nopseq
+          ORDER BY DATE_DEBUT_PREVU
+        `);
+      if (nextOpResult.recordset.length) {
+        const nextOp = nextOpResult.recordset[0];
+        // Get current operation's warehouse
+        const curOpResult = await poolExt2.request()
+          .input("transac", sql.Int, transac).input("nopseq", sql.Int, nopseq)
+          .query(`SELECT TOP 1 ENTREPOT, MACHINE, DECODE FROM vEcransProduction WHERE TRANSAC = @transac AND NOPSEQ = @nopseq`);
+        const curOp = curOpResult.recordset[0];
+
+        if (curOp && nextOp.ENTREPOT !== curOp.ENTREPOT) {
+          // Warehouses differ → create forklift transfer tasks
+          const srcWarehouse = curOp.ENTREPOT || 1;
+          const dstWarehouse = nextOp.ENTREPOT || 1;
+
+          // Find forklift department
+          const forkResult = await pool.request()
+            .query(`SELECT DESEQ FROM DEPARTEMENT WHERE DECODE = 'ForkLift'`);
+          const forkWhaResult = await pool.request()
+            .query(`SELECT DESEQ FROM DEPARTEMENT WHERE DECODE = 'ForkLift WHA'`);
+          let forkDept = forkResult.recordset[0]?.DESEQ || 0;
+          if (curOp.DECODE === "WHA" && forkWhaResult.recordset.length) {
+            forkDept = forkWhaResult.recordset[0].DESEQ;
+          }
+
+          // Find containers from DET_TRANS for this order
+          const contResult = await pool.request()
+            .input("transac", sql.Int, transac)
+            .query(`
+              SELECT DISTINCT DT.CONTENANT, DT.CONTENANT_CON_NUMERO, DT.NO_SERIE,
+                     T.INVENTAIRE, N.INVENTAIRE_INNOINV AS ITEM
+              FROM DET_TRANS DT
+              LEFT JOIN NO_SERIE N ON DT.NO_SERIE = N.NSSEQ
+              INNER JOIN TRANSAC T ON DT.TRANSAC = T.TRSEQ
+              WHERE T.TRANSAC = @transac
+            `);
+
+          // Get default production material status
+          const stmResult = await pool.request()
+            .query(`SELECT STM_SEQ FROM STATUT_MATERIEL WHERE STM_DEFAUT_PROD = 1`);
+          const stmSeq = stmResult.recordset[0]?.STM_SEQ || 0;
+
+          for (const cont of contResult.recordset) {
+            // HPL/RECON items use general forklift
+            if (cont.ITEM && (cont.ITEM.includes("HPL") || cont.ITEM.includes("RECON"))) {
+              forkDept = forkResult.recordset[0]?.DESEQ || 0;
+            }
+            if (cont.CONTENANT && Number(cont.CONTENANT) > 0) {
+              // With container: Nba_Insert_Transfer_Entrepot_Contenant
+              const tReq = pool.request();
+              tReq.input("CONTENANT_SOURCE", sql.Int, cont.CONTENANT);
+              tReq.input("CONTENANT_DEST", sql.Int, cont.CONTENANT);
+              tReq.input("ENTREPOT_SOURCE", sql.Int, srcWarehouse);
+              tReq.input("ENTREPOT_DEST", sql.Int, dstWarehouse);
+              tReq.input("STATUT_MATERIEL", sql.Int, stmSeq);
+              tReq.input("UTILISATEUR", sql.VarChar(50), "WebUI New");
+              tReq.input("MODE_VALIDATION", sql.Int, 0);
+              tReq.input("LOT_FAB", sql.Int, 0);
+              tReq.output("SQLERREUR", sql.Int);
+              tReq.output("ERREUR", sql.Int);
+              tReq.output("TRANSFENTREP", sql.Int);
+              const tResult = await tReq.execute("Nba_Insert_Transfer_Entrepot_Contenant");
+              const treseq = tResult.output.TRANSFENTREP || 0;
+              if (treseq > 0) {
+                await pool.request()
+                  .input("treseq", sql.Int, treseq)
+                  .input("copmachine", sql.Int, Number(copmachine) || 0)
+                  .input("nopseq", sql.Int, nopseq)
+                  .input("dept", sql.Int, forkDept)
+                  .query(`UPDATE TRANSFENTREP SET TREPOSTER = 0, COPMACHINE = @copmachine, CNOMENCOP = @nopseq, DEPARTEMENT = @dept, TRENOTE = 'Ecran de production' WHERE TRESEQ = @treseq`);
+              }
+              console.log(`[submitQuestionnaire] Forklift transfer (container): TRESEQ=${treseq}`);
+            } else if (cont.INVENTAIRE && cont.NO_SERIE) {
+              // Without container: Nba_Insert_Transfer_Entrepot_Sans_Contenant
+              const tReq = pool.request();
+              tReq.input("INVENTAIRE", sql.Int, cont.INVENTAIRE);
+              tReq.input("NO_SERIE", sql.Int, cont.NO_SERIE);
+              tReq.input("QTE", sql.Float, 1);
+              tReq.input("ENTREPOT_SOURCE", sql.Int, srcWarehouse);
+              tReq.input("ENTREPOT_DEST", sql.Int, dstWarehouse);
+              tReq.input("UTILISATEUR", sql.VarChar(50), "WebUI New");
+              tReq.input("LOT_FAB", sql.Int, 0);
+              tReq.output("SQLERREUR", sql.Int);
+              tReq.output("ERREUR", sql.Int);
+              tReq.output("TRANSFENTREP", sql.Int);
+              const tResult = await tReq.execute("Nba_Insert_Transfer_Entrepot_Sans_Contenant");
+              const treseq = tResult.output.TRANSFENTREP || 0;
+              if (treseq > 0) {
+                await pool.request()
+                  .input("treseq", sql.Int, treseq)
+                  .input("copmachine", sql.Int, Number(copmachine) || 0)
+                  .input("nopseq", sql.Int, nopseq)
+                  .input("dept", sql.Int, forkDept)
+                  .query(`UPDATE TRANSFENTREP SET COPMACHINE = @copmachine, CNOMENCOP = @nopseq, DEPARTEMENT = @dept WHERE TRESEQ = @treseq`);
+              }
+              console.log(`[submitQuestionnaire] Forklift transfer (no container): TRESEQ=${treseq}`);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[submitQuestionnaire] InsertTacheCariste skipped:", err.message);
+    }
+
     // ── STEP 6: Close PROD row via Nba_Sp_Update_Production (same SP as old software)
     // Get original start date/time from the PROD row
+    // CRITICAL: mssql driver returns datetime as JS Date tagged UTC.
+    // Must use getUTC*() to get the value as stored in SQL Server.
     const startDt = new Date(tp.TJDEBUTDATE);
-    const startDateStr = `${startDt.getFullYear()}-${String(startDt.getMonth() + 1).padStart(2, "0")}-${String(startDt.getDate()).padStart(2, "0")}`;
-    const startTimeStr = `${String(startDt.getHours()).padStart(2, "0")}:${String(startDt.getMinutes()).padStart(2, "0")}:${String(startDt.getSeconds()).padStart(2, "0")}`;
+    const startDateStr = `${startDt.getUTCFullYear()}-${String(startDt.getUTCMonth() + 1).padStart(2, "0")}-${String(startDt.getUTCDate()).padStart(2, "0")}`;
+    const startTimeStr = `${String(startDt.getUTCHours()).padStart(2, "0")}:${String(startDt.getUTCMinutes()).padStart(2, "0")}:${String(startDt.getUTCSeconds()).padStart(2, "0")}`;
+
+    // Fix 3: Use newly created smnotrans if available, otherwise fall back to original
+    const smnotransForUpdate = createdSmnotrans || (tp.SMNOTRANS || "").trim();
 
     const updateReq = pool.request();
     updateReq.input("TJSEQ", sql.Int, tjseq);
@@ -1477,12 +1897,12 @@ app.post(
     updateReq.input("StrHeureF", sql.Char(8), timeNow);
     updateReq.input("sModeProd", sql.VarChar(5), tp.MODEPROD_MPCODE.substring(0, 5));
     updateReq.input("TjNote", sql.VarChar(7500), "Ecran de production pour Temps prod New");
-    updateReq.input("SMNOTRANS", sql.Char(9), (tp.SMNOTRANS || "").substring(0, 9));
+    updateReq.input("SMNOTRANS", sql.Char(9), smnotransForUpdate.substring(0, 9));
     updateReq.output("ERREUR", sql.Int);
     const updateResult = await updateReq.execute("Nba_Sp_Update_Production");
-    console.log(`[submitQuestionnaire] Nba_Sp_Update_Production TJSEQ=${tjseq} err=${updateResult.output.ERREUR}`);
+    console.log(`[submitQuestionnaire] Nba_Sp_Update_Production TJSEQ=${tjseq} SMNOTRANS=${smnotransForUpdate} err=${updateResult.output.ERREUR}`);
 
-    // ── STEP 7: Recalculate costs via FctCalculTempsDeProduction (line 1702)
+    // ── STEP 7: Recalculate costs on the PROD row via FctCalculTempsDeProduction
     try {
       await pool.request()
         .input("tjseq", sql.Int, tjseq)
@@ -1494,11 +1914,44 @@ app.post(
             TJOPCOUT = ISNULL(C.CALCOPCOUT, 0),
             TJMACOUT = ISNULL(C.CALCMACOUT, 0)
           FROM TEMPSPROD
-          INNER JOIN dbo.FctCalculTempsDeProduction(@tjseq) C ON C.TJSEQ = @tjseq
-          WHERE TEMPSPROD.TJSEQ = @tjseq
-        `);
+            INNER JOIN dbo.FctCalculTempsDeProduction(@tjseq) C ON C.TJSEQ = @tjseq
+            WHERE TEMPSPROD.TJSEQ = @tjseq
+          `);
     } catch (err) {
       console.warn("[submitQuestionnaire] FctCalculTempsDeProduction skipped:", err.message);
+    }
+
+    // ── Fix 7: Update TJVALEUR_MATIERE on TEMPSPROD (InsertEnCours)
+    // Old software does FctCalculTempsDeProduction again for TJVALEUR_MATIERE
+    try {
+      await pool.request()
+        .input("tjseq", sql.Int, tjseq)
+        .input("transac", sql.Int, transac)
+        .query(`
+          UPDATE TEMPSPROD SET
+            TJVALEUR_MATIERE = ISNULL((SELECT SUM(0 - TRCOUTTRANS) FROM TRANSAC WHERE TRSEQ = @transac), 0)
+          WHERE TJSEQ = @tjseq
+        `);
+      console.log(`[submitQuestionnaire] TJVALEUR_MATIERE updated on TJSEQ=${tjseq}`);
+    } catch (err) {
+      console.warn("[submitQuestionnaire] TJVALEUR_MATIERE update skipped:", err.message);
+    }
+
+    // ── Fix 7b: KPI insert — Nba_SP_Kpi_Insert_Valeur_Operation_Reel
+    try {
+      const kpiExistsResult = await pool.request()
+        .input("nopseq", sql.Int, nopseq)
+        .query(`SELECT COUNT(*) AS cnt FROM T_KPI_VALEUR_OPERATION_REEL WHERE CNOMENCOP = @nopseq`);
+      const kpiExists = (kpiExistsResult.recordset[0]?.cnt || 0) > 0;
+      if (!kpiExists) {
+        const kpiReq = pool.request();
+        kpiReq.input("NOPSEQ", sql.Int, nopseq);
+        kpiReq.output("SQLERREUR", sql.Int);
+        await kpiReq.execute("Nba_SP_Kpi_Insert_Valeur_Operation_Reel");
+        console.log(`[submitQuestionnaire] Nba_SP_Kpi_Insert_Valeur_Operation_Reel called for NOPSEQ=${nopseq}`);
+      }
+    } catch (err) {
+      console.warn("[submitQuestionnaire] KPI insert skipped:", err.message);
     }
 
     // ── STEP 8: Call Nba_Update_ProduitEnCours (line 982)
@@ -1529,6 +1982,23 @@ app.post(
       console.log(`[submitQuestionnaire] Nba_Update_ProduitEnCours called`);
     } catch (err) {
       console.warn("[submitQuestionnaire] Nba_Update_ProduitEnCours skipped:", err.message);
+    }
+
+    // ── Fix 6: Update cNOMENCOP quantity totals from all PROD rows
+    try {
+      await pool.request()
+        .input("transac", sql.Int, transac)
+        .input("nopseq", sql.Int, nopseq)
+        .query(`
+          UPDATE CNOMENCOP SET
+            NOPQTETERMINE = (SELECT ISNULL(SUM(TJQTEPROD), 0) FROM TEMPSPROD WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'Prod'),
+            NOPQTESCRAP = (SELECT ISNULL(SUM(TJQTEDEFECT), 0) FROM TEMPSPROD WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'Prod'),
+            NOPQTERESTE = NOPQTEAFAIRE - (SELECT ISNULL(SUM(TJQTEPROD), 0) + ISNULL(SUM(TJQTEDEFECT), 0) FROM TEMPSPROD WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'Prod')
+          WHERE NOPSEQ = @nopseq
+        `);
+      console.log(`[submitQuestionnaire] cNOMENCOP quantities updated for NOPSEQ=${nopseq}`);
+    } catch (err) {
+      console.warn("[submitQuestionnaire] cNOMENCOP quantity update skipped:", err.message);
     }
 
     // ── STEP 9: Mark operation as complete in PL_RESULTAT if COMP
@@ -1569,9 +2039,469 @@ app.post(
 
     res.json({
       success: true,
-      data: { transac, type, tjseq },
+      data: { transac, type, tjseq, nopseq },
       message: `Questionnaire submitted — ${type.toUpperCase()} recorded`,
     });
+  })
+);
+
+// ─── POST /ajouteSM.cfm ─────────────────────────────────────────────────────
+// Mirrors legacy CF: SortieMateriel.cfc → ajouteSM (non-VCUT path)
+// Called when user clicks OK on good quantity field.
+// Creates or reuses a Sortie Matériel, then recalculates DET_TRANS quantities.
+// Returns { smnotrans, smseq, materials[] } so the frontend can display the real SM data.
+app.post(
+  "/ajouteSM.cfm",
+  handler(async (req, res) => {
+    const { transac, copmachine, nopseq, tjseq, qteBonne, qteDefect, smnotrans: frontSmnotrans } = req.body;
+    if (!transac || !nopseq) return res.json({ success: false, error: "transac and nopseq required" });
+
+    const pool = await getPool();
+    const goodQty = Number(qteBonne) || 0;
+
+    // Find the PROD TEMPSPROD row for this operation
+    const prodResult = await pool.request()
+      .input("transac", sql.Int, transac)
+      .input("nopseq", sql.Int, nopseq)
+      .query(`
+        SELECT TOP 1 TJSEQ, SMNOTRANS, OPERATION, MACHINE, INVENTAIRE_C, CNOMENCLATURE, TJQTEDEFECT
+        FROM TEMPSPROD
+        WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'PROD'
+        ORDER BY TJSEQ DESC
+      `);
+    if (!prodResult.recordset.length) return res.json({ success: false, error: "No PROD row found" });
+    const prodRow = prodResult.recordset[0];
+    const prodTjseq = prodRow.TJSEQ;
+
+    // Read CURRENT defect total from TEMPSPROD (already updated by addDefect/removeDefect)
+    // This is critical: the old software also reads from TEMPSPROD, not from the frontend param
+    const defectQty = prodRow.TJQTEDEFECT || 0;
+    const totalQte = goodQty + defectQty;
+
+    // Step 1: Update TEMPSPROD.TJQTEPROD on the PROD row (defect is already correct in DB)
+    await pool.request()
+      .input("tjseq", sql.Int, prodTjseq)
+      .input("good", sql.Float, goodQty)
+      .query(`UPDATE TEMPSPROD SET TJQTEPROD = @good WHERE TJSEQ = @tjseq AND MODEPROD_MPCODE = 'PROD'`);
+
+    // Step 2: Determine if SM already exists
+    let smnotrans = (frontSmnotrans || prodRow.SMNOTRANS || "").trim().substring(0, 9);
+
+    // Verify the SM header exists in TRANSAC (orphan check)
+    if (smnotrans) {
+      const headerCheck = await pool.request()
+        .input("smno", sql.VarChar(9), smnotrans)
+        .query(`SELECT TOP 1 TRSEQ FROM TRANSAC WHERE TRNO = @smno`);
+      if (!headerCheck.recordset.length) {
+        // Orphan SM reference — clear it
+        await pool.request()
+          .input("transac", sql.Int, transac).input("nopseq", sql.Int, nopseq)
+          .input("smno", sql.VarChar(9), smnotrans)
+          .query(`UPDATE TEMPSPROD SET SMNOTRANS = '' WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'PROD' AND LEFT(SMNOTRANS,9) = @smno`);
+        smnotrans = "";
+      }
+    }
+
+    // Get ConstruitDonneesLocales values
+    const smDataResult = await pool.request()
+      .input("transac", sql.Int, transac)
+      .query(`
+        SELECT T.TRITEM, T.TRNORELACHE, C.CONOTRANS
+        FROM TRANSAC T
+        INNER JOIN COMMANDE C ON C.CONOTRANS = T.TRNO AND T.TRITEM > 0
+        WHERE T.TRSEQ = @transac
+      `);
+    const nistrResult = await pool.request()
+      .input("transac", sql.Int, transac).input("nopseq", sql.Int, nopseq)
+      .query(`SELECT NISTR_NIVEAU, UtiliseInventaire FROM VOperationParTransac WHERE TRANSAC = @transac AND NOPSEQ = @nopseq`);
+    const utiliseSM = nistrResult.recordset[0]?.UtiliseInventaire || 0;
+    if (!smDataResult.recordset.length || utiliseSM !== 1) {
+      return res.json({ success: true, data: { smnotrans: "", materials: [] }, message: "No SM needed for this operation" });
+    }
+    const smData = smDataResult.recordset[0];
+    const tritem = smData.TRITEM || 0;
+    const conotrans = (smData.CONOTRANS || "").substring(0, 9);
+    const trnorelache = smData.TRNORELACHE || 0;
+    const nistrNiveau = nistrResult.recordset[0]?.NISTR_NIVEAU || "";
+
+    // Get server date/time
+    const dtResult = await pool.request().query(`SELECT FORMAT(GETDATE(), 'yyyy-MM-dd') AS d, FORMAT(GETDATE(), 'HH:mm:ss') AS t`);
+    const { d: dateNow, t: timeNow } = dtResult.recordset[0];
+
+    let smseq = null;
+
+    if (!smnotrans) {
+      // Step 3a: Create NEW SM via Nba_Sp_Insert_Sortie_Materiel
+      const insertReq = pool.request();
+      insertReq.input("SMITEM", sql.Int, tritem);
+      insertReq.input("SMNOORIGINE", sql.Char(9), conotrans);
+      insertReq.input("DATE", sql.Char(10), dateNow);
+      insertReq.input("HEURE", sql.Char(5), timeNow.substring(0, 5));
+      insertReq.input("SMQTEPRODUIT", sql.Float, totalQte);
+      insertReq.input("USER", sql.VarChar(30), "WebUI New");
+      insertReq.input("SMNOSERIE", sql.VarChar(20), "");
+      insertReq.input("SMNOTE", sql.VarChar(7500), "Ecran de production pour SM");
+      insertReq.input("LOT_FAB", sql.Int, 0);
+      insertReq.input("SMNORELACHE", sql.Int, 0);
+      insertReq.output("NEWSMNOTRANS", sql.Char(9));
+      insertReq.output("SQLERREUR", sql.Int);
+      const insertResult = await insertReq.execute("Nba_Sp_Insert_Sortie_Materiel");
+      smnotrans = (insertResult.output.NEWSMNOTRANS || "").trim();
+      console.log(`[ajouteSM] Nba_Sp_Insert_Sortie_Materiel → ${smnotrans} err=${insertResult.output.SQLERREUR}`);
+    }
+
+    if (smnotrans) {
+      // Step 3b: Call Nba_Sp_Sortie_Materiel (creates/updates DET_TRANS lines from BOM)
+      const smReq = pool.request();
+      smReq.input("SMNOTRANS", sql.Char(9), smnotrans);
+      smReq.input("SMITEM", sql.Int, tritem);
+      smReq.input("SMNOORIGINE", sql.Char(9), conotrans);
+      smReq.input("SMQTEPRODUIT", sql.Float, totalQte);
+      smReq.input("OPERATION", sql.Int, prodRow.OPERATION);
+      smReq.input("USER", sql.VarChar(30), "WebUI New");
+      smReq.input("NISTR_NIVEAU", sql.VarChar(500), nistrNiveau);
+      smReq.input("NOSERIE", sql.VarChar(20), "");
+      smReq.input("SMNORELACHE", sql.Int, trnorelache);
+      smReq.output("SQLERREUR", sql.Int);
+      const smResult = await smReq.execute("Nba_Sp_Sortie_Materiel");
+      console.log(`[ajouteSM] Nba_Sp_Sortie_Materiel → err=${smResult.output.SQLERREUR}`);
+
+      // Step 4: Link SM to TEMPSPROD
+      await pool.request()
+        .input("smno", sql.VarChar(9), smnotrans)
+        .input("tjseq", sql.Int, prodTjseq)
+        .query(`UPDATE TEMPSPROD SET SMNOTRANS = @smno WHERE TJSEQ = @tjseq AND MODEPROD_MPCODE = 'PROD'`);
+
+      // Step 5: Sync SORTIEMATERIEL and TRANSAC header with totalQte
+      await pool.request()
+        .input("smno", sql.VarChar(9), smnotrans).input("total", sql.Float, totalQte)
+        .query(`UPDATE SORTIEMATERIEL SET SMQTEPRODUIT = @total WHERE LEFT(SMNOTRANS,9) = @smno`);
+      await pool.request()
+        .input("smno", sql.VarChar(9), smnotrans).input("total", sql.Float, totalQte)
+        .query(`UPDATE TRANSAC SET TRQTETRANSAC = @total, TRQTEUNINV = @total WHERE TRNO = @smno`);
+
+      // Get SMSEQ
+      const smseqResult = await pool.request()
+        .input("smno", sql.VarChar(9), smnotrans)
+        .query(`SELECT TOP 1 SMSEQ FROM SORTIEMATERIEL WHERE LEFT(SMNOTRANS,9) = @smno`);
+      smseq = smseqResult.recordset[0]?.SMSEQ || null;
+
+      // Step 6: Recalculate DET_TRANS quantities via BOM ratio (calculeQteSMQS logic)
+      const detResult = await pool.request()
+        .input("smno", sql.VarChar(9), smnotrans)
+        .query(`
+          SELECT DT.DTRSEQ, DT.TRANSAC, DT.ENTREPOT, DT.CONTENANT,
+                 T.INVENTAIRE AS T_INVENTAIRE
+          FROM DET_TRANS DT
+          INNER JOIN TRANSAC T ON DT.TRANSAC = T.TRSEQ
+          WHERE DT.TRANSAC_TRNO = @smno
+        `);
+
+      const invC = prodRow.INVENTAIRE_C || 0;
+      for (const dt of detResult.recordset) {
+        // Get BOM ratio (NIQTE) for this material
+        const ratioResult = await pool.request()
+          .input("transac", sql.Int, transac)
+          .input("inventaireC", sql.Int, invC)
+          .input("inventaireM", sql.Int, dt.T_INVENTAIRE)
+          .query(`
+            SELECT MAX(CN.NIQTE) AS NIQTE
+            FROM cNOMENCOP COP
+            INNER JOIN cNOMENCLATURE CN ON CN.NISEQ_PERE = COP.CNOMENCLATURE
+            WHERE COP.TRANSAC = @transac AND COP.INVENTAIRE_P = @inventaireC AND CN.INVENTAIRE_M = @inventaireM
+          `);
+        const niqte = ratioResult.recordset[0]?.NIQTE || 0;
+        if (niqte <= 0) continue;
+
+        const nouvelleQte = Math.abs(totalQte * niqte);
+
+        // Update via Nba_Insert_Det_Trans_Avec_Contenant
+        const dtReq = pool.request();
+        dtReq.input("TRSEQ", sql.Int, dt.TRANSAC);
+        dtReq.input("INSEQ", sql.Int, dt.T_INVENTAIRE);
+        dtReq.input("NSNO_SERIE", sql.VarChar(20), "");
+        dtReq.input("ENSEQ", sql.Int, dt.ENTREPOT || 0);
+        dtReq.input("DTRQTEUNINV", sql.Float, nouvelleQte);
+        dtReq.input("TRFACTEURCONV", sql.Float, 1);
+        dtReq.input("CONTENANT", sql.Int, dt.CONTENANT || 0);
+        dtReq.input("UTILISATEUR", sql.VarChar(50), "WebUI New");
+        dtReq.output("SQLERREUR", sql.Int);
+        dtReq.output("ERROR", sql.Int);
+        dtReq.output("DTRSEQ", sql.Int);
+        await dtReq.execute("Nba_Insert_Det_Trans_Avec_Contenant");
+
+        // Update TRANSAC row quantities for this material
+        await pool.request()
+          .input("trseq", sql.Int, dt.TRANSAC).input("qty", sql.Float, nouvelleQte)
+          .query(`UPDATE TRANSAC SET TRQTETRANSAC = @qty, TRQTEUNINV = @qty, TRQTECMD = @qty, TRQTEINV_ESTIME = @qty WHERE TRSEQ = @trseq`);
+      }
+    }
+
+    // Step 7: Fetch the real SM materials to return to frontend
+    const materials = [];
+    if (smnotrans) {
+      const matResult = await pool.request()
+        .input("smno", sql.VarChar(9), smnotrans)
+        .query(`
+          SELECT DT.DTRSEQ, DT.DTRQTE, DT.CONTENANT_CON_NUMERO,
+                 DT.ENTREPOT_ENCODE, DT.ENTREPOT_ENDESC_P, DT.ENTREPOT_ENDESC_S,
+                 T.INVENTAIRE_INNOINV AS code,
+                 T.INVENTAIRE_INDESC1 AS description_P, T.INVENTAIRE_INDESC2 AS description_S,
+                 T.UNITE_INV_UNDESC1 AS unit_P, T.UNITE_INV_UNDESC2 AS unit_S,
+                 ABS(DETTRANS.DTRQTE_TRANSACTION) AS correctedQty
+          FROM DET_TRANS DT
+          INNER JOIN TRANSAC T ON DT.TRANSAC = T.TRSEQ
+          OUTER APPLY (
+            SELECT DT.DTRQTE_INV + ISNULL((
+              SELECT SUM(DTCOR.DTRQTE_INV) FROM DET_TRANS DTCOR
+              INNER JOIN TRANSAC TR ON TR.TRSEQ = DTCOR.TRANSAC
+              WHERE DTCOR.DTRSEQ_PERE = DT.DTRSEQ AND DTCOR.TRANSAC_TRNO_EQUATE = 14
+            ), 0) DTRQTE_TRANSACTION
+          ) DETTRANS
+          WHERE DT.TRANSAC_TRNO = @smno
+          ORDER BY T.INVENTAIRE_INNOINV
+        `);
+      for (const m of matResult.recordset) {
+        materials.push({
+          id: m.DTRSEQ,
+          code: m.code,
+          description_P: m.description_P, description_S: m.description_S,
+          unit_P: m.unit_P, unit_S: m.unit_S,
+          originalQty: m.DTRQTE,
+          correctedQty: m.correctedQty || m.DTRQTE,
+          warehouse_P: m.ENTREPOT_ENDESC_P, warehouse_S: m.ENTREPOT_ENDESC_S,
+          container: m.CONTENANT_CON_NUMERO || "",
+        });
+      }
+    }
+
+    console.log(`[ajouteSM] Done: SM=${smnotrans} SMSEQ=${smseq} materials=${materials.length}`);
+    res.json({
+      success: true,
+      data: { smnotrans, smseq, tjseq: prodTjseq, materials },
+      message: smnotrans ? `SM ${smnotrans} updated with ${materials.length} materials` : "No SM created",
+    });
+  })
+);
+
+// ─── POST /addDefect.cfm ────────────────────────────────────────────────────
+// Mirrors legacy CF: QteDefect.cfc → AjouteModifieDetailDEFECTQS (lines 743-847)
+// Writes DET_DEFECT immediately, updates TEMPSPROD.TJQTEDEFECT. Returns updated totals.
+app.post(
+  "/addDefect.cfm",
+  handler(async (req, res) => {
+    const { transac, nopseq, qty, typeId, notes: ddnote } = req.body;
+    if (!transac || !nopseq) return res.json({ success: false, error: "transac and nopseq required" });
+
+    const pool = await getPool();
+    const dQty = Number(qty) || 0;
+
+    // Find latest PROD TEMPSPROD
+    const prodResult = await pool.request()
+      .input("transac", sql.Int, transac).input("nopseq", sql.Int, nopseq)
+      .query(`
+        SELECT TOP 1 TJSEQ, MACHINE, EMPLOYE FROM TEMPSPROD
+        WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'PROD'
+        ORDER BY TJSEQ DESC
+      `);
+    if (!prodResult.recordset.length) return res.json({ success: false, error: "No PROD row" });
+    const prod = prodResult.recordset[0];
+
+    // Get INVENTAIRE + cost estimates (mirrors old software)
+    const costResult = await pool.request()
+      .input("tjseq", sql.Int, prod.TJSEQ).input("transac", sql.Int, transac)
+      .query(`
+        SELECT T.INVENTAIRE,
+               ISNULL(TP.TJEMCOUT,0)+ISNULL(TP.TJOPCOUT,0)+ISNULL(TP.TJMACOUT,0) AS CoutOp,
+               ISNULL(TP.TJQTEPROD,0) AS TJQTEPROD,
+               ISNULL((SELECT SUM(0-TRCOUTTRANS) FROM TRANSAC WHERE TRSEQ = @transac),0) AS CoutMat
+        FROM TEMPSPROD TP
+        INNER JOIN TRANSAC T ON TP.TRANSAC = T.TRSEQ
+        WHERE TP.TJSEQ = @tjseq
+      `);
+    const c = costResult.recordset[0] || {};
+    const totalCost = (c.CoutOp || 0) + (c.CoutMat || 0);
+    const unitCost = c.TJQTEPROD ? totalCost / c.TJQTEPROD : 0;
+
+    let ddseq = null;
+    if (dQty > 0 && typeId) {
+      // INSERT DET_DEFECT
+      const insResult = await pool.request()
+        .input("tempsprod", sql.Int, prod.TJSEQ)
+        .input("transac", sql.Int, transac)
+        .input("inventaire", sql.Int, c.INVENTAIRE || 0)
+        .input("machine", sql.Int, prod.MACHINE)
+        .input("employe", sql.Int, prod.EMPLOYE)
+        .input("qty", sql.Float, dQty)
+        .input("raison", sql.Int, Number(typeId))
+        .input("ddnote", sql.VarChar(1000), (ddnote || "").substring(0, 1000))
+        .input("costUnit", sql.Float, unitCost)
+        .input("costTotal", sql.Float, totalCost)
+        .query(`
+          INSERT INTO DET_DEFECT (TEMPSPROD, TRANSAC, INVENTAIRE, MACHINE, EMPLOYE,
+            DDQTEUNINV, DDDATE, RAISON, DDNOTE, DDVALEUR_ESTIME_UNITAIRE, DDVALEUR_ESTIME_TOTALE, TRANSAC_PERE)
+          VALUES (@tempsprod, @transac, @inventaire, @machine, @employe,
+            @qty, GETDATE(), @raison, @ddnote, @costUnit, @costTotal, 0);
+          SELECT SCOPE_IDENTITY() AS DDSEQ;
+        `);
+      ddseq = insResult.recordset[0]?.DDSEQ || null;
+    }
+
+    // Recalculate total defect qty
+    const totalResult = await pool.request()
+      .input("tjseq", sql.Int, prod.TJSEQ)
+      .query(`SELECT ISNULL(SUM(DDQTEUNINV), 0) AS Total FROM DET_DEFECT WHERE TEMPSPROD = @tjseq`);
+    const totalDefect = totalResult.recordset[0]?.Total || 0;
+
+    // Update TEMPSPROD.TJQTEDEFECT
+    await pool.request()
+      .input("tjseq", sql.Int, prod.TJSEQ).input("defect", sql.Float, totalDefect)
+      .query(`UPDATE TEMPSPROD SET TJQTEDEFECT = @defect WHERE TJSEQ = @tjseq`);
+
+    // If SM exists, sync SORTIEMATERIEL quantity
+    const tpResult = await pool.request()
+      .input("tjseq", sql.Int, prod.TJSEQ)
+      .query(`SELECT TJQTEPROD, TJQTEDEFECT, SMNOTRANS FROM TEMPSPROD WHERE TJSEQ = @tjseq`);
+    const tp = tpResult.recordset[0] || {};
+    if (tp.SMNOTRANS && tp.SMNOTRANS.trim()) {
+      const smTotal = (tp.TJQTEPROD || 0) + totalDefect;
+      await pool.request()
+        .input("smno", sql.VarChar(9), tp.SMNOTRANS.trim().substring(0, 9))
+        .input("total", sql.Float, smTotal)
+        .query(`UPDATE SORTIEMATERIEL SET SMQTEPRODUIT = @total WHERE LEFT(SMNOTRANS,9) = @smno`);
+    }
+
+    // Fetch all defects for this TJSEQ to return to frontend
+    const defectsResult = await pool.request()
+      .input("tjseq", sql.Int, prod.TJSEQ)
+      .query(`
+        SELECT DD.DDSEQ, DD.DDQTEUNINV AS qty, DD.RAISON AS typeId, DD.DDNOTE AS notes,
+               R.RRDESC_P AS type_P, R.RRDESC_S AS type_S
+        FROM DET_DEFECT DD
+        LEFT JOIN RAISON R ON DD.RAISON = R.RRSEQ
+        WHERE DD.TEMPSPROD = @tjseq
+        ORDER BY DD.DDSEQ
+      `);
+
+    console.log(`[addDefect] TJSEQ=${prod.TJSEQ} ddseq=${ddseq} totalDefect=${totalDefect}`);
+    res.json({
+      success: true,
+      data: { ddseq, tjseq: prod.TJSEQ, totalDefect, smnotrans: (tp.SMNOTRANS || "").trim(), defects: defectsResult.recordset },
+      message: "Defect recorded",
+    });
+  })
+);
+
+// ─── POST /removeDefect.cfm ─────────────────────────────────────────────────
+// Mirrors legacy CF: QteDefect.cfc → retireDetailDEFECTQS (lines 569-612)
+app.post(
+  "/removeDefect.cfm",
+  handler(async (req, res) => {
+    const { ddseq } = req.body;
+    if (!ddseq) return res.json({ success: false, error: "ddseq required" });
+
+    const pool = await getPool();
+
+    // Find the TEMPSPROD linked to this defect
+    const linkResult = await pool.request()
+      .input("ddseq", sql.Int, ddseq)
+      .query(`SELECT TEMPSPROD FROM DET_DEFECT WHERE DDSEQ = @ddseq`);
+    if (!linkResult.recordset.length) return res.json({ success: false, error: "Defect not found" });
+    const tjseq = linkResult.recordset[0].TEMPSPROD;
+
+    // Delete the defect
+    await pool.request().input("ddseq", sql.Int, ddseq)
+      .query(`DELETE FROM DET_DEFECT WHERE DDSEQ = @ddseq`);
+
+    // Recalculate total
+    const totalResult = await pool.request().input("tjseq", sql.Int, tjseq)
+      .query(`SELECT ISNULL(SUM(DDQTEUNINV), 0) AS Total FROM DET_DEFECT WHERE TEMPSPROD = @tjseq`);
+    const totalDefect = totalResult.recordset[0]?.Total || 0;
+
+    // Update TEMPSPROD
+    await pool.request().input("tjseq", sql.Int, tjseq).input("defect", sql.Float, totalDefect)
+      .query(`UPDATE TEMPSPROD SET TJQTEDEFECT = @defect WHERE TJSEQ = @tjseq`);
+
+    // Sync SM if exists
+    const tpResult = await pool.request().input("tjseq", sql.Int, tjseq)
+      .query(`SELECT TJQTEPROD, TJQTEDEFECT, SMNOTRANS FROM TEMPSPROD WHERE TJSEQ = @tjseq`);
+    const tp = tpResult.recordset[0] || {};
+    if (tp.SMNOTRANS && tp.SMNOTRANS.trim()) {
+      const smTotal = (tp.TJQTEPROD || 0) + totalDefect;
+      await pool.request()
+        .input("smno", sql.VarChar(9), tp.SMNOTRANS.trim().substring(0, 9))
+        .input("total", sql.Float, smTotal)
+        .query(`UPDATE SORTIEMATERIEL SET SMQTEPRODUIT = @total WHERE LEFT(SMNOTRANS,9) = @smno`);
+    }
+
+    // Return updated defects list
+    const defectsResult = await pool.request().input("tjseq", sql.Int, tjseq)
+      .query(`
+        SELECT DD.DDSEQ, DD.DDQTEUNINV AS qty, DD.RAISON AS typeId, DD.DDNOTE AS notes,
+               R.RRDESC_P AS type_P, R.RRDESC_S AS type_S
+        FROM DET_DEFECT DD LEFT JOIN RAISON R ON DD.RAISON = R.RRSEQ
+        WHERE DD.TEMPSPROD = @tjseq ORDER BY DD.DDSEQ
+      `);
+
+    console.log(`[removeDefect] Deleted DDSEQ=${ddseq} totalDefect=${totalDefect}`);
+    res.json({
+      success: true,
+      data: { tjseq, totalDefect, smnotrans: (tp.SMNOTRANS || "").trim(), defects: defectsResult.recordset },
+      message: "Defect removed",
+    });
+  })
+);
+
+// ─── POST /cancelQuestionnaire.cfm ─────────────────────────────────────────
+// Mirrors legacy CF: QuestionnaireSortie.cfc → retireQuestionnaireSortie (lines 314-597)
+// Cleans up intermediate DB writes (DET_DEFECT, SM, TEMPSPROD quantities) when user cancels.
+app.post(
+  "/cancelQuestionnaire.cfm",
+  handler(async (req, res) => {
+    const { transac, nopseq, smnotrans, smseq } = req.body;
+    if (!transac || !nopseq) return res.json({ success: false, error: "transac and nopseq required" });
+
+    const pool = await getPool();
+
+    // Find the PROD TEMPSPROD row
+    const prodResult = await pool.request()
+      .input("transac", sql.Int, transac).input("nopseq", sql.Int, nopseq)
+      .query(`
+        SELECT TOP 1 TJSEQ, SMNOTRANS
+        FROM TEMPSPROD WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'PROD'
+        ORDER BY TJSEQ DESC
+      `);
+    if (!prodResult.recordset.length) return res.json({ success: true, message: "Nothing to cancel" });
+    const tjseq = prodResult.recordset[0].TJSEQ;
+    const existingSmno = (smnotrans || prodResult.recordset[0].SMNOTRANS || "").trim().substring(0, 9);
+
+    // Delete DET_DEFECT for this TJSEQ
+    await pool.request().input("tjseq", sql.Int, tjseq)
+      .query(`DELETE FROM DET_DEFECT WHERE TEMPSPROD = @tjseq`);
+
+    // Delete SM if it was created during this questionnaire session
+    if (existingSmno) {
+      // Delete SM detail lines
+      await pool.request().input("smno", sql.VarChar(9), existingSmno)
+        .query(`DELETE FROM DET_TRANS WHERE TRANSAC_TRNO = @smno`);
+      // Delete SM header
+      await pool.request().input("smno", sql.VarChar(9), existingSmno)
+        .query(`DELETE FROM TRANSAC WHERE TRNO = @smno`);
+      // Delete SORTIEMATERIEL
+      await pool.request().input("smno", sql.VarChar(9), existingSmno)
+        .query(`DELETE FROM SORTIEMATERIEL WHERE LEFT(SMNOTRANS,9) = @smno`);
+      // Clear SMNOTRANS on TEMPSPROD
+      await pool.request().input("smno", sql.VarChar(9), existingSmno)
+        .input("transac", sql.Int, transac).input("nopseq", sql.Int, nopseq)
+        .query(`UPDATE TEMPSPROD SET SMNOTRANS = '' WHERE SMNOTRANS = @smno AND TRANSAC = @transac AND CNOMENCOP = @nopseq`);
+    }
+
+    // Reset TEMPSPROD quantities
+    await pool.request().input("tjseq", sql.Int, tjseq)
+      .query(`UPDATE TEMPSPROD SET TJFINDATE = NULL, TJQTEPROD = 0, TJQTEDEFECT = 0, SMNOTRANS = '' WHERE TJSEQ = @tjseq`);
+
+    console.log(`[cancelQuestionnaire] Cleaned up TJSEQ=${tjseq} SM=${existingSmno}`);
+    res.json({ success: true, message: "Questionnaire cancelled, intermediate data cleaned up" });
   })
 );
 
@@ -1683,7 +2613,7 @@ app.get(
     const fmtDate = (d) => {
       if (!d) return "";
       const dt = new Date(d);
-      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")} ${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`;
+      return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")} ${String(dt.getUTCHours()).padStart(2, "0")}:${String(dt.getUTCMinutes()).padStart(2, "0")}`;
     };
 
     const data = dataResult.recordset.map((r) => ({
@@ -1900,9 +2830,11 @@ app.post(
     }
 
     const pool = await getPool();
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+
+    // Use SQL GETDATE() for server time consistency (mirrors old CF DateFormat/TimeFormat(Now()))
+    const dtResult = await pool.request().query(`SELECT FORMAT(GETDATE(), 'yyyy-MM-dd') AS d, FORMAT(GETDATE(), 'HH:mm:ss') AS t`);
+    const dateStr = dtResult.recordset[0].d;
+    const timeStr = dtResult.recordset[0].t;
 
     // 1. Look up MODEPROD record for the new status
     const mpResult = await pool.request()
@@ -1941,8 +2873,10 @@ app.post(
     //    (mirrors legacy trouveDernierStatut query)
     const tpReq = pool.request()
       .input("transac2", sql.Int, transac)
-      .input("newMpcode", sql.VarChar(10), mpcode);
-    let tpWhere = `WHERE TRANSAC = @transac2 AND MODEPROD_MPCODE <> @newMpcode
+      .input("newMpcode", sql.VarChar(10), mpcode)
+      .input("nopseq2", sql.Int, op.NOPSEQ);
+    let tpWhere = `WHERE TRANSAC = @transac2 AND CNOMENCOP = @nopseq2
+      AND MODEPROD_MPCODE <> @newMpcode
       AND TJNOTE LIKE 'Ecran de production pour Temps prod%'`;
     if (copmachine) {
       tpReq.input("copmachine2", sql.Int, copmachine);
@@ -1959,12 +2893,75 @@ app.post(
 
     const tjNote = "Ecran de production pour Temps prod New";
 
+    // ── Path A (mirrors old software lines 1350-1432):
+    // If NO previous row exists and status is NOT SETUP, create a PROD row first.
+    // The old software does this so there's always a PROD row to close.
+    if (tpResult.recordset.length === 0 && mpcode !== "Setup") {
+      const prodMpResult = await pool.request().query(`SELECT MPSEQ FROM MODEPROD WHERE MPCODE = 'Prod'`);
+      if (prodMpResult.recordset.length) {
+        const prodMpSeq = prodMpResult.recordset[0].MPSEQ;
+        const pathAReq = pool.request();
+        pathAReq.input("EMPLOYE", sql.Int, employeeSeq);
+        pathAReq.input("EMPLOYE_TAUXH", sql.Float, 0);
+        pathAReq.input("OPERATION", sql.Int, op.OPERATION_SEQ);
+        pathAReq.input("OPERATION_TAUXH", sql.Float, 0);
+        pathAReq.input("MACHINE", sql.Int, op.MACHINE);
+        pathAReq.input("MACHINE_TAUXH", sql.Float, 0);
+        pathAReq.input("TRSEQ", sql.Int, transac);
+        pathAReq.input("NO_SERIE", sql.Int, 0);
+        pathAReq.input("NO_SERIE_NSNO_SERIE", sql.VarChar(20), "");
+        pathAReq.input("cNOMENCLATURE", sql.Int, op.CNOMENCLATURE || 0);
+        pathAReq.input("INVENTAIRE_C", sql.Int, op.INVENTAIRE_SEQ || 0);
+        pathAReq.input("TJQTEPROD", sql.Float, 0);
+        pathAReq.input("TJQTEDEFECT", sql.Float, 0);
+        pathAReq.input("TJVALIDE", sql.Bit, 1);
+        pathAReq.input("TJPROD_TERMINE", sql.Bit, 0);
+        pathAReq.input("StrDateD", sql.Char(10), dateStr);
+        pathAReq.input("StrHeureD", sql.Char(8), timeStr);
+        pathAReq.input("StrDateF", sql.Char(10), "");
+        pathAReq.input("StrHeureF", sql.Char(8), "");
+        pathAReq.input("MODEPROD", sql.Int, prodMpSeq);
+        pathAReq.input("TjNote", sql.VarChar(7500), tjNote);
+        pathAReq.input("LOT_FAB", sql.Int, 0);
+        pathAReq.input("SMNOTRANS", sql.Char(9), "");
+        pathAReq.input("CNOMENCOP_MACHINE", sql.Int, copmachine || op.COPMACHINE || 0);
+        pathAReq.output("TJSEQ", sql.Int);
+        pathAReq.output("ERREUR", sql.Int);
+        await pathAReq.execute("Nba_Sp_Insert_Production");
+        const pathATjseq = pathAReq.parameters.TJSEQ?.value;
+        console.log(`[changeStatus] Path A: created initial PROD row TJSEQ=${pathATjseq}`);
+
+        // Re-query to find the row we just created as "previous"
+        const reQuery = pool.request()
+          .input("trx", sql.Int, transac)
+          .input("mpc", sql.VarChar(10), mpcode)
+          .input("nop", sql.Int, op.NOPSEQ);
+        let reWhere = `WHERE TRANSAC = @trx AND CNOMENCOP = @nop AND MODEPROD_MPCODE <> @mpc AND TJNOTE LIKE 'Ecran de production pour Temps prod%'`;
+        if (copmachine) {
+          reQuery.input("cpm", sql.Int, copmachine);
+          reWhere += ` AND cNomencOp_Machine = @cpm`;
+        }
+        const reResult = await reQuery.query(`
+          SELECT TOP 1 TJSEQ, EMPLOYE, OPERATION, MACHINE, cNOMENCLATURE, INVENTAIRE_C,
+                 CNOMENCOP, cNomencOp_Machine, MODEPROD_MPCODE,
+                 TJDEBUTDATE, TJQTEPROD, TJQTEDEFECT, SMNOTRANS
+          FROM TEMPSPROD ${reWhere} ORDER BY TJSEQ DESC
+        `);
+        // Push into tpResult.recordset so the close step below finds it
+        if (reResult.recordset.length) {
+          tpResult.recordset.push(reResult.recordset[0]);
+        }
+      }
+    }
+
     if (tpResult.recordset.length > 0) {
       // --- EXISTING ROW FOUND: close it with Nba_Sp_Update_Production, then insert new ---
       const prev = tpResult.recordset[0];
+      // CRITICAL: mssql driver returns datetime as JS Date tagged UTC.
+      // Must use getUTC*() to get the value as stored in SQL Server.
       const prevDate = new Date(prev.TJDEBUTDATE);
-      const prevDateStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}-${String(prevDate.getDate()).padStart(2, "0")}`;
-      const prevTimeStr = `${String(prevDate.getHours()).padStart(2, "0")}:${String(prevDate.getMinutes()).padStart(2, "0")}:${String(prevDate.getSeconds()).padStart(2, "0")}`;
+      const prevDateStr = `${prevDate.getUTCFullYear()}-${String(prevDate.getUTCMonth() + 1).padStart(2, "0")}-${String(prevDate.getUTCDate()).padStart(2, "0")}`;
+      const prevTimeStr = `${String(prevDate.getUTCHours()).padStart(2, "0")}:${String(prevDate.getUTCMinutes()).padStart(2, "0")}:${String(prevDate.getUTCSeconds()).padStart(2, "0")}`;
 
       // Close previous row — param names must match SP signature exactly
       const updateReq = pool.request();
@@ -1999,7 +2996,7 @@ app.post(
     insertReq.input("EMPLOYE", sql.Int, employeeSeq);
     insertReq.input("EMPLOYE_TAUXH", sql.Float, 0);
     insertReq.input("OPERATION", sql.Int, op.OPERATION_SEQ);
-    insertReq.input("OPERATION_TAUXH", sql.Float, op.TAUXHORAIREOPERATION || 0);
+    insertReq.input("OPERATION_TAUXH", sql.Float, 0); // Old software always passes 0
     insertReq.input("MACHINE", sql.Int, op.MACHINE);
     insertReq.input("MACHINE_TAUXH", sql.Float, 0);
     insertReq.input("TRSEQ", sql.Int, transac);
@@ -2272,7 +3269,7 @@ app.get(
       }
     }
 
-    const materials = matResult.recordset.map((m) => ({
+    let materials = matResult.recordset.map((m) => ({
       id: m.DTRSEQ,
       code: m.INVENTAIRE_INNOINV || "",
       description_P: m.INVENTAIRE_INDESC1 || "",
@@ -2286,6 +3283,59 @@ app.get(
       warehouse_S: m.ENTREPOT_ENDESC_S || "",
       container: m.CONTENANT_CON_NUMERO || "",
     }));
+
+    // If no existing SM materials found, get expected materials from BOM
+    // (cNOMENCOP → cNOMENCLATURE → INVENTAIRE) so the table shows what WILL be outed
+    if (materials.length === 0 && nopseqInt > 0) {
+      try {
+        const bomResult = await pool.request()
+          .input("transac", sql.Int, Number(transac))
+          .input("nopseq", sql.Int, nopseqInt)
+          .query(`
+            SELECT CN.NISEQ AS id,
+                   IM.INNOINV AS code,
+                   IM.INDESC1 AS description_P,
+                   IM.INDESC2 AS description_S,
+                   UM.UNDESC1 AS unit_P,
+                   UM.UNDESC2 AS unit_S,
+                   CN.NIQTE AS bomRatio,
+                   IW.ENCODE AS warehouse,
+                   IW.ENDESC_P AS warehouse_P,
+                   IW.ENDESC_S AS warehouse_S
+            FROM cNOMENCOP COP
+            INNER JOIN cNOMENCLATURE CN ON CN.NISEQ_PERE = COP.CNOMENCLATURE
+            INNER JOIN INVENTAIRE IM ON IM.INSEQ = CN.INVENTAIRE_M
+            LEFT OUTER JOIN UNITE UM ON UM.UNSEQ = IM.UNITE
+            LEFT OUTER JOIN ENTREPOT IW ON IW.ENSEQ = IM.ENTREPOT
+            WHERE COP.TRANSAC = @transac
+              AND COP.NOPSEQ = @nopseq
+              AND CN.NIQTE <> 0
+          `);
+        if (bomResult.recordset.length) {
+          materials = bomResult.recordset.map((m) => ({
+            id: m.id,
+            code: m.code || "",
+            description_P: m.description_P || "",
+            description_S: m.description_S || "",
+            unit_P: m.unit_P || "",
+            unit_S: m.unit_S || "",
+            originalQty: 0,
+            correctedQty: 0,
+            warehouse: m.warehouse || "",
+            warehouse_P: m.warehouse_P || "",
+            warehouse_S: m.warehouse_S || "",
+            container: "",
+          }));
+          // Use the first BOM ratio found (they should all be the same for non-VCUT)
+          if (!bomRatio && bomResult.recordset[0]?.bomRatio) {
+            bomRatio = bomResult.recordset[0].bomRatio;
+          }
+          console.log(`[getMaterialOutput] BOM fallback: ${materials.length} materials from BOM for NOPSEQ=${nopseqInt}`);
+        }
+      } catch (err) {
+        console.warn("[getMaterialOutput] BOM fallback skipped:", err.message);
+      }
+    }
 
     const hasFinishedProduct = refPfnotrans > 0;
 
@@ -2349,7 +3399,7 @@ app.get(
     const fmtDate = (d) => {
       if (!d) return "";
       const dt = new Date(d);
-      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")} ${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`;
+      return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")} ${String(dt.getUTCHours()).padStart(2, "0")}:${String(dt.getUTCMinutes()).padStart(2, "0")}`;
     };
 
     // Parse duration string to minutes
@@ -2565,16 +3615,17 @@ app.post(
       SELECT FORMAT(GETDATE(), 'yyyy-MM-dd') AS dateNow, FORMAT(GETDATE(), 'HH:mm:ss') AS timeNow
     `);
     const { dateNow, timeNow } = dateTimeResult.recordset[0];
+    // CRITICAL: mssql driver returns datetime as JS Date tagged UTC. Use getUTC*().
     const startDt = new Date(tp.TJDEBUTDATE);
-    const startDateStr = `${startDt.getFullYear()}-${String(startDt.getMonth() + 1).padStart(2, "0")}-${String(startDt.getDate()).padStart(2, "0")}`;
-    const startTimeStr = `${String(startDt.getHours()).padStart(2, "0")}:${String(startDt.getMinutes()).padStart(2, "0")}:${String(startDt.getSeconds()).padStart(2, "0")}`;
+    const startDateStr = `${startDt.getUTCFullYear()}-${String(startDt.getUTCMonth() + 1).padStart(2, "0")}-${String(startDt.getUTCDate()).padStart(2, "0")}`;
+    const startTimeStr = `${String(startDt.getUTCHours()).padStart(2, "0")}:${String(startDt.getUTCMinutes()).padStart(2, "0")}:${String(startDt.getUTCSeconds()).padStart(2, "0")}`;
     // If TJFINDATE exists, use it; otherwise use now
     let endDateStr = dateNow;
     let endTimeStr = timeNow;
     if (tp.TJFINDATE) {
       const endDt = new Date(tp.TJFINDATE);
-      endDateStr = `${endDt.getFullYear()}-${String(endDt.getMonth() + 1).padStart(2, "0")}-${String(endDt.getDate()).padStart(2, "0")}`;
-      endTimeStr = `${String(endDt.getHours()).padStart(2, "0")}:${String(endDt.getMinutes()).padStart(2, "0")}:${String(endDt.getSeconds()).padStart(2, "0")}`;
+      endDateStr = `${endDt.getUTCFullYear()}-${String(endDt.getUTCMonth() + 1).padStart(2, "0")}-${String(endDt.getUTCDate()).padStart(2, "0")}`;
+      endTimeStr = `${String(endDt.getUTCHours()).padStart(2, "0")}:${String(endDt.getUTCMinutes()).padStart(2, "0")}:${String(endDt.getUTCSeconds()).padStart(2, "0")}`;
     }
 
     const updateReq = pool.request();
@@ -2655,16 +3706,17 @@ app.post(
           .query(`SELECT TJFINDATE FROM TEMPSPROD WHERE TJSEQ = @tjseq`);
         const endDate = updatedRow.recordset[0]?.TJFINDATE;
         if (endDate) {
+          // CRITICAL: mssql driver returns datetime as JS Date tagged UTC. Use getUTC*().
           const endDt = new Date(endDate);
-          const nxtStartDate = `${endDt.getFullYear()}-${String(endDt.getMonth() + 1).padStart(2, "0")}-${String(endDt.getDate()).padStart(2, "0")}`;
-          const nxtStartTime = `${String(endDt.getHours()).padStart(2, "0")}:${String(endDt.getMinutes()).padStart(2, "0")}:${String(endDt.getSeconds()).padStart(2, "0")}`;
+          const nxtStartDate = `${endDt.getUTCFullYear()}-${String(endDt.getUTCMonth() + 1).padStart(2, "0")}-${String(endDt.getUTCDate()).padStart(2, "0")}`;
+          const nxtStartTime = `${String(endDt.getUTCHours()).padStart(2, "0")}:${String(endDt.getUTCMinutes()).padStart(2, "0")}:${String(endDt.getUTCSeconds()).padStart(2, "0")}`;
           // End date/time for next row: use its existing TJFINDATE if set, else empty
           let nxtEndDate = "";
           let nxtEndTime = "";
           if (nxt.TJFINDATE) {
             const nxtEnd = new Date(nxt.TJFINDATE);
-            nxtEndDate = `${nxtEnd.getFullYear()}-${String(nxtEnd.getMonth() + 1).padStart(2, "0")}-${String(nxtEnd.getDate()).padStart(2, "0")}`;
-            nxtEndTime = `${String(nxtEnd.getHours()).padStart(2, "0")}:${String(nxtEnd.getMinutes()).padStart(2, "0")}:${String(nxtEnd.getSeconds()).padStart(2, "0")}`;
+            nxtEndDate = `${nxtEnd.getUTCFullYear()}-${String(nxtEnd.getUTCMonth() + 1).padStart(2, "0")}-${String(nxtEnd.getUTCDate()).padStart(2, "0")}`;
+            nxtEndTime = `${String(nxtEnd.getUTCHours()).padStart(2, "0")}:${String(nxtEnd.getUTCMinutes()).padStart(2, "0")}:${String(nxtEnd.getUTCSeconds()).padStart(2, "0")}`;
           }
           const nxtUpdateReq = pool.request();
           nxtUpdateReq.input("TJSEQ", sql.Int, nxt.TJSEQ);

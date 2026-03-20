@@ -34,7 +34,7 @@ interface CncInfoSectionProps {
 export function CncInfoSection({ operation, language, hideNextStep = false, onViewStepDetails, activeStepSeq }: CncInfoSectionProps) {
   const { t } = useTranslation();
   const op = operation as unknown as Record<string, unknown>;
-  const { accessories, loading: accessoriesLoading } = useOperationAccessories(operation.TRANSAC, operation.COPMACHINE);
+  const { accessories, loading: accessoriesLoading } = useOperationAccessories(operation.TRANSAC, operation.COPMACHINE ?? 0);
 
   const loc = (fr: unknown, en: unknown) =>
     String((language === "fr" ? fr : en) ?? fr ?? "—");

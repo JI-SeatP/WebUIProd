@@ -46,7 +46,7 @@ export function useStatusChange(
         if (confirmAction === "STOP" || confirmAction === "COMP") {
           const type = confirmAction === "STOP" ? "stop" : "comp";
           const copValue = copmachine ?? 0;
-          navigate(`/orders/${transac}/questionnaire/${type}?copmachine=${copValue}`);
+          navigate(`/orders/${transac}/questionnaire/${type}?copmachine=${copValue}&fromStatus=${encodeURIComponent(currentStatus)}`);
         }
         // PROD from SETUP: ask if worker wants to fill Setup Questionnaire
         else if (confirmAction === "PROD" && currentStatus === "SETUP") {

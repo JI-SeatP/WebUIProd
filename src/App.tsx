@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { SessionProvider } from "@/context/SessionContext";
 import { KeyboardProvider } from "@/context/KeyboardContext";
+import { RefreshProvider } from "@/context/RefreshContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { AppLayout } from "@/components/shared/AppLayout";
@@ -17,6 +18,7 @@ function App() {
     <SessionProvider>
       <TooltipProvider>
         <KeyboardProvider>
+          <RefreshProvider>
           <BrowserRouter basename={import.meta.env.BASE_URL}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
@@ -37,6 +39,7 @@ function App() {
               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
           </BrowserRouter>
+          </RefreshProvider>
           <Toaster />
         </KeyboardProvider>
       </TooltipProvider>

@@ -1,1 +1,10 @@
-{}
+{
+  "cssTheme": "",
+  "accentColor": "#4733db",
+  "theme": "system",
+  "baseFontSizeAction": true,
+  "enabledCssSnippets": [
+    "Colorful-Headings"
+  ],
+  "baseFontSize": 13
+}

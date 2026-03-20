@@ -10,12 +10,8 @@ interface ComponentsTableProps {
   loading?: boolean;
 }
 
-export function ComponentsTable({ components, language, loading }: ComponentsTableProps) {
+export function ComponentsTable({ components, language: _language, loading }: ComponentsTableProps) {
   const { t } = useTranslation();
-
-  const getLocalizedText = (fr: string | null | undefined, en: string | null | undefined) => {
-    return language === "fr" ? (fr ?? en ?? "—") : (en ?? fr ?? "—");
-  };
 
   if (loading) {
     return (

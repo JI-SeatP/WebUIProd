@@ -3,16 +3,19 @@ import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { NumPad } from "@/components/shared/NumPad";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface GoodQuantitySectionProps {
   value: string;
   onChange: (value: string) => void;
+  onOkPress?: () => void;
+  loading?: boolean;
   theme?: "modern" | "minimal" | "dense";
 }
 
-export function GoodQuantitySection({ value, onChange, theme = "modern" }: GoodQuantitySectionProps) {
+export function GoodQuantitySection({ value, onChange, onOkPress, loading, theme = "modern" }: GoodQuantitySectionProps) {
   const { t } = useTranslation();
   const [numpadOpen, setNumpadOpen] = useState(false);
 
@@ -62,6 +65,16 @@ export function GoodQuantitySection({ value, onChange, theme = "modern" }: GoodQ
             />
           </PopoverContent>
         </Popover>
+        {onOkPress && (
+          <Button
+            variant="outline"
+            className="touch-target h-12 w-14 text-base font-bold border-green-600 text-green-700"
+            onClick={onOkPress}
+            disabled={loading}
+          >
+            OK
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

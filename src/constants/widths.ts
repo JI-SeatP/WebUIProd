@@ -5,6 +5,36 @@
  */
 
 // ───────────────────────────────────────
+// WIDTH - LOGIN (auth)
+// Card chrome ~+10% vs max-w-sm; digit type +15% stacked (LoginPage + NumPad size=large)
+// ───────────────────────────────────────
+export const W_LOGIN = {
+  card: "max-w-[422px]",
+  logo: "h-[70px]",
+  codeDisplayMinH: "min-h-[88px]",
+  loginButtonMinH: "min-h-[53px]",
+  numPadKey: "h-[64px]",
+} as const;
+
+// ───────────────────────────────────────
+// WIDTH - NUMPAD (shared)
+// ───────────────────────────────────────
+export const W_NUMPAD = {
+  frame: "w-[280px]",
+  frameLarge: "w-[308px]",
+  keyGap: "gap-[6px]",
+} as const;
+
+// ───────────────────────────────────────
+// WIDTH - CONFIRM_DIALOG (shared) — prior max × 1.3, capped on narrow viewports
+// contentFit: width follows longest nowrap line (status confirm), capped at viewport
+// ───────────────────────────────────────
+export const W_CONFIRM_DIALOG = {
+  contentMax: "max-w-[min(100%-2rem,41.86rem)]",
+  contentFit: "w-max min-w-0 !max-w-[calc(100vw-2rem)]",
+} as const;
+
+// ───────────────────────────────────────
 // WIDTH - WORK_ORDERS_TABLE (S002)
 // ───────────────────────────────────────
 export const W_WORK_ORDERS = {
@@ -39,6 +69,16 @@ export const W_OPERATION_HEADER = {
   operationValue: "w-[250px]",
   statusLabel:    "w-[80px]",
   statusValue:    "w-[140px]",
+} as const;
+
+// ───────────────────────────────────────
+// WIDTH - STATUS_ACTION_BAR (S003 floating)
+// ───────────────────────────────────────
+const W_STATUS_ACTION_BAR_PANEL = "w-[250px]" as const;
+export const W_STATUS_ACTION_BAR = {
+  container: W_STATUS_ACTION_BAR_PANEL,
+  /** Same width as the floating bar so the menu aligns edge-to-edge */
+  dropdownMenu: W_STATUS_ACTION_BAR_PANEL,
 } as const;
 
 // ───────────────────────────────────────
@@ -168,6 +208,13 @@ export const W_CORRECTIONS = {
   label:     "w-[160px]",
   input:     "w-[200px]",
   qtyField:  "w-[120px]",
+} as const;
+
+// ───────────────────────────────────────
+// WIDTH - DROPDOWN_MENU (shared UI)
+// ───────────────────────────────────────
+export const W_DROPDOWN_MENU = {
+  content: "w-[248px]",
 } as const;
 
 // ───────────────────────────────────────

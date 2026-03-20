@@ -11,6 +11,7 @@ export type SortField =
   | "QTE_A_FAB"
   | "QTE_PRODUITE"
   | "QTE_RESTANTE"
+  | "MOULE_CODE"
   | "OPERATION"
   | "STATUT_CODE";
 

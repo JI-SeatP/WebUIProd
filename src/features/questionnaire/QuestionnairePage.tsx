@@ -1,8 +1,8 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
-import { apiGet, apiPost } from "@/api/client";
+import { apiPost } from "@/api/client";
 import { useOperation } from "@/features/operation/hooks/useOperation";
 import { useQuestionnaireSubmit } from "./hooks/useQuestionnaireSubmit";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -21,13 +21,7 @@ import { W_QUESTIONNAIRE } from "@/constants/widths";
 import type { Employee } from "@/types/employee";
 import type { FinishedProductRow } from "./components/FinishedProductsSection";
 import type { MaterialRow } from "./components/MaterialOutputSection";
-
-interface DefectRow {
-  id: number;
-  qty: string;
-  typeId: string;
-  notes: string;
-}
+import type { SavedDefect } from "./components/DefectQuantitySection";
 
 export function QuestionnairePage() {
   const { transac, type } = useParams<{ transac: string; type: string }>();
@@ -40,6 +34,7 @@ export function QuestionnairePage() {
     searchParams.get("copmachine") ??
     state.activeOperation?.COPMACHINE?.toString() ??
     "0";
+  const fromStatus = searchParams.get("fromStatus") ?? "";
   const { operation, loading: opLoading } = useOperation(transac!, copmachine);
 
   const isStop = type === "stop";
@@ -57,36 +52,15 @@ export function QuestionnairePage() {
   const [secondaryCause, setSecondaryCause] = useState("40");  // Fin de quart de travail
   const [notes, setNotes] = useState("");
   const [goodQty, setGoodQty] = useState("");
-  const [defects, setDefects] = useState<DefectRow[]>([]);
   const [finishedProducts, setFinishedProducts] = useState<FinishedProductRow[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Material output data fetched from API
-  const [materials, setMaterials] = useState<MaterialRow[]>([]);
-  const [bomRatio, setBomRatio] = useState<number | null>(null);
-  const [hasFinishedProduct, setHasFinishedProduct] = useState(false);
-  const [originalGoodQty, setOriginalGoodQty] = useState(0);
-  const [originalDefectQty, setOriginalDefectQty] = useState(0);
-
-  useEffect(() => {
-    if (!transac || !operation) return;
-    const nopseq = (operation as unknown as Record<string, unknown>).NOPSEQ ?? 0;
-    apiGet<{
-      materials: MaterialRow[];
-      bomRatio: number | null;
-      hasFinishedProduct: boolean;
-      originalGoodQty: number;
-      originalDefectQty: number;
-    }>(`getMaterialOutput.cfm?transac=${transac}&nopseq=${nopseq}`).then((res) => {
-      if (res.success && res.data) {
-        setMaterials(res.data.materials);
-        setBomRatio(res.data.bomRatio);
-        setHasFinishedProduct(res.data.hasFinishedProduct);
-        setOriginalGoodQty(res.data.originalGoodQty);
-        setOriginalDefectQty(res.data.originalDefectQty);
-      }
-    });
-  }, [transac, operation]);
+  // Write-as-you-go state
+  const [smnotrans, setSmnotrans] = useState("");
+  const [smseq, setSmseq] = useState<number | null>(null);
+  const [smMaterials, setSmMaterials] = useState<MaterialRow[]>([]);
+  const [savedDefects, setSavedDefects] = useState<SavedDefect[]>([]);
+  const [smLoading, setSmLoading] = useState(false);
 
   const {
     loading: submitLoading,
@@ -94,13 +68,76 @@ export function QuestionnairePage() {
     submit,
     confirmZero,
     cancelZero,
-    cancel,
   } = useQuestionnaireSubmit();
 
   const handleEmployeeFound = useCallback((employee: Employee) => {
     setEmployeeName(employee.EMNOM);
     setEmployeeCode(String(employee.EMNOIDENT));
   }, []);
+
+  // Write-as-you-go: good qty OK button → creates/updates SM
+  // Calls ajouteSM.cfm — creates/updates SM and recalculates material output.
+  // The backend reads TJQTEDEFECT directly from TEMPSPROD (already updated by addDefect/removeDefect),
+  // so we only need to pass the current goodQty from the UI.
+  const handleGoodQtyOk = useCallback(async () => {
+    setSmLoading(true);
+    try {
+      const nopseq = (operation as unknown as Record<string, unknown>)?.NOPSEQ ?? 0;
+      const res = await apiPost<{
+        smnotrans: string;
+        smseq: number;
+        materials: MaterialRow[];
+      }>("ajouteSM.cfm", {
+        transac: Number(transac),
+        copmachine: Number(copmachine),
+        nopseq: Number(nopseq),
+        qteBonne: Number(goodQty) || 0,
+        smnotrans,
+      });
+      if (res.success && res.data) {
+        setSmnotrans(res.data.smnotrans || "");
+        setSmseq(res.data.smseq);
+        setSmMaterials(res.data.materials || []);
+      }
+    } finally {
+      setSmLoading(false);
+    }
+  }, [transac, copmachine, operation, goodQty, smnotrans]);
+
+  // Write-as-you-go: add defect → writes to DB, refreshes list, recalcs SM
+  // In the old software, after adding a defect, calculeQteSMQS is ALWAYS called
+  // (which calls ajouteSM first if SM doesn't exist). So we always trigger SM recalc.
+  const handleAddDefect = useCallback(async (qty: string, typeId: string, notes: string) => {
+    const nopseq = (operation as unknown as Record<string, unknown>)?.NOPSEQ ?? 0;
+    const res = await apiPost<{
+      defects: SavedDefect[];
+      smnotrans?: string;
+    }>("addDefect.cfm", {
+      transac: Number(transac),
+      nopseq: Number(nopseq),
+      qty,
+      typeId,
+      notes,
+    });
+    if (res.success && res.data) {
+      setSavedDefects(res.data.defects || []);
+      // Always recalculate SM (old software triggers calculeQteSMQS after every defect change)
+      handleGoodQtyOk();
+    }
+  }, [transac, operation, handleGoodQtyOk]);
+
+  // Write-as-you-go: remove defect → deletes from DB, refreshes list, recalcs SM
+  const handleRemoveDefect = useCallback(async (ddseq: number) => {
+    const res = await apiPost<{
+      defects: SavedDefect[];
+      smnotrans?: string;
+    }>("removeDefect.cfm", { ddseq });
+    if (res.success && res.data) {
+      setSavedDefects(res.data.defects || []);
+      // Always recalculate SM
+      handleGoodQtyOk();
+    }
+  }, [handleGoodQtyOk]);
 
   const handleSubmit = useCallback(async () => {
     if (isSetup) {
@@ -126,6 +163,7 @@ export function QuestionnairePage() {
       return;
     }
 
+    const nopseq = (operation as unknown as Record<string, unknown>).NOPSEQ ?? 0;
     const validationErrors = submit({
       transac: Number(transac),
       copmachine: Number(copmachine),
@@ -136,7 +174,7 @@ export function QuestionnairePage() {
       notes: isStop ? notes : undefined,
       moldAction: showMoldAction ? moldAction : undefined,
       goodQty,
-      defects: defects.map((d) => ({ qty: d.qty, typeId: d.typeId, notes: d.notes })),
+      defects: savedDefects.map((d) => ({ qty: String(d.qty), typeId: String(d.typeId), notes: d.notes })),
       finishedProducts:
         showFinishedProducts
           ? finishedProducts.map((p) => ({
@@ -145,6 +183,7 @@ export function QuestionnairePage() {
               container: p.container,
             }))
           : undefined,
+      nopseq: Number(nopseq),
     });
 
     if (validationErrors) {
@@ -164,15 +203,23 @@ export function QuestionnairePage() {
     notes,
     moldAction,
     goodQty,
-    defects,
+    savedDefects,
     finishedProducts,
     navigate,
     t,
+    operation,
   ]);
 
-  const handleCancel = useCallback(() => {
-    cancel(Number(transac), Number(copmachine));
-  }, [cancel, transac, copmachine]);
+  const handleCancel = useCallback(async () => {
+    const nopseq = (operation as unknown as Record<string, unknown>)?.NOPSEQ ?? 0;
+    await apiPost("cancelQuestionnaire.cfm", {
+      transac: Number(transac),
+      nopseq: Number(nopseq),
+      smnotrans,
+      smseq,
+    });
+    navigate(`/orders/${transac}/operation/${copmachine}`);
+  }, [transac, copmachine, smnotrans, smseq, navigate, operation]);
 
   if (opLoading) {
     return <LoadingSpinner className="flex-1" />;
@@ -209,6 +256,7 @@ export function QuestionnairePage() {
           language={state.language}
           label={isStop ? t("questionnaire.stopSurvey") : isSetup ? t("questionnaire.setupSurvey") : t("questionnaire.completionSurvey")}
           targetStatus={targetStatus}
+          fromStatus={fromStatus}
         />
 
         {isSetup ? (
@@ -253,15 +301,18 @@ export function QuestionnairePage() {
                     onProductsChange={setFinishedProducts}
                   />
                 ) : (
-                  <GoodQuantitySection value={goodQty} onChange={setGoodQty} />
+                  <GoodQuantitySection value={goodQty} onChange={setGoodQty} onOkPress={handleGoodQtyOk} loading={smLoading} />
                 )}
               </div>
               {showDefects && (
                 <div className="flex-1">
                   <DefectQuantitySection
                     language={state.language}
-                    defects={defects}
-                    onDefectsChange={setDefects}
+                    fmcode={fmcode}
+                    onAddDefect={handleAddDefect}
+                    onRemoveDefect={handleRemoveDefect}
+                    savedDefects={savedDefects}
+                    loading={smLoading}
                   />
                 </div>
               )}
@@ -285,13 +336,8 @@ export function QuestionnairePage() {
               )}
               <div className="flex-[2]">
                 <MaterialOutputSection
-                  materials={materials}
-                  bomRatio={bomRatio}
-                  hasFinishedProduct={hasFinishedProduct}
-                  originalGoodQty={originalGoodQty}
-                  originalDefectQty={originalDefectQty}
-                  goodQty={Number(goodQty) || 0}
-                  defectQty={defects.reduce((sum, d) => sum + (Number(d.qty) || 0), 0)}
+                  materials={smMaterials}
+                  smnotrans={smnotrans}
                 />
               </div>
             </div>

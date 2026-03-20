@@ -229,3 +229,42 @@ When product is VCUT type:
 | Cancel Button | Yes (removes data) | No (commented out) |
 | Mode | Creates new records | Updates existing records |
 | Access | From status change | From history/review |
+
+
+## REVIEW USING EXISTING STORE PROCS
+
+### submitQuestionnaire.cfm
+
+|Step|Stored Procedure|Purpose|
+|---|---|---|
+|6|`Nba_Sp_Update_Production`|Closes the PROD row with end time, quantities, costs (replaces raw UPDATE)|
+|7|`FctCalculTempsDeProduction`|Recalculates production costs|
+|8|`Nba_Update_ProduitEnCours`|Updates in-progress product quantities with material + operation costs|
+
+### submitCorrection.cfm
+
+|Step|Stored Procedure|Purpose|
+|---|---|---|
+|1|`Nba_Corrige_Quantite_Transaction`|Corrects finished product transaction quantities|
+|4|`Nba_Sp_Update_Production`|Updates TEMPSPROD with corrected quantities/times|
+|5|`FctCalculTempsDeProduction`|Recalculates production costs|
+|6|`Nba_Recalcul_Un_Produit_EnCours`|Recalculates in-progress product data|
+
+Also fixed: **timezone issue** — all dates now use `GETDATE()` on SQL Server or `FORMAT(GETDATE(), ...)` for SP string parameters, avoiding the JS Date → UTC conversion problem.
+
+
+This is very detailed. The key insight I was missing: the old software's material output calculation uses the **BOM ratio** (`cNOMENCLATURE.NIQTE`) to calculate expected material quantities from production quantities — it's not just reading existing DET_TRANS rows.
+
+Here's what happens:
+
+1. **Display**: The query joins `TRANSAC → cNOMENCLATURE → cNOMENCOP` to find materials linked through the BOM, filtered by `SMNOTRANS` from ALL related TEMPSPROD rows
+2. **Calculation**: `NouvelleQte = (QteBonne + QteDefectueux) × NIQTE` where `NIQTE` is the BOM ratio
+3. **On submit**: Calls `Nba_Insert_Det_Trans_Avec_Contenant` to create/update the material transaction lines
+
+The reason we see "Aucun résultat" is because our query only looks for **existing** DET_TRANS rows via `SMNOTRANS`. But for a CNC operation that hasn't been submitted before, the material lines need to come from the **BOM** (cNOMENCLATURE/cNOMENCOP tables).
+
+This is a significant piece of logic. Want me to implement the BOM-based material output calculation to match the old software? It would involve:
+
+1. Querying `cNOMENCOP` → `cNOMENCLATURE` to find expected materials from the BOM
+2. Using `NIQTE` ratio to calculate quantities based on user-entered good + defect quantities
+3. Calling `Nba_Insert_Det_Trans_Avec_Contenant` on submit to create the material transactions

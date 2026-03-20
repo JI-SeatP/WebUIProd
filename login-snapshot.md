@@ -1,0 +1,377 @@
+- generic:
+  - generic:
+    - generic:
+      - banner:
+        - img
+        - generic:
+          - button:
+            - img
+          - button:
+            - img
+          - button:
+            - img
+        - combobox:
+          - generic: Département
+          - img
+        - generic:
+          - generic: ABANE, OURABAH
+          - generic: "Quart: PLAN B"
+          - generic: 7:00 - 23:59
+          - generic: 10 h 12
+        - generic:
+          - button:
+            - img
+          - button:
+            - img
+          - button:
+            - img
+          - button:
+            - img
+          - button:
+            - img
+          - button:
+            - img
+          - button:
+            - img
+          - button:
+            - img
+          - button:
+            - img
+          - button:
+            - img
+        - generic:
+          - button: FR
+          - button: EN
+      - main:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic: Commande
+                  - generic: CO-016913-001
+                  - generic: En production
+                - generic:
+                  - generic:
+                    - generic: Client
+                    - generic: STEELCASE INC.
+                  - generic: "PO: 4512445700"
+                - generic:
+                  - generic:
+                    - generic: Produit
+                    - generic:
+                      - generic:
+                        - generic: Bindu - Seat
+                        - generic: Rev. 2
+                - generic:
+                  - generic:
+                    - generic: Panneau
+                    - generic: FP303-001-P
+                - generic:
+                  - generic:
+                    - generic: Qté à fabriquer
+                    - generic:
+                      - generic: "416"
+                  - generic:
+                    - generic: Qté pressée
+                    - generic:
+                      - generic: "282"
+                  - generic:
+                    - generic: QTÉ DEFECT
+                    - generic:
+                      - generic: "16"
+                  - generic:
+                    - generic: Reste
+                    - generic:
+                      - generic: "134"
+                - generic:
+                  - generic: Pressage
+                  - generic: Press 1G
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic: Matériaux prêts
+                      - generic:
+                        - generic:
+                          - img
+                          - generic: Matière première
+                        - generic:
+                          - img
+                          - generic: Moule
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: Code moule
+                              - generic: MO_FP303S-A
+                            - generic:
+                              - generic: Type moule
+                              - generic: —
+                          - generic:
+                            - generic:
+                              - generic: Pièces/Cavité
+                              - generic: —
+                            - generic:
+                              - generic: Cavités/Moule
+                              - generic: —
+                          - generic:
+                            - generic:
+                              - generic: Écart
+                              - generic: —
+                          - generic:
+                            - generic:
+                              - generic: Temps cuisson
+                              - generic: —
+                            - generic:
+                              - generic: Temps refroidir
+                              - generic: —
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic: Début prog.
+                        - generic: 39:00.0
+                      - generic:
+                        - generic: Fin prog.
+                        - generic: 59:00.0
+                    - generic:
+                      - generic: Groupe
+                      - generic: Seat
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - table:
+                        - rowgroup:
+                          - row:
+                            - columnheader: Item
+                            - columnheader: Panneau
+                            - columnheader: Description
+                            - columnheader: Ver.
+                            - columnheader: Type
+                            - columnheader: Poids
+                        - rowgroup:
+                          - row:
+                            - cell: FWOD-1974-20
+                            - cell: FR176-051-P
+                            - cell: FWOD-1974-20-MAPLE FC- SEAT
+                            - cell: "1"
+                            - cell: Exposed
+                            - cell: "6.69"
+                - generic:
+                  - generic:
+                    - generic:
+                      - table:
+                        - rowgroup:
+                          - row:
+                            - columnheader: Séq.
+                            - columnheader: Lo
+                            - columnheader: La
+                            - columnheader: Espèce
+                            - columnheader: GR
+                            - columnheader: Coupe
+                            - columnheader: Épais.
+                            - columnheader: Grain
+                            - columnheader: P-Lam
+                            - columnheader: CO
+                            - columnheader: Rub
+                            - columnheader: Sabl
+                        - rowgroup:
+                          - row:
+                            - cell: SEAT EXPOSED MAPLE 21 X 21 X 0.75 (FR176-051-P)
+                          - row:
+                            - cell: "1"
+                            - cell: "21"
+                            - cell: "21"
+                            - cell: FR176-051-P 2-PLY MAPLE 21 X 21 FACE FLAT CUT BOOK MATCH
+                            - cell: FC
+                            - cell: 1/21
+                            - cell: L
+                            - cell: 2-PLY
+                            - cell
+                            - cell
+                            - cell: Non
+                            - cell: Oui
+                          - row:
+                            - cell: "2"
+                            - cell: "21"
+                            - cell: "21"
+                            - cell: MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT
+                            - cell: RC
+                            - cell: 1/16
+                            - cell: L
+                            - cell
+                            - cell: "1"
+                            - cell: Non
+                            - cell: Non
+                            - cell: Non
+                          - row:
+                            - cell: "3"
+                            - cell: "21"
+                            - cell: "21"
+                            - cell: MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT
+                            - cell: RC
+                            - cell: 1/16
+                            - cell: X
+                            - cell
+                            - cell
+                            - cell: Non
+                            - cell: Non
+                            - cell: Non
+                          - row:
+                            - cell: "4"
+                            - cell: "21"
+                            - cell: "21"
+                            - cell: MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT
+                            - cell: RC
+                            - cell: 1/16
+                            - cell: L
+                            - cell
+                            - cell: "1"
+                            - cell: Non
+                            - cell: Non
+                            - cell: Non
+                          - row:
+                            - cell: "5"
+                            - cell: "21"
+                            - cell: "21"
+                            - cell: MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT
+                            - cell: RC
+                            - cell: 1/16
+                            - cell: X
+                            - cell
+                            - cell
+                            - cell: Non
+                            - cell: Non
+                            - cell: Non
+                          - row:
+                            - cell: "6"
+                            - cell: "21"
+                            - cell: "21"
+                            - cell: MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT
+                            - cell: RC
+                            - cell: 1/16
+                            - cell: L
+                            - cell
+                            - cell: "1"
+                            - cell: Non
+                            - cell: Non
+                            - cell: Non
+                          - row:
+                            - cell: "7"
+                            - cell: "21"
+                            - cell: "21"
+                            - cell: MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT
+                            - cell: RC
+                            - cell: 1/16
+                            - cell: X
+                            - cell
+                            - cell
+                            - cell: Non
+                            - cell: Non
+                            - cell: Non
+                          - row:
+                            - cell: "8"
+                            - cell: "21"
+                            - cell: "21"
+                            - cell: MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT
+                            - cell: RC
+                            - cell: 1/16
+                            - cell: L
+                            - cell
+                            - cell: "1"
+                            - cell: Non
+                            - cell: Non
+                            - cell: Non
+                          - row:
+                            - cell: "9"
+                            - cell: "21"
+                            - cell: "21"
+                            - cell: MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT
+                            - cell: RC
+                            - cell: 1/16
+                            - cell: X
+                            - cell
+                            - cell
+                            - cell: Non
+                            - cell: Non
+                            - cell: Non
+                          - row:
+                            - cell: "10"
+                            - cell: "21"
+                            - cell: "21"
+                            - cell: MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT
+                            - cell: RC
+                            - cell: 1/16
+                            - cell: L
+                            - cell
+                            - cell: "1"
+                            - cell: Non
+                            - cell: Non
+                            - cell: Non
+                          - row:
+                            - cell: "11"
+                            - cell: "21"
+                            - cell: "21"
+                            - cell: MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT
+                            - cell: RC
+                            - cell: 1/16
+                            - cell: X
+                            - cell
+                            - cell
+                            - cell: Non
+                            - cell: Non
+                            - cell: Non
+                          - row:
+                            - cell: "12"
+                            - cell: "21"
+                            - cell: "21"
+                            - cell: MERISIER SOUND 21 X 21 X 1/16 ROTARY CUT
+                            - cell: RC
+                            - cell: 1/16
+                            - cell: L
+                            - cell
+                            - cell: "1"
+                            - cell: Non
+                            - cell: Non
+                            - cell: Non
+              - generic:
+                - generic:
+                  - generic:
+                    - img
+          - generic:
+            - button [expanded]:
+              - img
+              - text: En production
+    - region "Notifications alt+T"
+  - menu "En production" [active] [ref=e24]:
+    - menuitem "Mise en course" [ref=e25]:
+      - generic [ref=e26]:
+        - img
+      - generic [ref=e27]: Mise en course
+    - menuitem "Démarrer" [ref=e28]:
+      - generic [ref=e29]:
+        - img
+      - generic [ref=e30]: Démarrer
+    - menuitem "Pause" [ref=e31] [cursor=pointer]:
+      - generic [ref=e32]:
+        - img
+      - generic [ref=e33]: Pause
+    - menuitem "Arrêt" [ref=e34] [cursor=pointer]:
+      - generic [ref=e35]:
+        - img
+      - generic [ref=e36]: Arrêt
+    - menuitem "Mettre en attente" [ref=e37] [cursor=pointer]:
+      - generic [ref=e38]:
+        - img
+      - generic [ref=e39]: Mettre en attente
+    - menuitem "Compléter" [ref=e40] [cursor=pointer]:
+      - generic [ref=e41]:
+        - img
+      - generic [ref=e42]: Compléter

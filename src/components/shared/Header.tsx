@@ -24,6 +24,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useRefresh } from "@/context/RefreshContext";
 import type { Department } from "@/types/department";
 import { apiGet } from "@/api/client";
 import { useEffect, useState } from "react";
@@ -52,6 +53,7 @@ export function Header() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [deptOpen, setDeptOpen] = useState(false);
+  const refresh = useRefresh();
 
   useEffect(() => {
     apiGet<Department[]>("getDepartments.cfm").then((res) => {
@@ -117,7 +119,7 @@ export function Header() {
     { icon: <Clock className="size-5" />, label: t("timeTracking.title"), onClick: () => navigate("/time-tracking"), route: "/time-tracking" },
     { icon: <List className="size-5" />, label: t("header.machineSelection"), onClick: () => setActiveModal("machine") },
     { icon: <Maximize className="size-5" />, label: t("header.fullscreen"), onClick: handleFullscreen },
-    { icon: <RefreshCw className="size-5" />, label: t("actions.refresh"), onClick: () => window.location.reload() },
+    { icon: <RefreshCw className="size-5" />, label: t("actions.refresh"), onClick: refresh },
     { icon: <ScanBarcode className="size-5" />, label: t("header.skidScan"), onClick: () => setActiveModal("skid") },
     { icon: <Tag className="size-5" />, label: t("header.labelPrint"), onClick: () => setActiveModal("label") },
     { icon: <Send className="size-5" />, label: t("header.sendMessage"), onClick: () => setActiveModal("message") },

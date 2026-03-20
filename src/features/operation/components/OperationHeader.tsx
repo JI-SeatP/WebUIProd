@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { ChevronDown } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { StatusBadge, statusCodeToEnum } from "@/components/shared/StatusBadge";
@@ -11,6 +12,7 @@ import type { OperationData } from "../hooks/useOperation";
 interface OperationHeaderProps {
   operation: OperationData;
   language: "fr" | "en";
+  statusCode?: string | number | null;
 }
 
 function Field({ label, value, className }: { label: string; value: React.ReactNode; className?: string }) {
@@ -50,7 +52,7 @@ function QtyField({
   );
 }
 
-export function OperationHeader({ operation, language }: OperationHeaderProps) {
+export function OperationHeader({ operation, language, statusCode }: OperationHeaderProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -59,7 +61,7 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
   const loc = (fr: string | null | undefined, en: string | null | undefined) =>
     (language === "fr" ? fr : en) ?? fr ?? "—";
 
-  const status = statusCodeToEnum(operation.STATUT_CODE);
+  const status = statusCodeToEnum(statusCode ?? operation.STATUT_CODE);
 
   const qtyLabel = operation.FMCODE?.includes("PRESS")
     ? t("order.qtyPressed")
@@ -69,7 +71,7 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
 
   return (
     <Card className="p-4 flex flex-col justify-start">
-      <div className="grid gap-2 items-start" style={{ gridTemplateColumns: "80px 17px 10.8% 27.5% 7.2% auto 1fr" }}>
+      <div className="grid gap-2 items-start" style={{ gridTemplateColumns: `80px 17px 10.8% 27.5% ${operation.Panneau ? "7.2%" : "0px"} auto 1fr` }}>
         {/* Priority */}
         <div className="flex items-center justify-center h-full bg-muted rounded-lg">
           {(operation as unknown as Record<string, unknown>).DCPRIORITE != null ? (
@@ -96,7 +98,7 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
           <div className="min-w-0 shrink-1">
             <Field label={t("order.client")} value={operation.NOM_CLIENT} />
             {operation.CONOPO && (
-              <div className="text-sm text-muted-foreground mt-0.5">
+              <div className="text-base text-muted-foreground mt-0.5">
                 PO: {operation.CONOPO}
               </div>
             )}
@@ -110,7 +112,7 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
                   <div>
                     {(operation as unknown as Record<string, unknown>).PRODUIT_CODE as string ?? "—"}
                     {operation.REVISION && (
-                      <span className="text-xs text-muted-foreground ml-2">
+                      <span className="text-sm text-muted-foreground ml-2">
                         Rev. {operation.REVISION}
                       </span>
                     )}
@@ -123,7 +125,7 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
         </div>
 
         {/* Panel */}
-        <div>
+        <div className="overflow-hidden">
           {operation.Panneau && (
             <Field label={t("press.panel")} value={operation.Panneau} />
           )}
@@ -133,7 +135,7 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
         <div className="flex items-start gap-[9px]">
           <QtyField
             label={t("order.qtyToMake")}
-            value={pressQtyDisplay(operation.QTE_A_FAB, operation.DCQTE_A_PRESSER, operation.DCQTE_REJET, operation.FMCODE, operation.VBE_DCQTE_A_FAB)}
+            value={pressQtyDisplay(operation.QTE_A_FAB, operation.DCQTE_A_PRESSER, operation.DCQTE_REJET, operation.FMCODE, operation.VBE_DCQTE_A_FAB, operation.PCS_PER_PANEL)}
             backgroundColor="#F2F2F2"
           />
           <QtyField 
@@ -160,10 +162,11 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
           <Popover open={switcherOpen} onOpenChange={setSwitcherOpen}>
             <PopoverTrigger asChild>
               <div
-                className="text-[1.15rem] font-medium px-3 py-1 rounded-lg bg-muted text-center cursor-pointer"
+                className="text-[1.15rem] font-medium px-3 py-1 rounded-lg bg-muted text-center cursor-pointer flex items-center justify-center gap-1.5"
                 role="button"
               >
-                {loc(operation.OPERATION_P, operation.OPERATION_S) ?? "—"}
+                <span className="flex-1 text-center">{loc(operation.OPERATION_P, operation.OPERATION_S) ?? "—"}</span>
+                <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
               </div>
             </PopoverTrigger>
             <PopoverContent className="w-[var(--radix-popper-anchor-width)] p-1" align="end" sideOffset={6}>
@@ -177,7 +180,7 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
                     const isCurrent = op.COPMACHINE === operation.COPMACHINE;
                     return (
                       <button
-                        key={op.TRANSAC}
+                        key={`${op.TRANSAC}-${op.COPMACHINE ?? 0}`}
                         className={cn(
                           "flex flex-col items-start px-3 py-2 rounded-md text-left transition-colors",
                           isCurrent
@@ -193,7 +196,7 @@ export function OperationHeader({ operation, language }: OperationHeaderProps) {
                         <span className="text-[1.15rem] font-medium leading-tight">
                           {loc(op.OPERATION_P, op.OPERATION_S)}
                         </span>
-                        <span className="text-xs text-muted-foreground leading-tight mt-0.5">
+                        <span className="text-[calc(0.75rem+3pt)] text-muted-foreground leading-tight mt-0.5">
                           {loc(op.MACHINE_P, op.MACHINE_S)}
                         </span>
                       </button>

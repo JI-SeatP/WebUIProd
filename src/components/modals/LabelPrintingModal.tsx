@@ -118,7 +118,7 @@ export function LabelPrintingModal({ open, onOpenChange, transac, copmachine }: 
   const [dateFilter, setDateFilter] = useState<string | null>(null);
   const [operatorFilter, setOperatorFilter] = useState<string[]>([]);
   const [shiftFilter, setShiftFilter] = useState<string[]>([]);
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [_showDatePicker, setShowDatePicker] = useState(false);
   const [labelData, setLabelData] = useState<PressLabelData | PackLabelData | null>(null);
   const [previewOpcode, setPreviewOpcode] = useState<string | null>(null);
   const [isLabelLoading, setIsLabelLoading] = useState(false);

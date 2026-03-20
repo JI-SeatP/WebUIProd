@@ -12,9 +12,11 @@ interface OrderInfoBlockProps {
   label?: string;
   theme?: "modern" | "minimal" | "dense";
   targetStatus?: OperationStatus;
+  /** The status BEFORE the change (e.g. "PROD", "SETUP", "PAUSE") — passed via URL param */
+  fromStatus?: string;
 }
 
-export function OrderInfoBlock({ operation, language, label, theme = "modern", targetStatus }: OrderInfoBlockProps) {
+export function OrderInfoBlock({ operation, language, label, theme = "modern", targetStatus, fromStatus }: OrderInfoBlockProps) {
   const { t } = useTranslation();
   const isFr = language === "fr";
 
@@ -50,7 +52,8 @@ export function OrderInfoBlock({ operation, language, label, theme = "modern", t
               <span className="text-[1.8rem] font-bold leading-none">{operation.NO_PROD}</span>
               {targetStatus ? (
                 <div className="flex items-center gap-1.5">
-                  <StatusBadge status={statusCodeToEnum(operation.STATUT_CODE)} />
+                  {/* Left pill = previous status (before the change), passed via URL fromStatus param */}
+                  <StatusBadge status={fromStatus ? statusCodeToEnum(fromStatus) : "production"} />
                   <ArrowRight className="size-4 text-muted-foreground shrink-0" />
                   <StatusBadge status={targetStatus} />
                 </div>

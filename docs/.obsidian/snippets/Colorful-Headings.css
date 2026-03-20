@@ -1,0 +1,143 @@
+/*
+  ╔══════════════════════════════════════════════════════════════╗
+  ║           COLORFUL HEADINGS — Obsidian CSS Snippet           ║
+  ║                                                              ║
+  ║  Adds vibrant, harmonious heading colors to the default      ║
+  ║  Obsidian dark theme. All other styles remain unchanged.     ║
+  ║                                                              ║
+  ║  INSTALL:                                                    ║
+  ║    1. Copy this file to: .obsidian/snippets/                 ║
+  ║    2. Open Obsidian → Settings → Appearance → CSS snippets   ║
+  ║    3. Enable "Colorful-Headings"                             ║
+  ╚══════════════════════════════════════════════════════════════╝
+
+  COLOR PALETTE (optimized for dark backgrounds):
+    H1 ── Coral Rose    #FF6B7A  — bold, attention-grabbing
+    H2 ── Amber         #FFB347  — warm, energetic
+    H3 ── Citron Gold   #F5D76E  — bright, clear
+    H4 ── Seafoam Teal  #4EC9B0  — calm, structured
+    H5 ── Periwinkle    #7BA7E0  — cool, informational
+    H6 ── Mauve Orchid  #C49FE5  — subtle, finishing touch
+*/
+
+/* ─────────────────────────────────────────
+   CSS Variables — Dark Theme
+   ───────────────────────────────────────── */
+.theme-dark {
+  --h1-color: #FF6B7A;
+  --h2-color: #FFB347;
+  --h3-color: #F5D76E;
+  --h4-color: #4EC9B0;
+  --h5-color: #7BA7E0;
+  --h6-color: #C49FE5;
+
+  --h1-size: 1.6em;
+  --h2-size: 1.4em;
+  --h3-size: 1.3em;
+  --h4-size: 1.2em;
+  --h5-size: 1.1em;
+  --h6-size: 0.95em;
+}
+
+/* ─────────────────────────────────────────
+   Reading View  (rendered markdown)
+   ───────────────────────────────────────── */
+.theme-dark .markdown-reading-view h1,
+.theme-dark .markdown-preview-view h1 { color: var(--h1-color); font-size: var(--h1-size); }
+
+.theme-dark .markdown-reading-view h2,
+.theme-dark .markdown-preview-view h2 { color: var(--h2-color); font-size: var(--h2-size); }
+
+.theme-dark .markdown-reading-view h3,
+.theme-dark .markdown-preview-view h3 { color: var(--h3-color); font-size: var(--h3-size); }
+
+.theme-dark .markdown-reading-view h4,
+.theme-dark .markdown-preview-view h4 { color: var(--h4-color); font-size: var(--h4-size); }
+
+.theme-dark .markdown-reading-view h5,
+.theme-dark .markdown-preview-view h5 { color: var(--h5-color); font-size: var(--h5-size); }
+
+.theme-dark .markdown-reading-view h6,
+.theme-dark .markdown-preview-view h6 { color: var(--h6-color); font-size: var(--h6-size); }
+
+/* ─────────────────────────────────────────
+   Live Preview Editor
+   ───────────────────────────────────────── */
+.theme-dark .cm-line .cm-header-1,
+.theme-dark .HyperMD-header.HyperMD-header-1 .cm-header-1 { color: var(--h1-color) !important; font-size: var(--h1-size) !important; }
+
+.theme-dark .cm-line .cm-header-2,
+.theme-dark .HyperMD-header.HyperMD-header-2 .cm-header-2 { color: var(--h2-color) !important; font-size: var(--h2-size) !important; }
+
+.theme-dark .cm-line .cm-header-3,
+.theme-dark .HyperMD-header.HyperMD-header-3 .cm-header-3 { color: var(--h3-color) !important; font-size: var(--h3-size) !important; }
+
+.theme-dark .cm-line .cm-header-4,
+.theme-dark .HyperMD-header.HyperMD-header-4 .cm-header-4 { color: var(--h4-color) !important; font-size: var(--h4-size) !important; }
+
+.theme-dark .cm-line .cm-header-5,
+.theme-dark .HyperMD-header.HyperMD-header-5 .cm-header-5 { color: var(--h5-color) !important; font-size: var(--h5-size) !important; }
+
+.theme-dark .cm-line .cm-header-6,
+.theme-dark .HyperMD-header.HyperMD-header-6 .cm-header-6 { color: var(--h6-color) !important; font-size: var(--h6-size) !important; }
+
+/* ─────────────────────────────────────────
+   Source Mode Editor
+   ───────────────────────────────────────── */
+.theme-dark .CodeMirror .cm-header-1 { color: var(--h1-color) !important; font-size: var(--h1-size) !important; }
+.theme-dark .CodeMirror .cm-header-2 { color: var(--h2-color) !important; font-size: var(--h2-size) !important; }
+.theme-dark .CodeMirror .cm-header-3 { color: var(--h3-color) !important; font-size: var(--h3-size) !important; }
+.theme-dark .CodeMirror .cm-header-4 { color: var(--h4-color) !important; font-size: var(--h4-size) !important; }
+.theme-dark .CodeMirror .cm-header-5 { color: var(--h5-color) !important; font-size: var(--h5-size) !important; }
+.theme-dark .CodeMirror .cm-header-6 { color: var(--h6-color) !important; font-size: var(--h6-size) !important; }
+
+/* ─────────────────────────────────────────
+   Outline Panel (headings in sidebar)
+   ───────────────────────────────────────── */
+.theme-dark .outline-heading-level-1 .tree-item-inner { color: var(--h1-color); }
+.theme-dark .outline-heading-level-2 .tree-item-inner { color: var(--h2-color); }
+.theme-dark .outline-heading-level-3 .tree-item-inner { color: var(--h3-color); }
+.theme-dark .outline-heading-level-4 .tree-item-inner { color: var(--h4-color); }
+.theme-dark .outline-heading-level-5 .tree-item-inner { color: var(--h5-color); }
+.theme-dark .outline-heading-level-6 .tree-item-inner { color: var(--h6-color); }
+
+/* ─────────────────────────────────────────
+   Embedded Notes & Canvas Cards
+   ───────────────────────────────────────── */
+.theme-dark .markdown-embed h1,
+.theme-dark .canvas-node-content h1 { color: var(--h1-color); }
+
+.theme-dark .markdown-embed h2,
+.theme-dark .canvas-node-content h2 { color: var(--h2-color); }
+
+.theme-dark .markdown-embed h3,
+.theme-dark .canvas-node-content h3 { color: var(--h3-color); }
+
+.theme-dark .markdown-embed h4,
+.theme-dark .canvas-node-content h4 { color: var(--h4-color); }
+
+.theme-dark .markdown-embed h5,
+.theme-dark .canvas-node-content h5 { color: var(--h5-color); }
+
+.theme-dark .markdown-embed h6,
+.theme-dark .canvas-node-content h6 { color: var(--h6-color); }
+
+/* ─────────────────────────────────────────
+   Print / Export (keeps colors in PDF)
+   ───────────────────────────────────────── */
+@media print {
+  h1 { color: var(--h1-color) !important; font-size: var(--h1-size) !important; }
+  h2 { color: var(--h2-color) !important; font-size: var(--h2-size) !important; }
+  h3 { color: var(--h3-color) !important; font-size: var(--h3-size) !important; }
+  h4 { color: var(--h4-color) !important; font-size: var(--h4-size) !important; }
+  h5 { color: var(--h5-color) !important; font-size: var(--h5-size) !important; }
+  h6 { color: var(--h6-color) !important; font-size: var(--h6-size) !important; }
+}
+
+/* ─────────────────────────────────────────
+   View paragraph width
+   ───────────────────────────────────────── */
+
+body {
+  --file-line-width: 90%;
+}

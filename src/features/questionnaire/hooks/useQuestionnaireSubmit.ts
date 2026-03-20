@@ -16,6 +16,7 @@ interface QuestionnairePayload {
   goodQty: string;
   defects: { qty: string; typeId: string; notes: string }[];
   finishedProducts?: { product: string; qty: string; container: string }[];
+  nopseq?: number;
 }
 
 interface ValidationErrors {

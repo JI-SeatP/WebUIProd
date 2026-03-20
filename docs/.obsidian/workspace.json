@@ -1,56 +1,41 @@
 {
   "main": {
-    "id": "96378a8b5436b41c",
+    "id": "3d26554bac065ee9",
     "type": "split",
     "children": [
       {
-        "id": "0683db443979a0ed",
+        "id": "0b9e1f276871fd07",
         "type": "tabs",
         "children": [
           {
-            "id": "e2bbf8646686cefe",
+            "id": "0f1d19d77d8b4ba7",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Mock Data Queries.md",
+                "file": "SOURCE_FEATURES/S003-Database-Operations-Audit.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Mock Data Queries"
-            }
-          },
-          {
-            "id": "dcba16736b0e8876",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "SOURCE_FEATURES/S002-WorkOrderList-Analysis.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "S002-WorkOrderList-Analysis"
+              "title": "S003-Database-Operations-Audit"
             }
           }
-        ],
-        "stacked": true
+        ]
       }
     ],
     "direction": "vertical"
   },
   "left": {
-    "id": "1dd34c99c31c053f",
+    "id": "a3f80bb27e6c1bc3",
     "type": "split",
     "children": [
       {
-        "id": "20f6fe97bf41ca09",
+        "id": "7e143aeabdc6e671",
         "type": "tabs",
         "children": [
           {
-            "id": "7274ad1d95b8c6ee",
+            "id": "d43fc605232a4e40",
             "type": "leaf",
             "state": {
               "type": "file-explorer",
@@ -63,7 +48,7 @@
             }
           },
           {
-            "id": "df9e9752ec68e6cf",
+            "id": "d3b9713f9b8713c7",
             "type": "leaf",
             "state": {
               "type": "search",
@@ -80,7 +65,7 @@
             }
           },
           {
-            "id": "71e14d1d21202352",
+            "id": "788226ceddc48132",
             "type": "leaf",
             "state": {
               "type": "bookmarks",
@@ -93,23 +78,24 @@
       }
     ],
     "direction": "horizontal",
-    "width": 248.50909423828125
+    "width": 328.5086555480957,
+    "collapsed": true
   },
   "right": {
-    "id": "7fb0a36c2847186a",
+    "id": "bde83791f210fb5f",
     "type": "split",
     "children": [
       {
-        "id": "49a475b326036cdc",
+        "id": "f386a15d459d901a",
         "type": "tabs",
         "children": [
           {
-            "id": "f40955afae798c62",
+            "id": "8a7b057c9e865da6",
             "type": "leaf",
             "state": {
               "type": "backlink",
               "state": {
-                "file": "Mock Data Queries.md",
+                "file": "Create Notes Module/View and Create Notes reference.png",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -119,25 +105,25 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for Mock Data Queries"
+              "title": "Backlinks for View and Create Notes reference"
             }
           },
           {
-            "id": "642badf722f0db74",
+            "id": "beb8e28084c930d3",
             "type": "leaf",
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "Mock Data Queries.md",
+                "file": "Create Notes Module/View and Create Notes reference.png",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from Mock Data Queries"
+              "title": "Outgoing links from View and Create Notes reference"
             }
           },
           {
-            "id": "4f518edab924e45c",
+            "id": "332b43f4f64f375b",
             "type": "leaf",
             "state": {
               "type": "tag",
@@ -152,7 +138,7 @@
             }
           },
           {
-            "id": "7a4400d8758176b2",
+            "id": "a8e7d6c7c0866ca5",
             "type": "leaf",
             "state": {
               "type": "all-properties",
@@ -166,18 +152,18 @@
             }
           },
           {
-            "id": "bf20bf879eacfa2e",
+            "id": "f7d39ae7643c83bb",
             "type": "leaf",
             "state": {
               "type": "outline",
               "state": {
-                "file": "Mock Data Queries.md",
+                "file": "Create Notes Module/View and Create Notes reference.png",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of Mock Data Queries"
+              "title": "Outline of View and Create Notes reference"
             }
           }
         ]
@@ -198,30 +184,52 @@
       "bases:Create new base": false
     }
   },
-  "active": "e2bbf8646686cefe",
+  "active": "0f1d19d77d8b4ba7",
   "lastOpenFiles": [
-    "Comments regarding the old web.md",
-    "SOURCE_FEATURES/S005-i18n-Dictionary-Analysis.md",
-    "SOURCE_FEATURES/S004-Work Order Production Quantity Entry Questionnaire-Analysis.md",
-    "SOURCE_FEATURES/S003-OperationDetails-Analysis.md",
-    "SOURCE_FEATURES/S002-WorkOrderList-Analysis.md",
-    "SOURCE_FEATURES/S000-ScreenFlow-Summary.md",
-    "Mock Data Queries.md",
-    "SOURCE_FEATURES/S001-MainApplication-Analysis.md",
-    "MIGRATION_TODO.md",
-    "SOURCE_FEATURES/S008-Inventory-Analysis.md",
-    "SOURCE_FEATURES/S007-Time tracking and Production Entries Screens-Analysis.md",
+    "SOURCE_FEATURES/S003-Database-Operations-Audit.md.tmp.70212.1773954629676",
     "SOURCE_FEATURES/S010-Corrections-Analysis.md",
-    "SOURCE_FEATURES/S009-PopupModals-Analysis.md",
-    "SOURCE_FEATURES/S006-HeaderMenu-Analysis.md",
-    "SOURCE_FEATURES/screenshots/S003-OperationDetails-Press.png",
-    "SOURCE_FEATURES/screenshots/S002-WorkOrderList.png",
-    "SOURCE_FEATURES/screenshots/S000-LoginScreen.png",
-    "SOURCE_FEATURES/screenshots/S004-Questionnaire-Stop.png",
-    "SOURCE_FEATURES/screenshots/S003-OperationDetails-CNC.png",
-    "SOURCE_FEATURES/screenshots",
-    "SOURCE_FEATURES/New folder",
-    "SOURCE_FEATURES/S004-Questionnaire-Analysis.md.tmp.87280.1772039165173",
-    "SOURCE_FEATURES/README.md"
+    "SOURCE_FEATURES/S003-Database-Operations-Audit.md",
+    "SOURCE_FEATURES/S003-OperationDetails-Analysis.md",
+    "NEW FEATURES/PROD QUANTITY LOG/Production Quantity Target Toolbar (PQTT).md",
+    "Untitled.md",
+    "Untitled 1.md",
+    "Untitled 2.md",
+    "Untitled 3.md",
+    "NEW FEATURES/PROD QUANTITY LOG/Files/PQTT_Field styles.png",
+    "NEW FEATURES/PROD QUANTITY LOG/Files/PQTT_FieldNames.png",
+    "NEW FEATURES/PROD QUANTITY LOG/Files/PQTT_Field styles.png",
+    "NEW FEATURES/PROD QUANTITY LOG/Files/PQTT_reference.png",
+    "NEW FEATURES/PROD QUANTITY LOG/Files",
+    "NEW FEATURES/PRODUCTION TARGETS/Production Targets.md",
+    "Pasted image 20260317101241.png",
+    "NEW FEATURES/PROD QUANTITY LOG",
+    "NEW FEATURES/CNC INSPECTION/CNC_Inspection Screen.md",
+    "NEW FEATURES/PRODUCTION TARGETS",
+    "NEW FEATURES/CNC INSPECTION/Files/Accepted Tolerances Table.png",
+    "NEW FEATURES/CNC INSPECTION/Files/Product_Tolerance_Table.png",
+    "NEW FEATURES/CNC INSPECTION/Files/CNC_Inspection_1.png",
+    "NEW FEATURES/CNC INSPECTION/Files/Inspection Component location.png",
+    "NEW FEATURES/CNC INSPECTION/Files",
+    "WEB UI FEATURES v2/Containers In Transit/Containers In Transit.md",
+    "WEB UI FEATURES v2/Containers In Transit/ContainerTracking_Requirements_v1.1-SPECS.md",
+    "WEB UI FEATURES v2/Containers In Transit/ContainerTracking_Requirements_v1.1 (4).md",
+    "WEB UI FEATURES v2/Containers In Transit/~$ContainerTracking_Requirements_v1.0.tmp",
+    "WEB UI FEATURES v2/Containers In Transit/ContainerTracking_Requirements_v1.0.docx",
+    "DATABASE NOTES/DATABASE NOTES.md",
+    "WEB UI FEATURES v2/Containers In Transit",
+    "SQL WebUIPROD/Production Kit Item and Panel codes.sql",
+    "SQL WebUIPROD",
+    "New folder",
+    "CODE and Git notes/GIT Workflow.md",
+    "Scheduler/Requirements for AFAB.md",
+    "WEB UI FEATURES v2/Productivity Targets/Styling Notes.md",
+    "Pasted image 20260218114935.png",
+    "WebUI Masterplan.md",
+    "WEB UI FEATURES v2/Productivity Targets/Scheduled Machines Overview.md",
+    "4.0 Manufacturing/BACCI.md",
+    "WEB UI FEATURES v2/Folder Structure.md",
+    "WEB UI FEATURES v2/Skills/Skill Creation Notes.md",
+    "WEB UI FEATURES v2/Productivity Targets/WO Productivity Targets Modal.md",
+    "WEB UI FEATURES v2/Productivity Targets/Other Screens to do.md"
   ]
 }

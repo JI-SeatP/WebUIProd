@@ -19,8 +19,6 @@ export function StepDetailsDialog({ step, stepNumber, language, onClose }: StepD
   const [imagesLoading, setImagesLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("instructions");
 
-  const lang = language.toUpperCase() as "FR" | "EN";
-
   // Determine available media from step data
   const rtfHtml = step ? (language === "fr" ? step.METRTF_P : step.METRTF_S) : null;
   const pdfPath = step ? (language === "fr" ? step.METFICHIER_PDF_P : step.METFICHIER_PDF_S) : null;

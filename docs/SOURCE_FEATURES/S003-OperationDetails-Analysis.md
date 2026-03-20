@@ -293,3 +293,169 @@ For outsourced panels, shows warning with:
 
 **`local.Statut` - Status information:**
 - Same as work order list
+
+# UPDATED  
+Here's the full breakdown of queries used when loading the Operation Details screen:
+
+---
+
+### 1. `getOperation.cfm` — **Main operation header data**
+
+- **Params:** `transac`, `copmachine`
+- **Hook:** `useOperation`
+- **Populates:** The entire top section — order number, client, product, quantities (Qté à fabriquer, Qté produite, Qté restante, Qté défect), operation type, machine name, status, mold info, next step, panel warning, dates, etc.
+- **Queries internally:**
+    - `vEcransProduction` view (from EXT db) — main operation data
+    - `VSP_BonTravail_Entete` — press/mold-specific fields (DCQTE_A_FAB, Mold, etc.)
+    - `AUTOFAB_TRANSAC` — TRNOTE (transaction note)
+    - `AUTOFAB_FctSelectVarCompo` — MOULE_TYPE
+    - `AUTOFAB_TEMPSPROD` — sum of TJQTEDEFECT (scrap qty)
+    - `VOperationParTransac` — next step info (next operation/machine/dept)
+    - `INSTRUCTION` + `METHODE` — step instructions and accessories
+
+
+#### From `vEcransProduction` view (EXT db)
+
+| Field                                          | Description                         |
+| ---------------------------------------------- | ----------------------------------- |
+| `DATE_DEBUT_PREVU`                             | Planned start date                  |
+| `DATE_FIN_PREVU`                               | Planned end date                    |
+| `PR_DEBUTE`                                    | Started flag                        |
+| `PR_TERMINE`                                   | Completed flag                      |
+| `NO_PROD`                                      | Order number (e.g. CO-016913-001)   |
+| `NOM_CLIENT`                                   | Client name                         |
+| `CODE_CLIENT`                                  | Client code                         |
+| `CONOPO`                                       | PO number                           |
+| `INVENTAIRE_SEQ`                               | Inventory sequence                  |
+| `NO_INVENTAIRE`                                | Inventory code                      |
+| `INVENTAIRE_P` / `INVENTAIRE_S`                | Inventory description FR/EN         |
+| `REVISION`                                     | Revision number                     |
+| `MATERIEL_SEQ`                                 | Material sequence                   |
+| `MATERIEL_CODE`                                | Material code                       |
+| `MATERIEL_P` / `MATERIEL_S`                    | Material description FR/EN          |
+| `PRODUIT_SEQ`                                  | Product sequence                    |
+| `PRODUIT_CODE`                                 | Product code                        |
+| `PRODUIT_P` / `PRODUIT_S`                      | Product description FR/EN           |
+| `KIT_SEQ`                                      | Kit sequence                        |
+| `INVENTAIRE_VCUT`                              | VCUT inventory                      |
+| `VCUT_INNOINV`, `VCUT_INDESC1`, `VCUT_INDESC2` | VCUT fields                         |
+| `OPERATION_SEQ`                                | Operation sequence number           |
+| `OPERATION`                                    | Operation code                      |
+| `OPERATION_P` / `OPERATION_S`                  | Operation description FR/EN         |
+| `ORDRERECETTE`                                 | Recipe order (for next step lookup) |
+| `TAUXHORAIREOPERATION`                         | Hourly rate                         |
+| `CNOMENCLATURE`                                | Nomenclature sequence               |
+| `CNOM_QTE`                                     | Nomenclature quantity               |
+| `QTE_PAR_EMBAL`                                | Qty per packaging                   |
+| `QTE_PAR_CONT`                                 | Qty per container                   |
+| `NIQTE`                                        | Inventory quantity                  |
+| `QTE_A_FAB`                                    | Qty to manufacture                  |
+| `QTE_PRODUITE`                                 | Qty produced                        |
+| `QTE_RESTANTE`                                 | Qty remaining                       |
+| `QTE_FORCEE`                                   | Forced qty                          |
+| `QTY_REQ`                                      | Required qty                        |
+| `MACHINE`                                      | Machine seq                         |
+| `MACODE`                                       | Machine code                        |
+| `MACHINE_P` / `MACHINE_S`                      | Machine description FR/EN           |
+| `UNITE_P` / `UNITE_S`                          | Unit FR/EN                          |
+| `TRANSAC`                                      | Transaction sequence                |
+| `NOPSEQ`                                       | Operation seq (CNOMENCOP)           |
+| `COPMACHINE`                                   | Machine assignment seq (CNOM_SEQ)   |
+| `Panneau`                                      | Panel code                          |
+| `PPINNOINV`                                    | Panel inventory code                |
+| `FMCODE`                                       | Machine family code                 |
+| `FAMILLEMACHINE`                               | Machine family                      |
+| `STATUT_CODE`                                  | Status code                         |
+| `STATUT_P` / `STATUT_S`                        | Status description FR/EN            |
+| `TJFINDATE`                                    | Time journal end date               |
+| `TERMINE`                                      | Finished flag                       |
+| `TJSEQ`                                        | Time journal sequence               |
+| `DESEQ`                                        | Department seq                      |
+| `DECODE`                                       | Department code                     |
+| `DeDescription_P` / `DeDescription_S`          | Department desc FR/EN               |
+| `DCPRIORITE`                                   | Priority                            |
+| `ESTKIT`                                       | Is kit flag                         |
+| `TYPEPRODUIT`                                  | Product type                        |
+| `DEPARTEMENT`                                  | Department                          |
+| `TREPOSTER_TRANSFERT`                          | Transfer flag                       |
+
+#### From `VSP_BonTravail_Entete` (VBE) — Press-specific
+
+|Field|Returned As|
+|---|---|
+|`VBE.DCQTE_A_FAB`|`VBE_DCQTE_A_FAB`|
+|`VBE.DCQTE_A_PRESSER`|`DCQTE_A_PRESSER`|
+|`VBE.DCQTE_PRESSED`|`DCQTE_PRESSED`|
+|`VBE.DCQTE_PENDING_TO_PRESS`|`DCQTE_PENDING_TO_PRESS`|
+|`VBE.DCQTE_PENDING_TO_MACHINE`|`DCQTE_PENDING_TO_MACHINE`|
+|`VBE.DCQTE_FINISHED`|`DCQTE_FINISHED`|
+|`VBE.DCQTE_REJET`|`DCQTE_REJET`|
+|`VBE.PCS_PER_PANEL`|`PCS_PER_PANEL`|
+|`VBE.CONOPO`|`VBE_CONOPO`|
+|`VBE.SHARE_PRESSING`|`SHARE_PRESSING`|
+|`VBE.PAGE_COMPO`|`PAGE_COMPO`|
+|`VBE.Panel_NiSeq`|`Panel_NiSeq`|
+|`VBE.Mold`|`MOULE_CODE`|
+|`VBE.NUM_PER_PACK`|`PANNEAU_CAVITE`|
+|`VBE.OPENING`|`MOULE_CAVITE`|
+|`VBE.[ACTUAL GAP]`|`MOULE_ECART`|
+|`VBE.PV_Groupe`|`GROUPE`|
+|`VBE.PRODUCT_TYPE`|`VBE_TYPEPRODUIT`|
+|`VBE.PANEL_SOURCE`|`PANEL_SOURCE`|
+|`VBE.PV_PANEAU`|`PV_PANEAU`|
+
+#### From `AUTOFAB_TRANSAC`
+
+|Field|Description|
+|---|---|
+|`TRNOTE`|Transaction note|
+
+#### Computed / Function fields
+
+|Field|Source|
+|---|---|
+|`MOULE_TYPE`|`AUTOFAB_FctSelectVarCompo(..., '@MOLD_TYPE@')`|
+|`PRESSAGE_PRESSAGE`|`AUTOFAB_FctSelectVarCompo(..., '@TIME_PR_PRESSING@')`|
+|`PRESSAGE_TEST_APRES`|`AUTOFAB_FctSelectVarCompo(..., '@TIME_PR_TEST_PR@')`|
+|`PRESSAGE_NOTE`|`AUTOFAB_FctSelectVarCompo(..., '@PRESS_NOTE@')`|
+|`NOPQTESCRAP`|`SUM(TJQTEDEFECT)` from AUTOFAB_TEMPSPROD|
+
+#### Appended by secondary queries
+
+|Field|Source|
+|---|---|
+|`NEXT_OPERATION`|Boolean — from VOperationParTransac|
+|`NEXT_OPERATION_P` / `_S`|Next op description FR/EN|
+|`NEXT_MACHINE_P` / `_S`|Next machine description FR/EN|
+|`NEXT_DEPT_P` / `_S`|Next department description FR/EN|
+|`steps[]`|Array of instruction/method objects (METSEQ, METNUMERO, METDESC_P/S, PDF/video paths, IMAGE_COUNT)|
+
+### 2. `getPanelData.cfm` — **Panel detail + layers table**
+
+- **Params:** `transac`, `panelNiSeq`
+- **Called from:** `useEffect` in `OperationDetailsPage`
+- **Populates:** The panel info card (Panneau code, Description, Version, Type, Poids) and the panel layers table (species, dimensions, grade, grain, glue, etc.)
+
+### 3. `getOperationComponents.cfm` — **Étapes de production (production steps)**
+
+- **Params:** `transac`, `copmachine`
+- **Hook:** `useOperationComponents`
+- **Populates:** The "Étapes de production" table — step number, description, quantity, method instructions
+
+### 4. `getOperationAccessories.cfm` — **Accessoires nécessaires**
+
+- **Params:** `transac`, `copmachine`
+- **Hook:** `useOperationAccessories`
+- **Populates:** The "Accessoires nécessaires" column next to the production steps
+
+### 5. `getDrawings.cfm` — **Product/panel drawings**
+
+- **Params:** `produitSeq`, `inventaireSeq`, `kitSeq` (varies)
+- **Called from:** `useEffect` in `OperationDetailsPage`
+- **Populates:** The drawing viewer panel (right side). For PRESS operations, defaults to panel drawing first, falls back to product drawing. For CNC, loads product drawing directly.
+
+### 6. `getOrderOperations.cfm` — **All operations for the order** _(loaded on demand)_
+
+- **Params:** `noProd`
+- **Hook:** `useOrderOperations`
+- **Populates:** Used when navigating between operations of the same order (operation selector dropdown)

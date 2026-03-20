@@ -21,6 +21,8 @@ interface MultiSelectFilterProps {
   className?: string;
   searchable?: boolean;
   popoverWidth?: string;
+  /** Fixed pixel width for the trigger button (e.g. 200). Applied via inline style to bypass tailwind-merge. */
+  triggerWidth?: number;
   disabledValues?: Set<string>;
   /** Number of columns for the options list (default: 1) */
   columns?: number;
@@ -36,6 +38,7 @@ export function MultiSelectFilter({
   className,
   searchable = false,
   popoverWidth,
+  triggerWidth,
   disabledValues,
   columns = 1,
   showSelectAll = false,
@@ -67,7 +70,8 @@ export function MultiSelectFilter({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          className={cn("touch-target gap-1.5 text-[0.96rem] uppercase shrink-0 px-5", className)}
+          className={cn("touch-target gap-1.5 text-[0.96rem] uppercase shrink-0 px-5 justify-between", className)}
+          style={triggerWidth ? { width: triggerWidth } : undefined}
         >
           {selected.length === 1
             ? options.find((o) => o.value === selected[0])?.label ?? label

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { useSession } from "@/context/SessionContext";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -22,6 +22,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { W_DRAWING_PANEL, W_PRESS_SECTION } from "@/constants/widths";
 import type { OperationStep } from "@/types/workOrder";
+import { useRegisterRefresh } from "@/context/RefreshContext";
 
 export function OperationDetailsPage() {
   const { transac, copmachine } = useParams<{ transac: string; copmachine: string }>();
@@ -29,6 +30,9 @@ export function OperationDetailsPage() {
   const { t } = useTranslation();
   const { operation, loading, error, refetch } = useOperation(transac!, copmachine!);
   const [localStatus, setLocalStatus] = useState<string | null>(null);
+
+  // Register with global refresh so the Header refresh button re-fetches this page's data
+  useRegisterRefresh(refetch);
 
   // Panel data from API
   const [panelDetail, setPanelDetail] = useState<PanelDetail | null>(null);
@@ -53,25 +57,36 @@ export function OperationDetailsPage() {
 
     const fetchPanelData = async () => {
       try {
-        const panelNiSeq = (operation as Record<string, unknown>).Panel_NiSeq;
+        const panelNiSeq = (operation as unknown as Record<string, unknown>).Panel_NiSeq;
+        const panelNiSeqNum = Number(panelNiSeq) || 0;
         const res = await apiGet<{
           panelDetail: Record<string, unknown> | null;
           layers: PanelLayer[];
           groupHeader: string;
-        }>(`getPanelData.cfm?transac=${operation.TRANSAC}&panelNiSeq=${panelNiSeq || 0}`);
+        }>(`getPanelData.cfm?transac=${operation.TRANSAC}&panelNiSeq=${panelNiSeqNum}`);
 
         if (res.success && res.data) {
           if (res.data.panelDetail) {
             const pd = res.data.panelDetail;
+            if (import.meta.env.DEV) {
+              console.log("[OperationDetails] getPanelData", {
+                transac: operation.TRANSAC,
+                panelNiSeq: panelNiSeqNum,
+                rawPanel_NiSeq: panelNiSeq,
+                THICKNESS_RAW: pd.THICKNESS_RAW,
+                THICKNESS_displayed: pd.THICKNESS,
+              });
+            }
             setPanelDetail({
               ITEM: String(pd.ITEM || ""),
               ITEM_SEQ: pd.ITEM_SEQ as number | undefined,
               PANNEAU: String(pd.PANNEAU || ""),
               PANNEAU_SEQ: pd.PANNEAU_SEQ as number | undefined,
               DESCRIPTION: String(pd.DESCRIPTION_P || ""),
-              VER: pd.VER ?? "",
+              VER: (pd.VER ?? "") as string | number,
               TYPE: String(pd.TYPE || ""),
-              POIDS: pd.POIDS ?? "",
+              THICKNESS: (pd.THICKNESS ?? null) as number | string | null,
+              POIDS: (pd.POIDS ?? "") as string | number,
             });
           }
           setPanelLayers(res.data.layers || []);
@@ -98,7 +113,7 @@ export function OperationDetailsPage() {
 
     const fetchProductDrawings = async () => {
       try {
-        const op = operation as Record<string, unknown>;
+        const op = operation as unknown as Record<string, unknown>;
         const params = new URLSearchParams();
         if (op.PRODUIT_SEQ) params.set("produitSeq", String(op.PRODUIT_SEQ));
         if (op.INVENTAIRE_SEQ) params.set("inventaireSeq", String(op.INVENTAIRE_SEQ));
@@ -143,7 +158,7 @@ export function OperationDetailsPage() {
           setActiveDrawingSeq(panneauSeq);
         } else {
           // Fallback to product drawing
-          const op = operation as Record<string, unknown>;
+          const op = operation as unknown as Record<string, unknown>;
           const params = new URLSearchParams();
           if (op.PRODUIT_SEQ) params.set("produitSeq", String(op.PRODUIT_SEQ));
           if (op.INVENTAIRE_SEQ) params.set("inventaireSeq", String(op.INVENTAIRE_SEQ));
@@ -209,6 +224,8 @@ export function OperationDetailsPage() {
   }
 
   const fmcode = operation.FMCODE ?? "";
+  const locOp = (fr: string | null | undefined, en: string | null | undefined) =>
+    (state.language === "fr" ? fr : en) ?? fr ?? "—";
   const isPress = fmcode.toUpperCase().includes("PRESS");
   const isCnc = fmcode.toUpperCase().includes("CNC") || fmcode.toUpperCase().includes("SAND");
   const isVcut = operation.NO_INVENTAIRE === "VCUT" || fmcode === "TableSaw";
@@ -225,7 +242,7 @@ export function OperationDetailsPage() {
         {hasDoNotPress && <DoNotPressAlert />}
 
         {/* Header */}
-        <OperationHeader operation={operation} language={state.language} />
+        <OperationHeader operation={operation} language={state.language} statusCode={localStatus ?? operation.STATUT_CODE} />
 
         {/* All cards (left 50%) + technical drawing (right 50%) */}
         <div className="flex gap-2 items-stretch">
@@ -258,6 +275,11 @@ export function OperationDetailsPage() {
                 return (
                   <Card className={cn(W_PRESS_SECTION.moldCard, "py-0 gap-0 flex flex-col justify-center")}>
                     <CardContent className="px-4 py-3 flex flex-col items-center gap-2">
+                      {panelWarning && (
+                        <div className="text-[0.9rem] font-bold text-center tracking-wide">
+                          {panelWarning}
+                        </div>
+                      )}
                       <div className="flex items-center gap-3">
                         <span className="text-[0.8rem] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap shrink-0">
                           {t("operation.nextStep")}
@@ -275,11 +297,6 @@ export function OperationDetailsPage() {
                           )}
                         </div>
                       </div>
-                      {panelWarning && (
-                        <div className="text-[0.8rem] font-bold text-center tracking-wide">
-                          {panelWarning}
-                        </div>
-                      )}
                     </CardContent>
                   </Card>
                 );
@@ -313,6 +330,11 @@ export function OperationDetailsPage() {
                   return (
                     <Card className="py-0 gap-0">
                       <CardContent className="px-4 py-3 flex flex-col items-center gap-2">
+                        {panelWarning && (
+                          <div className="text-[0.9rem] font-bold text-center tracking-wide">
+                            {panelWarning}
+                          </div>
+                        )}
                         <div className="flex items-center gap-3">
                           <span className="text-[0.8rem] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap shrink-0">
                             {t("operation.nextStep")}
@@ -330,11 +352,6 @@ export function OperationDetailsPage() {
                             )}
                           </div>
                         </div>
-                        {panelWarning && (
-                          <div className="text-[0.8rem] font-bold text-center tracking-wide">
-                            {panelWarning}
-                          </div>
-                        )}
                       </CardContent>
                     </Card>
                   );
@@ -392,6 +409,8 @@ export function OperationDetailsPage() {
         copmachine={operation.COPMACHINE ?? Number(copmachine)}
         statusCode={localStatus ?? operation.STATUT_CODE}
         orderNumber={operation.NO_PROD}
+        operationLabel={locOp(operation.OPERATION_P, operation.OPERATION_S)}
+        machineLabel={locOp(operation.MACHINE_P, operation.MACHINE_S)}
         onStatusChanged={handleStatusChanged}
       />
     </div>

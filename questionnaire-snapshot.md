@@ -1,0 +1,130 @@
+- generic [ref=e2]:
+  - generic [ref=e32]:
+    - banner [ref=e33]:
+      - img "SeatPly" [ref=e34]
+      - generic [ref=e35]:
+        - button [ref=e36]:
+          - img
+        - button [ref=e37]:
+          - img
+        - button [ref=e38]:
+          - img
+      - combobox [ref=e39]:
+        - generic: Département
+        - img
+      - generic [ref=e40]:
+        - generic [ref=e41]: ABANE, OURABAH
+        - generic [ref=e42]: "Quart: PLAN B"
+        - generic [ref=e43]: 7:00 - 23:59
+        - generic [ref=e44]: 10 h 26
+      - generic [ref=e45]:
+        - button [ref=e46]:
+          - img
+        - button [ref=e47]:
+          - img
+        - button [ref=e48]:
+          - img
+        - button [ref=e49]:
+          - img
+        - button [ref=e50]:
+          - img
+        - button [ref=e51]:
+          - img
+        - button [ref=e52]:
+          - img
+        - button [ref=e53]:
+          - img
+        - button [ref=e54]:
+          - img
+      - generic [ref=e55]:
+        - button "FR" [ref=e56]
+        - button "EN" [ref=e57]
+    - main [ref=e58]:
+      - generic [ref=e59]:
+        - generic [ref=e60]:
+          - heading "Questionnaire d'arrêt" [level=1] [ref=e61]
+          - generic [ref=e62]:
+            - generic [ref=e64]: questionnaire.orderInformation
+            - generic [ref=e65]:
+              - generic [ref=e66]:
+                - generic [ref=e67]:
+                  - generic [ref=e68]: "No. commande:"
+                  - generic [ref=e69]: "1067522"
+                - generic [ref=e70]:
+                  - generic [ref=e71]: "Client:"
+                  - generic [ref=e72]: STEELCASE INC.
+                - generic [ref=e73]:
+                  - generic [ref=e74]: "PO Client:"
+                  - generic [ref=e75]: "4512445700"
+                - generic [ref=e76]:
+                  - generic [ref=e77]: "Produit:"
+                  - generic [ref=e78]: Bindu - Seat
+                - generic [ref=e79]:
+                  - generic [ref=e80]: "Machine:"
+                  - generic [ref=e81]: PR1G — Press 1G
+                - generic [ref=e82]:
+                  - generic [ref=e83]: "Statut:"
+                  - generic [ref=e84]: En production
+              - generic [ref=e85]:
+                - generic [ref=e86]:
+                  - generic [ref=e87]: questionnaire.qtyToMake
+                  - generic [ref=e88]: "416"
+                - generic [ref=e89]:
+                  - generic [ref=e90]: questionnaire.qtyProduced
+                  - generic [ref=e91]: "282"
+                - generic [ref=e92]:
+                  - generic [ref=e93]: questionnaire.qtyRemaining
+                  - generic [ref=e94]: "134"
+                - generic [ref=e95]:
+                  - generic [ref=e96]: questionnaire.qtyDefect
+                  - generic [ref=e97]: "0"
+          - generic [ref=e98]:
+            - generic [ref=e100]: Employé
+            - generic [ref=e102]:
+              - generic [ref=e103]:
+                - generic [ref=e104]: "Code employé:"
+                - button "2808" [ref=e105] [cursor=pointer]
+              - generic [ref=e106]:
+                - generic [ref=e107]: "Nom employé:"
+                - generic [ref=e108]: ABANE, OURABAH
+          - generic [ref=e109]:
+            - generic [ref=e111]: Cause d'arrêt
+            - generic [ref=e112]:
+              - generic [ref=e113]:
+                - generic [ref=e114]: "Cause principale:"
+                - combobox [ref=e115]:
+                  - generic: Sélectionner une cause...
+                  - img
+              - generic [ref=e116]:
+                - generic [ref=e117]: "Cause secondaire:"
+                - combobox [disabled] [ref=e118]:
+                  - generic: Sélectionner une cause...
+                  - img
+              - generic [ref=e119]:
+                - generic [ref=e120]: "Notes:"
+                - textbox "Autre (préciser)" [ref=e121]
+          - generic [ref=e122]:
+            - generic [ref=e123]:
+              - generic [ref=e124]: Quantité défectueuse
+              - button "Ajouter défaut" [ref=e125]:
+                - img
+                - text: Ajouter défaut
+            - paragraph [ref=e127]: Aucun résultat
+          - generic [ref=e128]:
+            - generic [ref=e129]:
+              - generic [ref=e130]: Produits finis
+              - button "Ajouter produit" [ref=e131]:
+                - img
+                - text: Ajouter produit
+            - paragraph [ref=e133]: Aucun résultat
+          - generic [ref=e134]:
+            - generic [ref=e136]: Sortie matériel
+            - paragraph [ref=e138]: Aucun résultat
+        - generic [ref=e139]:
+          - button "Annuler" [ref=e140]:
+            - img
+            - text: Annuler
+          - button "OK" [ref=e141]:
+            - img
+            - text: OK
+  - region "Notifications alt+T"

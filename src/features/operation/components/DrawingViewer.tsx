@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
@@ -33,25 +34,29 @@ export function DrawingViewer({ images }: DrawingViewerProps) {
       <Card className="py-0 gap-0">
         <CardContent className="px-4 pt-3 pb-4 flex flex-col gap-3">
           {isPdf(currentUrl) ? (
-            <object
-              data={`${currentUrl}#toolbar=0`}
-              type="application/pdf"
-              className="w-full rounded border cursor-pointer"
-              style={{ height: "600px" }}
-              onClick={() => setFullscreen(true)}
-            >
-              <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
-                <p className="text-sm">PDF preview not available</p>
-                <a
-                  href={currentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue-600 underline"
-                >
-                  Open PDF in new tab
-                </a>
-              </div>
-            </object>
+            /* Wrap in relative container with transparent overlay — <object> swallows all mouse events */
+            <div className="relative cursor-pointer" style={{ height: "600px" }} onClick={() => setFullscreen(true)}>
+              <object
+                data={`${currentUrl}#toolbar=0`}
+                type="application/pdf"
+                className="w-full h-full rounded border"
+              >
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+                  <p className="text-sm">PDF preview not available</p>
+                  <a
+                    href={currentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Open PDF in new tab
+                  </a>
+                </div>
+              </object>
+              {/* Transparent click-catcher — right 15% left free so scroll gestures still work */}
+              <div className="absolute inset-y-0 left-0 right-[15%]" />
+            </div>
           ) : (
             <img
               src={currentUrl}
@@ -88,8 +93,8 @@ export function DrawingViewer({ images }: DrawingViewerProps) {
         </CardContent>
       </Card>
 
-      {/* Fullscreen modal */}
-      {fullscreen && (
+      {/* Fullscreen modal — portaled to body to escape overflow-y-auto scroll container */}
+      {fullscreen && createPortal(
         <div
           className="fixed inset-0 z-[100] bg-white flex flex-col"
           onClick={() => setFullscreen(false)}
@@ -152,7 +157,8 @@ export function DrawingViewer({ images }: DrawingViewerProps) {
               />
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

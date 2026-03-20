@@ -129,6 +129,10 @@
     "setupQuestionnairePrompt": "Do you want to fill the Setup Questionnaire?",
     "title": "Actions"
   },
+  "statusConfirm": {
+    "line1": "{{action}} <operation>{{operation}}</operation> on <machine>{{machine}}</machine>",
+    "line2": "for order <orderLink>{{order}}</orderLink>?"
+  },
   "questionnaire": {
     "exitSurvey": "Exit Survey",
     "setupSurvey": "Setup Survey",
@@ -163,7 +167,8 @@
     "employeeRequired": "Employee code is required",
     "causeRequired": "Stop cause is required",
     "addProduct": "Add Product",
-    "confirmQuantities": "Confirm Quantities"
+    "confirmQuantities": "Confirm Quantities",
+    "materialOutputHint": "Enter a quantity and press OK to see material output"
   },
   "dialogs": {
     "loading": "Please wait...",

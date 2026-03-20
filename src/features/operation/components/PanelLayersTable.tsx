@@ -52,8 +52,8 @@ export function PanelLayersTable({ layers, groupHeader }: PanelLayersTableProps)
           <TableHeader>
             <TableRow>
               <TableHead className={W_PANEL_LAYERS.seq}>{t("panel.seq")}</TableHead>
-              <TableHead className={cn(W_PANEL_LAYERS.length, "text-right")}>{t("panel.length")}</TableHead>
-              <TableHead className={cn(W_PANEL_LAYERS.width, "text-right")}>{t("panel.width")}</TableHead>
+              <TableHead className={cn(W_PANEL_LAYERS.length, "text-center")}>{t("panel.length")}</TableHead>
+              <TableHead className={cn(W_PANEL_LAYERS.width, "text-center")}>{t("panel.width")}</TableHead>
               <TableHead className={W_PANEL_LAYERS.species}>{t("panel.species")}</TableHead>
               <TableHead className={W_PANEL_LAYERS.grade}>{t("panel.grade")}</TableHead>
               <TableHead className={cn(W_PANEL_LAYERS.cut, "text-center")}>{t("panel.cut")}</TableHead>
@@ -91,8 +91,8 @@ export function PanelLayersTable({ layers, groupHeader }: PanelLayersTableProps)
                 style={isPlyRow ? { backgroundColor: "#FFFAD9" } : undefined}
               >
                 <TableCell className={cn(W_PANEL_LAYERS.seq)} style={{ color: "#89DE71" }}>{layer.NIRANG}</TableCell>
-                <TableCell className={cn(W_PANEL_LAYERS.length, "text-right tabular-nums")}>{layer.NILONGUEUR}</TableCell>
-                <TableCell className={cn(W_PANEL_LAYERS.width, "text-right tabular-nums")}>{layer.NILARGEUR}</TableCell>
+                <TableCell className={cn(W_PANEL_LAYERS.length, "text-center tabular-nums")}>{layer.NILONGUEUR}</TableCell>
+                <TableCell className={cn(W_PANEL_LAYERS.width, "text-center tabular-nums")}>{layer.NILARGEUR}</TableCell>
                 <TableCell className={W_PANEL_LAYERS.species}>{layer.SPECIES}</TableCell>
                 <TableCell className={W_PANEL_LAYERS.grade}>{layer.GRADE}</TableCell>
                 <TableCell className={cn(W_PANEL_LAYERS.cut, "text-center")}>{layer.CUT}</TableCell>

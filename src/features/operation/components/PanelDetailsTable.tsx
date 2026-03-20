@@ -21,6 +21,7 @@ export interface PanelDetail {
   DESCRIPTION: string;
   VER: number | string;
   TYPE: string;
+  THICKNESS?: number | string | null;
   POIDS: number | string;
 }
 
@@ -44,27 +45,28 @@ export function PanelDetailsTable({ detail, onViewDrawing, activeDrawingSeq }: P
               <TableHead className={W_PANEL_DETAILS.description}>{t("panel.description")}</TableHead>
               <TableHead className={cn(W_PANEL_DETAILS.version, "text-right")}>{t("panel.version")}</TableHead>
               <TableHead className={W_PANEL_DETAILS.type}>{t("panel.type")}</TableHead>
+              <TableHead className={cn(W_PANEL_DETAILS.thickness, "text-right")}>{t("panel.thickness")}</TableHead>
               <TableHead className={cn(W_PANEL_DETAILS.weight, "text-right")}>{t("panel.weight")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             <TableRow className="h-10">
-              <TableCell className={W_PANEL_DETAILS.item}>
+              <TableCell className={cn(W_PANEL_DETAILS.item, "text-base")}>
                 <span className="flex items-center gap-1">
                   {detail.ITEM}
                   {detail.ITEM_SEQ && onViewDrawing && (
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="size-8"
+                      className="size-[42px]"
                       onClick={() => onViewDrawing(detail.ITEM_SEQ!)}
                     >
                       <div
-                        className="flex items-center justify-center rounded-full size-[24px]"
+                        className="flex items-center justify-center rounded-md size-[32px]"
                         style={{ backgroundColor: activeDrawingSeq === detail.ITEM_SEQ ? "#aeffae" : "transparent" }}
                       >
                         <Image
-                          className="size-[19px]"
+                          className="size-[25px]"
                           fill={activeDrawingSeq === detail.ITEM_SEQ ? "#aeffae" : "none"}
                         />
                       </div>
@@ -72,22 +74,22 @@ export function PanelDetailsTable({ detail, onViewDrawing, activeDrawingSeq }: P
                   )}
                 </span>
               </TableCell>
-              <TableCell className={W_PANEL_DETAILS.panneau}>
+              <TableCell className={cn(W_PANEL_DETAILS.panneau, "text-base font-semibold")}>
                 <span className="flex items-center gap-1">
                   {detail.PANNEAU}
                   {detail.PANNEAU_SEQ && onViewDrawing && (
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="size-8"
+                      className="size-[42px]"
                       onClick={() => onViewDrawing(detail.PANNEAU_SEQ!)}
                     >
                       <div
-                        className="flex items-center justify-center rounded-full size-[24px]"
+                        className="flex items-center justify-center rounded-md size-[32px]"
                         style={{ backgroundColor: activeDrawingSeq === detail.PANNEAU_SEQ ? "#aeffae" : "transparent" }}
                       >
                         <Image
-                          className="size-[19px]"
+                          className="size-[25px]"
                           fill={activeDrawingSeq === detail.PANNEAU_SEQ ? "#aeffae" : "none"}
                         />
                       </div>
@@ -95,10 +97,13 @@ export function PanelDetailsTable({ detail, onViewDrawing, activeDrawingSeq }: P
                   )}
                 </span>
               </TableCell>
-              <TableCell className={W_PANEL_DETAILS.description}>{detail.DESCRIPTION}</TableCell>
-              <TableCell className={cn(W_PANEL_DETAILS.version, "text-right tabular-nums")}>{detail.VER}</TableCell>
-              <TableCell className={W_PANEL_DETAILS.type}>{detail.TYPE}</TableCell>
-              <TableCell className={cn(W_PANEL_DETAILS.weight, "text-right tabular-nums")}>{typeof detail.POIDS === "number" ? detail.POIDS.toFixed(2) : detail.POIDS}</TableCell>
+              <TableCell className={cn(W_PANEL_DETAILS.description, "text-base")}>{detail.DESCRIPTION}</TableCell>
+              <TableCell className={cn(W_PANEL_DETAILS.version, "text-right tabular-nums text-base")}>{detail.VER}</TableCell>
+              <TableCell className={cn(W_PANEL_DETAILS.type, "text-base")}>{detail.TYPE}</TableCell>
+              <TableCell className={cn(W_PANEL_DETAILS.thickness, "text-right tabular-nums text-base")}>
+                {detail.THICKNESS != null && detail.THICKNESS !== "" ? detail.THICKNESS : "—"}
+              </TableCell>
+              <TableCell className={cn(W_PANEL_DETAILS.weight, "text-right tabular-nums text-base")}>{typeof detail.POIDS === "number" ? detail.POIDS.toFixed(2) : detail.POIDS}</TableCell>
             </TableRow>
           </TableBody>
         </Table>

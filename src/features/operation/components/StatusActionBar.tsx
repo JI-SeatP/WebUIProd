@@ -1,5 +1,5 @@
 import React from "react";
-import { useTranslation } from "react-i18next";
+import { useTranslation, Trans } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,12 +19,18 @@ import {
 } from "lucide-react";
 import { statusCodeToEnum, type OperationStatus } from "@/components/shared/StatusBadge";
 import { type StatusAction, useStatusChange } from "../hooks/useStatusChange";
+import { W_STATUS_ACTION_BAR } from "@/constants/widths";
+import { cn } from "@/lib/utils";
 
 interface StatusActionBarProps {
   transac: number;
   copmachine: number | null;
   statusCode: number | string;
   orderNumber: string;
+  /** Localized operation label (matches header) */
+  operationLabel: string;
+  /** Localized machine label (matches header) */
+  machineLabel: string;
   onStatusChanged?: (newStatus: string) => void;
 }
 
@@ -102,7 +108,15 @@ const STATUS_DISPLAY: Record<OperationStatus, { labelKey: string; bgColor: strin
   DONE:    { labelKey: "status.done",       bgColor: "#059669" },
 };
 
-export function StatusActionBar({ transac, copmachine, statusCode, orderNumber, onStatusChanged }: StatusActionBarProps) {
+export function StatusActionBar({
+  transac,
+  copmachine,
+  statusCode,
+  orderNumber,
+  operationLabel,
+  machineLabel,
+  onStatusChanged,
+}: StatusActionBarProps) {
   const { t } = useTranslation();
   const status = statusCodeToEnum(statusCode);
   const {
@@ -132,7 +146,10 @@ export function StatusActionBar({ transac, copmachine, statusCode, orderNumber, 
     <>
       {/* Floating action panel — fixed bottom-center */}
       <div
-        className="fixed bottom-5 left-5 z-50 w-[250px] rounded-3xl px-4 py-3 flex flex-col gap-2 backdrop-blur border border-white/20"
+        className={cn(
+          "fixed bottom-5 left-5 z-50 rounded-3xl px-4 py-3 flex flex-col gap-2 backdrop-blur border border-white/20",
+          W_STATUS_ACTION_BAR.container,
+        )}
         style={{ backgroundColor: "rgba(64, 75, 79, 0.65)", boxShadow: "0 8px 10px rgba(0,0,0,0.5)" }}
       >
         {/* Actions dropdown */}
@@ -153,8 +170,11 @@ export function StatusActionBar({ transac, copmachine, statusCode, orderNumber, 
           </DropdownMenuTrigger>
           <DropdownMenuContent
             side="top"
-            align="start"
-            className="w-[220px] p-1"
+            align="center"
+            className={cn(
+              W_STATUS_ACTION_BAR.dropdownMenu,
+              "p-4 !ml-0 shadow-[0_-6px_16px_-2px_rgba(0,0,0,0.34),0_-5px_56px_-14px_rgba(0,0,0,0.28)]",
+            )}
           >
             {actions.map((action) => {
               const iconColor = action.active ? "#ffffff" : "#374151";
@@ -189,11 +209,35 @@ export function StatusActionBar({ transac, copmachine, statusCode, orderNumber, 
         open={!!confirmAction}
         onOpenChange={(open) => !open && cancelChange()}
         title={
-          <span>
-            {confirmAction ? confirmLabels[confirmAction] : ""} — {t("order.title")}{" "}
-            <span className="text-blue-600">{orderNumber}</span>?
-          </span>
+          confirmAction ? (
+            <span className="block w-max max-w-full min-w-0 text-left">
+              <span className="block whitespace-nowrap">
+                <Trans
+                  i18nKey="statusConfirm.line1"
+                  values={{
+                    action: confirmLabels[confirmAction],
+                    operation: operationLabel,
+                    machine: machineLabel,
+                  }}
+                  components={{
+                    operation: <span className="text-blue-600" />,
+                    machine: <span className="text-blue-600" />,
+                  }}
+                />
+              </span>
+              <span className="block whitespace-nowrap">
+                <Trans
+                  i18nKey="statusConfirm.line2"
+                  values={{ order: orderNumber }}
+                  components={{ orderLink: <span className="text-blue-600" /> }}
+                />
+              </span>
+            </span>
+          ) : (
+            ""
+          )
         }
+        fitContent
         onConfirm={executeChange}
         variant={confirmAction === "STOP" ? "destructive" : "default"}
       />

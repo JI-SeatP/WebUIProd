@@ -18,16 +18,19 @@ export function pressQtyDisplay(
   dcqteRejet: number | null | undefined,
   fmcode: string | null | undefined,
   vbeDcqteAFab?: number | null | undefined,
+  pcsPerPanel?: number | null | undefined,
 ): string {
   const fmc = (fmcode ?? "").toUpperCase();
   const isPress = fmc.includes("PRESS") || fmc.includes("VENPR") || fmc.includes("FLATP");
 
   if (isPress) {
     // PRESS: show DCQTE_A_PRESSER (or VBE.DCQTE_A_FAB) + adjustment
+    // LaQuantiteAjoutee = Ceiling(DCQTE_REJET / PCS_PER_PANEL) — matches old CF logic
     const base = (dcqteAPresser != null && dcqteAPresser > 0)
       ? dcqteAPresser
       : (vbeDcqteAFab ?? qteAFab ?? 0);
-    const rejet = Number(dcqteRejet ?? 0);
+    const ppp = Math.ceil(Number(pcsPerPanel ?? 0));
+    const rejet = ppp > 0 ? Math.ceil(Number(dcqteRejet ?? 0) / ppp) : 0;
     return rejet > 0 ? `${Math.ceil(base)} + ${rejet}` : String(Math.ceil(Number(base)));
   }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { W_LOGIN, W_NUMPAD } from "@/constants/widths";
 import { Delete, X, CornerDownLeft } from "lucide-react";
 
 interface NumPadProps {
@@ -13,6 +14,8 @@ interface NumPadProps {
   showActions?: boolean;
   displayValue?: string;
   className?: string;
+  /** Login screen: larger frame (+10%) and digit glyphs (+15% vs default scale) */
+  size?: "default" | "large";
 }
 
 export function NumPad({
@@ -25,7 +28,9 @@ export function NumPad({
   showActions = true,
   displayValue,
   className,
+  size = "default",
 }: NumPadProps) {
+  const large = size === "large";
   const [flashKey, setFlashKey] = useState<string | null>(null);
 
   const flash = (id: string) => {
@@ -80,32 +85,46 @@ export function NumPad({
 
   const keyClass = (id: string, extra = "") =>
     cn(
-      "touch-target h-[58px] !transition-none",
+      "touch-target !transition-none",
+      large ? W_LOGIN.numPadKey : "h-[58px]",
       flashKey === id ? "!bg-[#aeffae] !border-green-400" : "",
       extra
     );
 
+  const digitText = large ? "text-[1.58125rem] font-semibold" : "text-xl font-semibold";
+  const iconPx = large ? 24 : 22;
+
   return (
     <div
       className={cn(
-        "bg-popover border rounded-lg shadow-lg p-3 w-[280px] no-select",
+        "bg-popover border rounded-lg shadow-lg no-select",
+        large ? "p-[11px]" : "p-3",
+        large ? W_NUMPAD.frameLarge : W_NUMPAD.frame,
         className
       )}
     >
       {/* Display */}
       {showDisplay && (
-        <div className="bg-muted rounded-md px-4 py-3 mb-3 text-2xl font-mono tabular-nums min-h-[52px] flex items-center" style={{ justifyContent: displayValue ? "center" : "flex-end" }}>
+        <div
+          className={cn(
+            "bg-muted rounded-md font-mono tabular-nums flex items-center",
+            large
+              ? "px-[18px] py-[13px] mb-[13px] text-[1.89875rem] min-h-[57px]"
+              : "px-4 py-3 mb-3 text-2xl min-h-[52px]"
+          )}
+          style={{ justifyContent: displayValue ? "center" : "flex-end" }}
+        >
           {displayValue ?? (value || "0")}
         </div>
       )}
 
       {/* Key grid — 3 columns, standard phone layout */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className={cn("grid grid-cols-3", W_NUMPAD.keyGap)}>
         {numKeys.map((key) => (
           <Button
             key={key}
             variant="outline"
-            className={keyClass(key, "text-xl font-semibold")}
+            className={keyClass(key, digitText)}
             onClick={() => handleKey(key)}
           >
             {key}
@@ -118,11 +137,11 @@ export function NumPad({
           className={keyClass("backspace")}
           onClick={() => handleKey("backspace")}
         >
-          <Delete size={22} />
+          <Delete size={iconPx} />
         </Button>
         <Button
           variant="outline"
-          className={keyClass("0", "text-xl font-semibold")}
+          className={keyClass("0", digitText)}
           onClick={() => handleKey("0")}
         >
           0
@@ -132,13 +151,13 @@ export function NumPad({
           className={keyClass("clear")}
           onClick={() => handleKey("clear")}
         >
-          <X size={22} />
+          <X size={iconPx} />
         </Button>
       </div>
 
       {/* Action row (optional — used in popover mode) */}
       {showActions && onClose && (
-        <div className="flex gap-2 mt-2">
+        <div className={cn("flex mt-2", W_NUMPAD.keyGap)}>
           <Button
             variant="outline"
             className="flex-1 touch-target text-lg"

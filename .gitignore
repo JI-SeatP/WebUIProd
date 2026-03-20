@@ -32,3 +32,12 @@ src/old/
 # Mock data CSV files (may contain production data)
 src/mocks/data/*.csv
 src/mocks/data/*.xlsx
+
+# Local env and scratch (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Tooling / temp
+.playwright-mcp/
+tmp_corr.json

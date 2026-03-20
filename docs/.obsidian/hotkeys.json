@@ -53,13 +53,13 @@
       "key": "6"
     }
   ],
-  "editor:toggle-bullet-list": [
+  "editor:set-heading-0": [
     {
       "modifiers": [
-        "Alt",
-        "Mod"
+        "Mod",
+        "Shift"
       ],
-      "key": "B"
+      "key": "`"
     }
   ],
   "editor:toggle-numbered-list": [
@@ -69,6 +69,33 @@
         "Mod"
       ],
       "key": "N"
+    }
+  ],
+  "editor:toggle-bullet-list": [
+    {
+      "modifiers": [
+        "Alt",
+        "Mod"
+      ],
+      "key": "B"
+    }
+  ],
+  "editor:toggle-code": [
+    {
+      "modifiers": [
+        "Alt",
+        "Mod"
+      ],
+      "key": "C"
+    }
+  ],
+  "export-to-html:copy-to-clipboard-as-html": [
+    {
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ],
+      "key": "C"
     }
   ]
 }

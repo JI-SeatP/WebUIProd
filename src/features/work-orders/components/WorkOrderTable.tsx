@@ -134,9 +134,14 @@ export function WorkOrderTable({
             <TableHead className={W_WORK_ORDERS.panel}>
               {t("press.panel")}
             </TableHead>
-            <TableHead className={W_WORK_ORDERS.mold}>
-              {t("press.mold")}
-            </TableHead>
+            <SortableHeader
+              field="MOULE_CODE"
+              label={t("press.mold")}
+              currentField={sortField}
+              currentDirection={sortDirection}
+              onSort={onSort}
+              className={W_WORK_ORDERS.mold}
+            />
             <SortableHeader
               field="QTE_A_FAB"
               label={t("order.qtyToMake")}
@@ -196,7 +201,7 @@ export function WorkOrderTable({
                 <TableRow
                   key={`${order.TRANSAC}-${order.NOPSEQ}-${idx}`}
                   className={cn(
-                    "h-[56px] cursor-pointer no-select hover:!bg-[#aeffae]",
+                    "h-[56px] cursor-pointer hover:!bg-[#aeffae]",
                     statusRowColor(status)
                   )}
                 >
@@ -215,37 +220,82 @@ export function WorkOrderTable({
                   <TableCell className={cn(W_WORK_ORDERS.orderNumber, "font-semibold text-xl")}>
                     {order.NO_PROD}
                   </TableCell>
-                  <TableCell className={W_WORK_ORDERS.client}>
+                  <TableCell className={cn(W_WORK_ORDERS.client, "text-base")}>
                     <div className="truncate">{order.NOM_CLIENT}</div>
                     {order.CONOPO && (
-                      <div className="text-xs text-muted-foreground truncate">
+                      <div className="text-base text-muted-foreground truncate -mt-0.5">
                         PO: {order.CONOPO}
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className={W_WORK_ORDERS.product}>
-                    <div className="truncate font-semibold">
-                      {order.NO_INVENTAIRE === "VCUT"
-                        ? order.NO_INVENTAIRE
-                        : order.PRODUIT_CODE || "—"}
-                    </div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {order.NO_INVENTAIRE === "VCUT"
-                        ? getLocalizedText(order.INVENTAIRE_P, order.INVENTAIRE_S)
-                        : getLocalizedText(order.PRODUIT_P, order.PRODUIT_S)}
-                    </div>
+                  <TableCell className={cn(W_WORK_ORDERS.product, "text-base")}>
+                    {(() => {
+                      // Match old software cascading logic for PRODUIT column
+                      if (order.NO_INVENTAIRE === "VCUT") {
+                        return (
+                          <>
+                            <div className="truncate font-semibold">{order.NO_INVENTAIRE}</div>
+                            <div className="text-base text-muted-foreground truncate -mt-0.5">
+                              {getLocalizedText(order.INVENTAIRE_P, order.INVENTAIRE_S)}
+                            </div>
+                          </>
+                        );
+                      }
+                      if (order.PRODUIT_CODE) {
+                        // OPERATION_SEQ=2 → show product; otherwise show material
+                        if (order.OPERATION_SEQ === 2) {
+                          return (
+                            <>
+                              <div className="truncate font-semibold">{order.PRODUIT_CODE}</div>
+                              <div className="text-base text-muted-foreground truncate -mt-0.5">
+                                {getLocalizedText(order.PRODUIT_P, order.PRODUIT_S)}
+                              </div>
+                            </>
+                          );
+                        }
+                        return (
+                          <>
+                            <div className="truncate font-semibold">{order.MATERIEL_CODE || order.PRODUIT_CODE}</div>
+                            <div className="text-base text-muted-foreground truncate -mt-0.5">
+                              {getLocalizedText(order.MATERIEL_P ?? order.PRODUIT_P, order.MATERIEL_S ?? order.PRODUIT_S)}
+                            </div>
+                          </>
+                        );
+                      }
+                      if (order.NO_INVENTAIRE) {
+                        return (
+                          <>
+                            <div className="truncate font-semibold">{order.NO_INVENTAIRE}</div>
+                            <div className="text-base text-muted-foreground truncate -mt-0.5">
+                              {getLocalizedText(order.INVENTAIRE_P, order.INVENTAIRE_S)}
+                            </div>
+                          </>
+                        );
+                      }
+                      if (order.MATERIEL_CODE) {
+                        return (
+                          <>
+                            <div className="truncate font-semibold">{order.MATERIEL_CODE}</div>
+                            <div className="text-base text-muted-foreground truncate -mt-0.5">
+                              {getLocalizedText(order.MATERIEL_P, order.MATERIEL_S)}
+                            </div>
+                          </>
+                        );
+                      }
+                      return <div className="truncate font-semibold">—</div>;
+                    })()}
                   </TableCell>
-                  <TableCell className={W_WORK_ORDERS.group}>
+                  <TableCell className={cn(W_WORK_ORDERS.group, "text-base")}>
                     {order.GROUPE ?? "—"}
                   </TableCell>
-                  <TableCell className={W_WORK_ORDERS.panel}>
+                  <TableCell className={cn(W_WORK_ORDERS.panel, "text-base font-semibold")}>
                     {order.Panneau ?? "—"}
                   </TableCell>
-                  <TableCell className={W_WORK_ORDERS.mold}>
+                  <TableCell className={cn(W_WORK_ORDERS.mold, "text-base")}>
                     {order.MOULE_CODE ?? "—"}
                   </TableCell>
                   <TableCell className={cn(W_WORK_ORDERS.qtyTotal, "text-right tabular-nums text-base")}>
-                    {pressQtyDisplay(order.QTE_A_FAB, order.DCQTE_A_PRESSER, order.DCQTE_REJET, order.FMCODE, order.VBE_DCQTE_A_FAB)}
+                    {pressQtyDisplay(order.QTE_A_FAB, order.DCQTE_A_PRESSER, order.DCQTE_REJET, order.FMCODE, order.VBE_DCQTE_A_FAB, order.PCS_PER_PANEL)}
                   </TableCell>
                   <TableCell className={cn(W_WORK_ORDERS.qtyProduced, "text-right tabular-nums text-base")}>
                     {order.QTE_PRODUITE ?? 0}
@@ -253,11 +303,11 @@ export function WorkOrderTable({
                   <TableCell className={cn(W_WORK_ORDERS.qtyRemaining, "text-right tabular-nums text-base font-semibold")}>
                     {computeQteRestante(order)}
                   </TableCell>
-                  <TableCell className={W_WORK_ORDERS.operation}>
+                  <TableCell className={cn(W_WORK_ORDERS.operation, "text-base")}>
                     <div className="truncate">
                       {getLocalizedText(order.OPERATION_P, order.OPERATION_S)}
                     </div>
-                    <div className="text-xs text-muted-foreground truncate">
+                    <div className="text-base text-muted-foreground truncate -mt-0.5">
                       {getLocalizedText(order.MACHINE_P, order.MACHINE_S)}
                     </div>
                   </TableCell>
