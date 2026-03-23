@@ -58,6 +58,10 @@ Always read the relevant skill from `ai/skills/` BEFORE doing work:
 ## Browser Testing
 - **Do NOT** use Playwright MCP or BrowserTools MCP unless the user explicitly asks you to open the browser.
 - The user will test UI changes themselves. Only use browser tools when the user requests it.
+- **Manual navigation** — Never automate login or page navigation via preview_eval. Always instruct the user to log in and navigate to the required screen manually, then wait for confirmation before taking screenshots or interacting.
+
+## Migration Rules
+- **Exact query replication** — Backend endpoints (Express or .cfm) MUST use the exact same SQL queries, stored procedures, and field mappings as the old ColdFusion software (in `src/old/`). Do not rewrite, optimize, or combine queries. If the old code does 3 sequential queries, replicate the same 3 queries.
 
 ## ColdFusion Notes
 - The CF server is shared with the existing WebUI project

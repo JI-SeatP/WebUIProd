@@ -5,12 +5,20 @@ export function getCorrection(tjseq: number) {
   return apiGet<CorrectionData>(`getCorrection.cfm?tjseq=${tjseq}`);
 }
 
-export function submitCorrection(payload: {
+export interface SubmitCorrectionPayload {
   tjseq: number;
-  goodQty?: number;
-  defects?: { id: number; correctedQty: number }[];
-  newDefects?: { typeId: number; qty: number }[];
-  finishedProducts?: { id: number; correctedQty: number }[];
-}) {
+  employeeCode: string;
+  employeeName: string;
+  operation: number;
+  machine: number;
+  startDate: string; // ISO datetime-local format "yyyy-MM-ddTHH:mm"
+  endDate: string;
+  goodQty: number;
+  defects: { ddseq?: number; qty: number; reasonId: number; note?: string }[];
+  finishedProducts: { dtrseq: number; qty: number }[];
+  materials: { dtrseq: number; qty: number }[];
+}
+
+export function submitCorrection(payload: SubmitCorrectionPayload) {
   return apiPost<{ TJSEQ: number }>("submitCorrection.cfm", payload);
 }

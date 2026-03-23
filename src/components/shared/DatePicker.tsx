@@ -49,10 +49,13 @@ export function DatePicker({ value, onChange, className }: DatePickerProps) {
           selected={date}
           onSelect={handleSelect}
           locale={locale}
-          className="p-4 [--cell-size:--spacing(10)]"
+          className="p-4 [--cell-size:--spacing(11)] [&_.rdp-day_button]:!text-lg [&_.rdp-weekday]:!text-base"
           classNames={{
             week: "flex w-full mt-3",
-            day: "relative w-full h-full p-0.5 text-center select-none aspect-square data-[selected=true]:bg-[#aeffae] data-[selected=true]:rounded-md [&_button[data-selected-single=true]]:bg-transparent [&_button[data-selected-single=true]]:text-black [&_button[data-selected-single=true]]:font-bold",
+            month_caption: "flex items-center justify-center h-(--cell-size) w-full px-(--cell-size)",
+            caption_label: "select-none font-semibold text-lg",
+            weekday: "text-muted-foreground rounded-md flex-1 font-normal text-base select-none",
+            day: "relative w-full h-full p-0.5 text-center select-none aspect-square data-[selected=true]:bg-[#aeffae] data-[selected=true]:rounded-md [&_button[data-selected-single=true]]:bg-transparent [&_button[data-selected-single=true]]:text-black [&_button[data-selected-single=true]]:font-bold [&_button]:!text-lg",
             today: "bg-accent text-accent-foreground rounded-md",
           }}
         />

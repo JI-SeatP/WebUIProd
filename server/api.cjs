@@ -3377,16 +3377,21 @@ app.get(
         T.MACHINE_MACODE, T.MACHINE_MADESC_P, T.MACHINE_MADESC_S,
         T.OPERATION_OPDESC_P, T.OPERATION_OPDESC_S,
         T.SMNOTRANS, T.ENTRERPRODFINI_PFNOTRANS,
-        T.CNOMENCOP,
+        T.CNOMENCOP, T.cNOMENCLATURE, T.INVENTAIRE_C,
+        T.EMPLOYE, T.OPERATION, T.MACHINE,
+        (SELECT TOP 1 MP.MPSEQ FROM MODEPROD MP WHERE MP.MPCODE = T.MODEPROD_MPCODE) AS MODEPROD,
         D.DECODE, D.DEDESCRIPTION_P, D.DEDESCRIPTION_S,
         M.DEPARTEMENT,
+        FM.FMCODE,
         dbo.FctFormatNoProd(T.TRANSAC_TRNO, T.TRANSAC_TRITEM) AS NO_PROD,
         I.INDESC1, I.INDESC2,
-        CASE WHEN T.ENTRERPRODFINI_PFNOTRANS IS NOT NULL AND T.ENTRERPRODFINI_PFNOTRANS > 0 THEN 1 ELSE 0 END AS ENTREPF
+        CASE WHEN I.INNOINV = 'VCUT' THEN 1 ELSE 0 END AS EST_VCUT,
+        CASE WHEN T.ENTRERPRODFINI_PFNOTRANS IS NOT NULL AND LTRIM(RTRIM(T.ENTRERPRODFINI_PFNOTRANS)) <> '' THEN 1 ELSE 0 END AS ENTREPF
       FROM TEMPSPROD T
       INNER JOIN MACHINE M ON T.MACHINE = M.MASEQ
       INNER JOIN DEPARTEMENT D ON M.DEPARTEMENT = D.DESEQ
       LEFT OUTER JOIN INVENTAIRE I ON I.INSEQ = T.INVENTAIRE_C
+      LEFT OUTER JOIN FAMILLEMACHINE FM ON M.FAMILLEMACHINE = FM.FMSEQ
       WHERE T.TJSEQ = @tjseq
     `);
 
@@ -3395,6 +3400,10 @@ app.get(
     }
 
     const r = mainResult.recordset[0];
+    // Debug: log row count
+    if (mainResult.recordset.length > 1) {
+      console.log(`[WARN] getCorrection: ${mainResult.recordset.length} rows for TJSEQ ${tjseq}`);
+    }
 
     const fmtDate = (d) => {
       if (!d) return "";
@@ -3412,7 +3421,11 @@ app.get(
     // Fetch defects, finished products, and materials in parallel
     // Queries mirror legacy CF: QteDefect.cfc, ProduitFini.cfc, SortieMateriel.cfc
     const tjseqInt = Number(tjseq);
-    const [defectsResult, fpResult, materialsResult] = await Promise.all([
+    const transac = r.TRANSAC;
+    const cnomencop = r.CNOMENCOP;
+    const fmseq = r.DEPARTEMENT; // machine's department for family lookup
+
+    const [defectsResult, fpResult, materialsResult, opsResult, machinesResult] = await Promise.all([
       // DET_DEFECT — mirrors QteDefect.cfc → afficheTableauDEFECT
       pool.request().input("tjseq", sql.Int, tjseqInt).query(`
         SELECT DD.DDSEQ, DD.TRANSAC, DD.INVENTAIRE, DD.MACHINE, DD.EMPLOYE,
@@ -3448,6 +3461,7 @@ app.get(
         WHERE TP.TJSEQ = @tjseq
       `),
       // Materials — mirrors SortieMateriel.cfc → afficheListeSortieMateriel
+      // Includes NIQTE (BOM ratio) from cNOMENCLATURE for calculeQteSM
       pool.request().input("tjseq", sql.Int, tjseqInt).query(`
         SELECT DT.DTRSEQ, DT.TRANSAC_TRNO, DT.CONTENANT_CON_NUMERO,
                DT.DTRQTE, DT.DTRQTECUM_CONT, DT.NO_SERIE_NSNO_SERIE,
@@ -3455,7 +3469,20 @@ app.get(
                DT.ENTREPOT_ENCODE_SO, DT.ENTREPOT_ENDESC_P_SO, DT.ENTREPOT_ENDESC_S_SO,
                T.INVENTAIRE_INNOINV, T.INVENTAIRE_INDESC1, T.INVENTAIRE_INDESC2,
                T.UNITE_INV_UNDESC1, T.UNITE_INV_UNDESC2,
-               ABS(DETTRANS.DTRQTE_TRANSACTION) AS QTECORRIGEE
+               T.INVENTAIRE AS INVENTAIRE_MSEQ,
+               ABS(DETTRANS.DTRQTE_TRANSACTION) AS QTECORRIGEE,
+               ISNULL((
+                 SELECT MAX(CN.NIQTE)
+                 FROM cNOMENCLATURE CN
+                 WHERE CN.NISEQ_PERE = ISNULL(NULLIF(TP.cNOMENCLATURE, 0), (
+                   SELECT TOP 1 NOP.cNOMENCLATURE
+                   FROM cNOMENCOP NOP
+                   WHERE NOP.TRANSAC = TP.TRANSAC
+                     AND NOP.INVENTAIRE_P = TP.INVENTAIRE_C
+                     AND NOP.cNOMENCLATURE > 0
+                 ))
+                   AND CN.INVENTAIRE_M = T.INVENTAIRE
+               ), 0) AS NIQTE
         FROM TEMPSPROD TP
         INNER JOIN DET_TRANS DT ON DT.TRANSAC_TRNO = TP.SMNOTRANS
         INNER JOIN TRANSAC T ON DT.TRANSAC = T.TRSEQ
@@ -3468,6 +3495,23 @@ app.get(
           ), 0) DTRQTE_TRANSACTION
         ) DETTRANS
         WHERE TP.TJSEQ = @tjseq
+      `),
+      // Operations — mirrors TempsProd.cfc → trouveOperations (returns all)
+      pool.request().query(`
+        SELECT OPSEQ, OPCODE, OPDESC_P, OPDESC_S
+        FROM OPERATION
+        ORDER BY OPCODE
+      `),
+      // Machines — mirrors TempsProd.cfc → trouveMachines (filtered by family FK)
+      pool.request().input("tjseq", sql.Int, tjseqInt).query(`
+        SELECT M2.MASEQ, M2.MACODE, M2.MADESC_P, M2.MADESC_S
+        FROM MACHINE M2
+        WHERE M2.FAMILLEMACHINE = (
+          SELECT TOP 1 M1.FAMILLEMACHINE FROM TEMPSPROD TP
+          INNER JOIN MACHINE M1 ON TP.MACHINE = M1.MASEQ
+          WHERE TP.TJSEQ = @tjseq
+        )
+        ORDER BY M2.MACODE
       `),
     ]);
 
@@ -3490,9 +3534,19 @@ app.get(
       OPERATION_P: r.OPERATION_OPDESC_P || "",
       OPERATION_S: r.OPERATION_OPDESC_S || "",
       MODEPROD_MPCODE: r.MODEPROD_MPCODE || "",
+      MODEPROD: r.MODEPROD || 0,
       ENTREPF: r.ENTREPF,
       QTE_BONNE: r.TJQTEPROD || 0,
       QTE_DEFAUT: r.TJQTEDEFECT || 0,
+      CNOMENCOP: r.CNOMENCOP || 0,
+      CNOMENCLATURE: r.cNOMENCLATURE || 0,
+      INVENTAIRE_C: r.INVENTAIRE_C || 0,
+      SMNOTRANS: r.SMNOTRANS || "",
+      EMPLOYE_EMNO: String(r.EMPLOYE_EMNO || ""),
+      OPERATION_SEQ: r.OPERATION || 0,
+      MACHINE_SEQ: r.MACHINE || 0,
+      FMCODE: r.FMCODE || "",
+      EST_VCUT: r.EST_VCUT || 0,
       defects: defectsResult.recordset.map((d) => ({
         id: d.DDSEQ,
         typeId: d.RAISON,
@@ -3525,6 +3579,19 @@ app.get(
         warehouse_S: m.ENTREPOT_ENDESC_S || "",
         originalQty: m.DTRQTE || 0,
         correctedQty: m.QTECORRIGEE ?? (m.DTRQTE || 0),
+        niqte: m.NIQTE || 0,
+      })),
+      operations: opsResult.recordset.map((op) => ({
+        OPSEQ: op.OPSEQ,
+        OPCODE: op.OPCODE || "",
+        OPDESC_P: op.OPDESC_P || "",
+        OPDESC_S: op.OPDESC_S || "",
+      })),
+      machines: machinesResult.recordset.map((ma) => ({
+        MASEQ: ma.MASEQ,
+        MACODE: ma.MACODE || "",
+        MADESC_P: ma.MADESC_P || "",
+        MADESC_S: ma.MADESC_S || "",
       })),
     };
 
@@ -3542,15 +3609,28 @@ app.get(
 app.post(
   "/submitCorrection.cfm",
   handler(async (req, res) => {
-    const { tjseq, goodQty, defects, newDefects, finishedProducts } = req.body;
+    const { tjseq, goodQty, defects, newDefects, finishedProducts, startDate, endDate, employeeCode } = req.body;
 
     if (!tjseq) {
       return res.json({ success: false, error: "tjseq is required" });
     }
 
     const pool = await getPool();
-    const totalDefect = (defects || []).reduce((sum, d) => sum + (d.correctedQty || 0), 0)
+    const totalDefect = (defects || []).reduce((sum, d) => sum + (d.qty || 0), 0)
       + (newDefects || []).reduce((sum, d) => sum + (d.qty || 0), 0);
+
+    // ── Parse start/end from the submitted form values (mirrors CF: form.DateDebut_TJSEQ, form.DateFin_TJSEQ)
+    // Frontend sends "yyyy-MM-dd HH:mm" (space) or "yyyy-MM-ddTHH:mm" (ISO T)
+    function parseDateTimeStr(dt) {
+      if (!dt) return { datePart: null, timePart: null };
+      const normalized = dt.replace("T", " ");
+      const [datePart = "", timePart = "00:00"] = normalized.split(" ");
+      return { datePart, timePart: timePart + ":00" }; // → "HH:mm:ss"
+    }
+    const parsed = {
+      start: parseDateTimeStr(startDate),
+      end: parseDateTimeStr(endDate),
+    };
 
     // ── Load full TEMPSPROD row for SP parameters
     const tpResult = await pool.request()
@@ -3571,13 +3651,29 @@ app.post(
     if (finishedProducts && finishedProducts.length > 0) {
       for (const fp of finishedProducts) {
         const corrReq = pool.request();
-        corrReq.input("DTRSEQ", sql.Int, fp.id);
-        corrReq.input("DTRQTE_CORRECTION", sql.Float, fp.correctedQty);
+        corrReq.input("DTRSEQ", sql.Int, fp.dtrseq);
+        corrReq.input("DTRQTE_CORRECTION", sql.Float, fp.qty);
         corrReq.input("USAGER", sql.VarChar(50), "WebUI Correction");
         corrReq.output("ERREUR", sql.Int);
         corrReq.output("MSG_EQUATE", sql.VarChar(255));
         const corrResult = await corrReq.execute("Nba_Corrige_Quantite_Transaction");
-        console.log(`[submitCorrection] Nba_Corrige_Quantite_Transaction FP DTRSEQ=${fp.id} err=${corrResult.output.ERREUR}`);
+        console.log(`[submitCorrection] Nba_Corrige_Quantite_Transaction FP DTRSEQ=${fp.dtrseq} qty=${fp.qty} err=${corrResult.output.ERREUR}`);
+      }
+    }
+
+    // ── STEP 1b: Correct material output (SM) quantities via Nba_Corrige_Quantite_Transaction
+    // Mirrors CorrectionInventaire.cfc lines 299-342
+    const { materials } = req.body;
+    if (materials && materials.length > 0) {
+      for (const mat of materials) {
+        const corrReq = pool.request();
+        corrReq.input("DTRSEQ", sql.Int, mat.dtrseq);
+        corrReq.input("DTRQTE_CORRECTION", sql.Float, mat.qty);
+        corrReq.input("USAGER", sql.VarChar(50), req.body.employeeName || "WebUI Correction");
+        corrReq.output("ERREUR", sql.Int);
+        corrReq.output("MSG_EQUATE", sql.VarChar(255));
+        const corrResult = await corrReq.execute("Nba_Corrige_Quantite_Transaction");
+        console.log(`[submitCorrection] Nba_Corrige_Quantite_Transaction SM DTRSEQ=${mat.dtrseq} qty=${mat.qty} err=${corrResult.output.ERREUR}`);
       }
     }
 
@@ -3585,8 +3681,8 @@ app.post(
     if (defects && defects.length > 0) {
       for (const d of defects) {
         await pool.request()
-          .input("ddseq", sql.Int, d.id)
-          .input("qty", sql.Float, d.correctedQty)
+          .input("ddseq", sql.Int, d.ddseq)
+          .input("qty", sql.Float, d.qty)
           .query(`UPDATE DET_DEFECT SET DDQTEUNINV = @qty WHERE DDSEQ = @ddseq`);
       }
     }
@@ -3611,26 +3707,43 @@ app.post(
     }
 
     // ── STEP 4: Close/update TEMPSPROD via Nba_Sp_Update_Production (same SP as old software)
-    const dateTimeResult = await pool.request().query(`
-      SELECT FORMAT(GETDATE(), 'yyyy-MM-dd') AS dateNow, FORMAT(GETDATE(), 'HH:mm:ss') AS timeNow
-    `);
-    const { dateNow, timeNow } = dateTimeResult.recordset[0];
-    // CRITICAL: mssql driver returns datetime as JS Date tagged UTC. Use getUTC*().
-    const startDt = new Date(tp.TJDEBUTDATE);
-    const startDateStr = `${startDt.getUTCFullYear()}-${String(startDt.getUTCMonth() + 1).padStart(2, "0")}-${String(startDt.getUTCDate()).padStart(2, "0")}`;
-    const startTimeStr = `${String(startDt.getUTCHours()).padStart(2, "0")}:${String(startDt.getUTCMinutes()).padStart(2, "0")}:${String(startDt.getUTCSeconds()).padStart(2, "0")}`;
-    // If TJFINDATE exists, use it; otherwise use now
-    let endDateStr = dateNow;
-    let endTimeStr = timeNow;
-    if (tp.TJFINDATE) {
+    // ── Use submitted start/end dates (mirrors CF: form.DateDebut_TJSEQ / form.DateFin_TJSEQ)
+    // Fall back to original DB values only if frontend didn't send them
+    let startDateStr, startTimeStr, endDateStr, endTimeStr;
+    if (parsed.start.datePart) {
+      startDateStr = parsed.start.datePart;
+      startTimeStr = parsed.start.timePart;
+    } else {
+      const startDt = new Date(tp.TJDEBUTDATE);
+      startDateStr = `${startDt.getUTCFullYear()}-${String(startDt.getUTCMonth() + 1).padStart(2, "0")}-${String(startDt.getUTCDate()).padStart(2, "0")}`;
+      startTimeStr = `${String(startDt.getUTCHours()).padStart(2, "0")}:${String(startDt.getUTCMinutes()).padStart(2, "0")}:${String(startDt.getUTCSeconds()).padStart(2, "0")}`;
+    }
+    if (parsed.end.datePart) {
+      endDateStr = parsed.end.datePart;
+      endTimeStr = parsed.end.timePart;
+    } else if (tp.TJFINDATE) {
       const endDt = new Date(tp.TJFINDATE);
       endDateStr = `${endDt.getUTCFullYear()}-${String(endDt.getUTCMonth() + 1).padStart(2, "0")}-${String(endDt.getUTCDate()).padStart(2, "0")}`;
       endTimeStr = `${String(endDt.getUTCHours()).padStart(2, "0")}:${String(endDt.getUTCMinutes()).padStart(2, "0")}:${String(endDt.getUTCSeconds()).padStart(2, "0")}`;
+    } else {
+      const now = new Date();
+      endDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      endTimeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:00`;
+    }
+    console.log(`[submitCorrection] dates: start=${startDateStr} ${startTimeStr} end=${endDateStr} ${endTimeStr}`);
+
+    // ── Resolve EMSEQ from submitted employeeCode (mirrors CF: trouveEmploye by EMNO)
+    let emseq = tp.EMPLOYE || 0;
+    if (employeeCode) {
+      const emResult = await pool.request()
+        .input("emno", sql.VarChar(5), String(employeeCode).substring(0, 5))
+        .query(`SELECT TOP 1 EMSEQ FROM EMPLOYE WHERE EMNO = @emno`);
+      if (emResult.recordset.length) emseq = emResult.recordset[0].EMSEQ;
     }
 
     const updateReq = pool.request();
     updateReq.input("TJSEQ", sql.Int, tjseq);
-    updateReq.input("EMPLOYE", sql.Int, tp.EMPLOYE || 0);
+    updateReq.input("EMPLOYE", sql.Int, emseq);
     updateReq.input("OPERATION", sql.Int, tp.OPERATION);
     updateReq.input("MACHINE", sql.Int, tp.MACHINE);
     updateReq.input("TRSEQ", sql.Int, tp.TRANSAC);

@@ -3,26 +3,28 @@ import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { NumPad } from "@/components/shared/NumPad";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface CorrectionGoodQtyProps {
   value: number;
   onChange: (qty: number) => void;
+  onOk?: () => void;
 }
 
-export function CorrectionGoodQty({ value, onChange }: CorrectionGoodQtyProps) {
+export function CorrectionGoodQty({ value, onChange, onOk }: CorrectionGoodQtyProps) {
   const { t } = useTranslation();
   const [numpadOpen, setNumpadOpen] = useState(false);
 
   return (
     <Card className="min-h-[250px] bg-white">
-      <div className="py-1.5 px-3">
+      <div className="py-1.5 px-6">
         <div className="border border-green-500 bg-green-50 rounded-lg px-3 py-1 text-2xl font-bold text-green-900 uppercase tracking-wider w-fit">
           {t("corrections.goodQuantities")}
         </div>
       </div>
-      <CardContent className="pt-0.5 pb-2 px-3 flex items-center gap-2">
+      <CardContent className="pt-0.5 pb-2 px-6 flex items-center gap-2">
         <Label className="text-sm text-muted-foreground shrink-0">
           {t("questionnaire.qty")}:
         </Label>
@@ -45,6 +47,15 @@ export function CorrectionGoodQty({ value, onChange }: CorrectionGoodQtyProps) {
             />
           </PopoverContent>
         </Popover>
+        {onOk && (
+          <Button
+            variant="outline"
+            className="touch-target h-12 w-28 text-base font-bold border-green-600 text-green-700"
+            onClick={onOk}
+          >
+            OK
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

@@ -20,13 +20,35 @@
 		<cfset datasourcePrimary = "TS_SEATPL">
 	</cfif>
 
-	<!--- Defect types from RAISON table, filtered by RRTYPE LIKE '%14%'
-	      Source: QteDefect.cfc — exact table/column names from legacy code --->
+	<!--- Optional machine family code filter (e.g. PRESS, CNC, Sand, PACK, VENPR)
+	      Source: QteDefect.cfc lines 51-74 — filters defect reasons by machine family --->
+	<cfparam name="url.fmcode" default="">
+	<cfparam name="url.lang" default="FR">
+
 	<cfquery name="qDefects" datasource="#datasourcePrimary#">
 		SELECT RRSEQ, RRCODE, RRDESC_P, RRDESC_S, RRTYPE
 		FROM RAISON
 		WHERE RRTYPE LIKE '%14%'
-		ORDER BY RRDESC_P
+		AND (
+			(RRDESC_S LIKE 'Raw-Material%' OR RRDESC_S LIKE 'Visual%')
+			<cfif url.fmcode NEQ "">
+				<cfif FindNoCase("PRESS", url.fmcode) NEQ 0>
+					OR (RRCODE LIKE 'SCRAP-PRS%' OR RRDESC_P LIKE 'Presse%')
+				<cfelseif FindNoCase("CNC", url.fmcode) NEQ 0>
+					OR (RRCODE LIKE 'SCRAP-CNC%' OR RRDESC_P LIKE 'Usinage%')
+				<cfelseif FindNoCase("Sand", url.fmcode) NEQ 0>
+					OR (RRCODE LIKE 'SCRAP-SND%')
+				<cfelseif FindNoCase("PACK", url.fmcode) NEQ 0>
+					OR (RRCODE LIKE 'SCRAP-PKG%' OR RRDESC_P LIKE 'Emballage%')
+				<cfelseif FindNoCase("VENPR", url.fmcode) NEQ 0>
+					OR (RRTYPE LIKE '%3%' OR RRTYPE LIKE '%20%')
+				</cfif>
+			<cfelse>
+				<!--- No family filter: return all RRTYPE 14 defects --->
+				OR 1=1
+			</cfif>
+		)
+		ORDER BY <cfif UCase(url.lang) EQ "EN">RRDESC_S<cfelse>RRDESC_P</cfif>
 	</cfquery>
 
 	<cfset rows = []>

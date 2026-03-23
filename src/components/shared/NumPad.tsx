@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { W_LOGIN, W_NUMPAD } from "@/constants/widths";
@@ -32,28 +32,62 @@ export function NumPad({
 }: NumPadProps) {
   const large = size === "large";
   const [flashKey, setFlashKey] = useState<string | null>(null);
+  // Use refs to avoid stale closures when rapid clicks queue before React re-renders.
+  const selectedRef = useRef(true);
+  const [selectedDisplay, setSelectedDisplay] = useState(true);
+  const valueRef = useRef(value);
+  valueRef.current = value;
 
   const flash = (id: string) => {
     setFlashKey(id);
     setTimeout(() => setFlashKey(null), 150);
   };
 
+  const clearSelected = () => {
+    selectedRef.current = false;
+    setSelectedDisplay(false);
+  };
+
+  const emit = useCallback((next: string) => {
+    valueRef.current = next;
+    onChange(next);
+  }, [onChange]);
+
   const handleKey = useCallback(
     (key: string) => {
       flash(key);
+      const isSelected = selectedRef.current;
+      const cur = valueRef.current;
       if (key === "backspace") {
-        onChange(value.slice(0, -1));
+        if (isSelected) {
+          emit("");
+          clearSelected();
+        } else {
+          emit(cur.slice(0, -1));
+        }
       } else if (key === "clear") {
-        onChange("");
+        emit("");
+        clearSelected();
       } else if (key === ".") {
-        if (allowDecimal && !value.includes(".")) {
-          onChange(value + ".");
+        if (allowDecimal) {
+          if (isSelected) {
+            emit("0.");
+            clearSelected();
+          } else if (!cur.includes(".")) {
+            emit(cur + ".");
+          }
         }
       } else {
-        onChange(value + key);
+        // Digit key — if selected, replace entire value
+        if (isSelected) {
+          emit(key);
+          clearSelected();
+        } else {
+          emit(cur + key);
+        }
       }
     },
-    [value, onChange, allowDecimal]
+    [emit, allowDecimal]
   );
 
   // Listen for physical keyboard input
@@ -114,7 +148,13 @@ export function NumPad({
           )}
           style={{ justifyContent: displayValue ? "center" : "flex-end" }}
         >
-          {displayValue ?? (value || "0")}
+          {displayValue ?? (
+            selectedDisplay && value ? (
+              <span className="bg-primary/20 rounded px-1">{value}</span>
+            ) : (
+              value || "0"
+            )
+          )}
         </div>
       )}
 

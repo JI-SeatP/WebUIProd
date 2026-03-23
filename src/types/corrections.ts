@@ -5,8 +5,8 @@ export interface CorrectionData {
   NOM_CLIENT: string;
   PRODUIT_P: string;
   PRODUIT_S: string;
-  TJDEBUT: string;
-  TJFIN: string;
+  TJDEBUT: string; // ISO datetime-local format "yyyy-MM-ddTHH:mm"
+  TJFIN: string;   // ISO datetime-local format "yyyy-MM-ddTHH:mm"
   TJDUREE: number;
   EMNOM: string;
   EMNOIDENT: number;
@@ -17,12 +17,27 @@ export interface CorrectionData {
   OPERATION_P: string;
   OPERATION_S: string;
   MODEPROD_MPCODE: string;
+  MODEPROD: number;
   ENTREPF: number;
   QTE_BONNE: number;
   QTE_DEFAUT: number;
+  // Fields needed for backend submit
+  CNOMENCOP: number;
+  CNOMENCLATURE: number;
+  INVENTAIRE_C: number;
+  SMNOTRANS: string;
+  EMPLOYE_EMNO: string;
+  OPERATION_SEQ: number;
+  MACHINE_SEQ: number;
+  FMCODE: string;
+  EST_VCUT: number;
+  // Nested data
   defects: CorrectionDefect[];
   finishedProducts: CorrectionFinishedProduct[];
   materials: CorrectionMaterial[];
+  // Dropdown options
+  operations: CorrectionOperation[];
+  machines: CorrectionMachine[];
 }
 
 export interface CorrectionDefect {
@@ -54,6 +69,21 @@ export interface CorrectionMaterial {
   warehouse_S: string;
   originalQty: number;
   correctedQty: number;
+  niqte: number; // BOM ratio from cNOMENCLATURE — used by calculeQteSM
+}
+
+export interface CorrectionOperation {
+  OPSEQ: number;
+  OPCODE: string;
+  OPDESC_P: string;
+  OPDESC_S: string;
+}
+
+export interface CorrectionMachine {
+  MASEQ: number;
+  MACODE: string;
+  MADESC_P: string;
+  MADESC_S: string;
 }
 
 export interface NewDefectRow {
