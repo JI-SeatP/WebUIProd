@@ -69,10 +69,10 @@ export function ProductionTimeFilters({
           onChange={(v) => updateFilter("endDate", v)}
         />
       </div>
-      <div className="ml-[30px] mr-10 flex flex-col gap-1">
+      <div className="ml-[30px] mr-10 flex flex-col gap-1 flex-1 min-w-0">
         <Label className="text-sm text-muted-foreground">{t("actions.search")}</Label>
         <Input
-          className={`!h-12 ${W_TIME_TRACKING.productionFiltersSearch} !text-base`}
+          className="touch-target !text-base min-w-0 flex-1"
           placeholder={t("timeTracking.searchPlaceholder")}
           value={filters.searchText}
           onChange={(e) => updateFilter("searchText", e.target.value)}
@@ -111,7 +111,7 @@ export function ProductionTimeFilters({
             value={filters.showMode}
             onValueChange={(v) => updateFilter("showMode", v as "all" | "onlyQty")}
           >
-            <SelectTrigger className="w-[200px] !h-12">
+            <SelectTrigger className="w-[150px] !h-12">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

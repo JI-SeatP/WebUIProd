@@ -231,6 +231,8 @@
     "deleteEntry": "Supprimer",
     "modifyEntry": "Modifier",
     "totalHours": "Total heures",
+    "totalTime": "Temps total",
+    "totalQtyLabel": "Quantité totale bon / défectueux",
     "confirmDelete": "Confirmer la suppression?",
     "entryDeleted": "Entrée supprimée",
     "entryUpdated": "Entrée mise à jour",

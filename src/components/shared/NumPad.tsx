@@ -141,10 +141,10 @@ export function NumPad({
       {showDisplay && (
         <div
           className={cn(
-            "bg-muted rounded-md font-mono tabular-nums flex items-center",
+            "bg-muted rounded-md tabular-nums flex items-center",
             large
               ? "px-[18px] py-[13px] mb-[13px] text-[1.89875rem] min-h-[57px]"
-              : "px-4 py-3 mb-3 text-2xl min-h-[52px]"
+              : "px-4 py-3 mb-3 text-3xl min-h-[52px]"
           )}
           style={{ justifyContent: displayValue ? "center" : "flex-end" }}
         >

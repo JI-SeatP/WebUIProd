@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProductionTimeTab } from "./components/ProductionTimeTab";
 import { AddHoursTab } from "./components/AddHoursTab";
+import { AddHoursOldTab } from "./components/AddHoursOldTab";
 
 const tabTriggerClass =
   "touch-target text-base px-6 shadow-none after:hidden rounded-md border border-gray-300 bg-white text-gray-900 hover:bg-gray-100 data-[state=active]:border-2 data-[state=active]:border-black data-[state=active]:bg-[#aeffae] data-[state=active]:text-black data-[state=active]:hover:bg-[#aeffae]";
@@ -16,6 +17,9 @@ function TabsNav() {
       <TabsTrigger value="addHours" className={tabTriggerClass}>
         {t("timeTracking.addHours")}
       </TabsTrigger>
+      <TabsTrigger value="addHoursOld" className={tabTriggerClass}>
+        {t("timeTracking.addHours")} OLD
+      </TabsTrigger>
     </TabsList>
   );
 }
@@ -28,8 +32,12 @@ export function TimeTrackingPage() {
           <ProductionTimeTab tabsList={<TabsNav />} />
         </TabsContent>
 
-        <TabsContent value="addHours" className="flex-1 overflow-auto mt-0">
+        <TabsContent value="addHours" className="flex-1 min-h-0 mt-0 flex flex-col">
           <AddHoursTab tabsList={<TabsNav />} />
+        </TabsContent>
+
+        <TabsContent value="addHoursOld" className="flex-1 overflow-auto mt-0">
+          <AddHoursOldTab tabsList={<TabsNav />} />
         </TabsContent>
       </Tabs>
     </div>

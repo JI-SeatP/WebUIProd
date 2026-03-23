@@ -114,6 +114,7 @@ export function ProductionTimeTable({
   const navigate = useNavigate();
   const lang = state.language;
   const statusOptions = getStatusOptions(entries, lang);
+  const totalDuration = entries.reduce((sum, e) => sum + e.TJDUREE, 0);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -171,13 +172,13 @@ export function ProductionTimeTable({
             <TableBody>
               {entries.map((entry) => (
                 <TableRow key={entry.TJSEQ} className="h-[56px]">
-                  <TableCell className={`${W_TIME_TRACKING.date} text-base text-right pr-4`}>
+                  <TableCell className={`${W_TIME_TRACKING.date} text-lg text-right pr-4`}>
                     {formatDate(entry.TJDATE, showYear)}
                   </TableCell>
-                  <TableCell className={`${W_TIME_TRACKING.dateEnd} text-base text-left`}>
+                  <TableCell className={`${W_TIME_TRACKING.dateEnd} text-lg text-left`}>
                     {formatEndDate(entry.TJDEBUT, entry.TJFIN, showYear)}
                   </TableCell>
-                  <TableCell className={`${W_TIME_TRACKING.duration} text-base`}>
+                  <TableCell className={`${W_TIME_TRACKING.duration} text-lg`}>
                     {formatDuration(entry.TJDUREE)}
                   </TableCell>
                   <TableCell className={W_TIME_TRACKING.status}>
@@ -185,7 +186,7 @@ export function ProductionTimeTable({
                       value={String(entry.STATUT_CODE)}
                       onValueChange={(v) => onStatusChange(entry.TJSEQ, Number(v))}
                     >
-                      <SelectTrigger className={`h-10 text-base ${W_TIME_TRACKING.statusDropdown}`}>
+                      <SelectTrigger className={`h-10 text-lg ${W_TIME_TRACKING.statusDropdown}`}>
                         <span className="flex items-center gap-2">
                           <StatusDot mpcode={entry.MODEPROD_MPCODE} />
                           {statusOptions.find((o) => o.code === entry.STATUT_CODE)?.label ?? ""}
@@ -193,7 +194,7 @@ export function ProductionTimeTable({
                       </SelectTrigger>
                       <SelectContent>
                         {statusOptions.map((opt) => (
-                          <SelectItem key={opt.code} value={String(opt.code)} className="text-base">
+                          <SelectItem key={opt.code} value={String(opt.code)} className="text-lg">
                             <span className="flex items-center gap-2">
                               <StatusDot mpcode={opt.mpcode} />
                               {opt.label}
@@ -203,7 +204,7 @@ export function ProductionTimeTable({
                       </SelectContent>
                     </Select>
                   </TableCell>
-                  <TableCell className={`${W_TIME_TRACKING.order} text-base text-center font-bold`}>
+                  <TableCell className={`${W_TIME_TRACKING.order} text-lg text-center font-bold`}>
                     {entry.NO_PROD}
                   </TableCell>
                   <TableCell className={W_TIME_TRACKING.shift}>
@@ -214,14 +215,14 @@ export function ProductionTimeTable({
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className={`${W_TIME_TRACKING.employee} text-base`}>
+                  <TableCell className={`${W_TIME_TRACKING.employee} text-lg`}>
                     <div>{entry.DECODE} / {lang === "fr" ? entry.OPERATION_P : entry.OPERATION_S} / {entry.MACODE}</div>
                     <div className="text-muted-foreground text-sm">{entry.EMNO} - {entry.EMNOM}</div>
                   </TableCell>
-                  <TableCell className={`${W_TIME_TRACKING.qty} text-lg font-bold`}>
+                  <TableCell className={`${W_TIME_TRACKING.qty} text-xl font-bold`}>
                     {entry.QTE_BONNE || "-"}
                   </TableCell>
-                  <TableCell className={`${W_TIME_TRACKING.qty} text-lg font-bold text-red-600`}>
+                  <TableCell className={`${W_TIME_TRACKING.qty} text-xl font-bold text-red-600`}>
                     {entry.QTE_DEFAUT || "-"}
                   </TableCell>
                   <TableCell className={W_TIME_TRACKING.actions}>
@@ -253,18 +254,17 @@ export function ProductionTimeTable({
         <Table>
           <tfoot>
             <TableRow className="h-[56px] font-bold border-t">
-              <TableCell className={W_TIME_TRACKING.date} />
+              <TableCell className={`${W_TIME_TRACKING.date} text-lg font-bold uppercase text-right`}>{t("timeTracking.totalTime")}</TableCell>
               <TableCell className={W_TIME_TRACKING.dateEnd} />
-              <TableCell className={W_TIME_TRACKING.duration} />
+              <TableCell className={`${W_TIME_TRACKING.duration} text-lg`}>{formatDuration(totalDuration)}</TableCell>
               <TableCell className={W_TIME_TRACKING.status} />
               <TableCell className={W_TIME_TRACKING.order} />
               <TableCell className={W_TIME_TRACKING.shift} />
-              <TableCell className={W_TIME_TRACKING.employee}>
-                {t("timeTracking.totalHours")} ({totals.totalCount} {t("common.results")}
-                {entries.length < totals.totalCount && ` — ${entries.length} ${t("common.loaded")}`})
+              <TableCell className={`${W_TIME_TRACKING.employee} text-lg font-bold uppercase text-right`}>
+                {t("timeTracking.totalQtyLabel")}
               </TableCell>
-              <TableCell className={`${W_TIME_TRACKING.qty} text-lg`}>{totals.totalQtyGood}</TableCell>
-              <TableCell className={`${W_TIME_TRACKING.qty} text-lg text-red-600`}>{totals.totalQtyDefect}</TableCell>
+              <TableCell className={`${W_TIME_TRACKING.qty} text-xl`}>{totals.totalQtyGood}</TableCell>
+              <TableCell className={`${W_TIME_TRACKING.qty} text-xl text-red-600`}>{totals.totalQtyDefect}</TableCell>
               <TableCell className={W_TIME_TRACKING.actions} />
             </TableRow>
           </tfoot>

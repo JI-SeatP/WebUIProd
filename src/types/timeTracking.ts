@@ -67,6 +67,8 @@ export interface EmployeeHoursEntry {
   EHDUREE: number;
   DEPARTEMENT: number;
   DECODE: string;
+  DECODE_S?: string;
+  MACHINE: number;
   MACODE: string;
   MACHINE_P: string;
   MACHINE_S: string;

@@ -2,12 +2,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
 import {
-  Table,
   TableBody,
   TableCell,
   TableFooter,
-  TableHead,
-  TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -102,8 +99,8 @@ export function EmployeeHoursTable({
   const [effortNumpadOpen, setEffortNumpadOpen] = useState(false);
 
   useEffect(() => {
-    if (employeeCode && date) {
-      fetchHours(Number(employeeCode), date);
+    if (date) {
+      fetchHours(employeeCode ? Number(employeeCode) : 0, date);
     }
   }, [employeeCode, date, refreshTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -129,19 +126,12 @@ export function EmployeeHoursTable({
       startTime: formatTime(entry.EHDEBUT),
       endTime: formatTime(entry.EHFIN),
       department: entry.DEPARTEMENT,
-      machine: 0, // Will be resolved from MACODE
+      machine: entry.MACHINE ?? 0,
       effortRate: entry.EFFORTRATE,
     });
-    // Resolve machine MASEQ from MACODE once machines load
-    if (machines.length > 0) {
-      const found = machines.find((m) => m.MACODE === entry.MACODE);
-      if (found) {
-        setEditing((prev) => prev ? { ...prev, machine: found.MASEQ } : prev);
-      }
-    }
   };
 
-  // Resolve machine MASEQ when machines load after edit starts
+  // Fallback: resolve machine MASEQ from MACODE if MACHINE field not available
   useEffect(() => {
     if (editing && machines.length > 0 && editing.machine === 0) {
       const entry = entries.find((e) => e.EHSEQ === editing.ehseq);
@@ -199,7 +189,7 @@ export function EmployeeHoursTable({
     setTimeRaw("");
   };
 
-  if (!employeeCode) return null;
+  if (!date) return null;
 
   if (loading) {
     return (
@@ -214,24 +204,20 @@ export function EmployeeHoursTable({
 
   return (
     <>
-      <h3 className="text-base font-semibold mt-4 mb-2">
-        {t("timeTracking.employeeHoursTitle")}
-      </h3>
-      <div className="border rounded-md overflow-auto">
-        <Table>
-          <TableHeader>
-            <TableRow className="h-[56px]">
-              <TableHead className={W_EMPLOYEE_HOURS.startEnd}>{t("timeTracking.startTime")}</TableHead>
-              <TableHead className={W_EMPLOYEE_HOURS.startEnd}>{t("timeTracking.endTime")}</TableHead>
-              <TableHead className={W_EMPLOYEE_HOURS.duration}>{t("timeTracking.duration")}</TableHead>
-              <TableHead className={W_EMPLOYEE_HOURS.department}>{t("operation.department")}</TableHead>
-              <TableHead className={W_EMPLOYEE_HOURS.machine}>{t("operation.machine")}</TableHead>
-              <TableHead className={W_EMPLOYEE_HOURS.employee}>{t("timeTracking.employee")}</TableHead>
-              <TableHead className={W_EMPLOYEE_HOURS.effortRate}>{t("timeTracking.effortRate")}</TableHead>
-              <TableHead className={W_EMPLOYEE_HOURS.hoursWorked}>{t("timeTracking.hoursWorked")}</TableHead>
-              <TableHead className={W_EMPLOYEE_HOURS.actions}>{t("common.actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
+      <table className="w-full caption-bottom text-sm">
+        <thead className="sticky -top-1.5 z-30 bg-white">
+          <tr className="border-b h-[48px]">
+            <th className={`${W_EMPLOYEE_HOURS.startEnd} px-2 pt-1.5 text-left text-lg font-semibold align-middle whitespace-nowrap`}>{t("timeTracking.startTime")}</th>
+            <th className={`${W_EMPLOYEE_HOURS.startEnd} px-2 pt-1.5 text-left text-lg font-semibold align-middle whitespace-nowrap`}>{t("timeTracking.endTime")}</th>
+            <th className={`${W_EMPLOYEE_HOURS.duration} px-2 pt-1.5 text-left text-lg font-semibold align-middle whitespace-nowrap`}>{t("timeTracking.duration")}</th>
+            <th className={`${W_EMPLOYEE_HOURS.department} px-2 pt-1.5 text-left text-lg font-semibold align-middle whitespace-nowrap`}>{t("operation.department")}</th>
+            <th className={`${W_EMPLOYEE_HOURS.machine} px-2 pt-1.5 text-left text-lg font-semibold align-middle whitespace-nowrap`}>{t("operation.machine")}</th>
+            <th className={`${W_EMPLOYEE_HOURS.employee} px-2 pt-1.5 text-left text-lg font-semibold align-middle whitespace-nowrap`}>{t("timeTracking.employee")}</th>
+            <th className={`${W_EMPLOYEE_HOURS.effortRate} px-2 pt-1.5 text-left text-lg font-semibold align-middle whitespace-nowrap`}>{t("timeTracking.effortRate")}</th>
+            <th className={`${W_EMPLOYEE_HOURS.hoursWorked} px-2 pt-1.5 text-left text-lg font-semibold align-middle whitespace-nowrap`}>{t("timeTracking.hoursWorked")}</th>
+            <th className={`${W_EMPLOYEE_HOURS.actions} px-2 pt-1.5 text-left text-lg font-semibold align-middle whitespace-nowrap`}>{t("common.actions")}</th>
+          </tr>
+        </thead>
           <TableBody>
             {entries.length === 0 ? (
               <TableRow>
@@ -259,7 +245,7 @@ export function EmployeeHoursTable({
                             <Input
                               value={editing.startTime}
                               readOnly
-                              className="w-[90px] !text-base font-mono cursor-pointer"
+                              className="w-[90px] !text-base tabular-nums cursor-pointer"
                             />
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0" align="start">
@@ -294,7 +280,7 @@ export function EmployeeHoursTable({
                             <Input
                               value={editing.endTime}
                               readOnly
-                              className="w-[90px] !text-base font-mono cursor-pointer"
+                              className="w-[90px] !text-base tabular-nums cursor-pointer"
                             />
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0" align="start">
@@ -317,7 +303,7 @@ export function EmployeeHoursTable({
                         </Popover>
                       </TableCell>
                       {/* Duration (computed) */}
-                      <TableCell className="font-mono">
+                      <TableCell className="tabular-nums">
                         {editDuration > 0 ? formatDuration(editDuration) : "—"}
                       </TableCell>
                       {/* Department */}
@@ -376,7 +362,7 @@ export function EmployeeHoursTable({
                             <Input
                               value={`${editing.effortRate}%`}
                               readOnly
-                              className="w-[80px] !text-base font-mono cursor-pointer"
+                              className="w-[80px] !text-base tabular-nums cursor-pointer"
                             />
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0" align="start">
@@ -392,7 +378,7 @@ export function EmployeeHoursTable({
                         </Popover>
                       </TableCell>
                       {/* Hours Worked (computed) */}
-                      <TableCell className="font-mono font-bold">
+                      <TableCell className="tabular-nums font-bold">
                         {editHoursWorked > 0 ? formatDuration(editHoursWorked) : "—"}
                       </TableCell>
                       {/* Actions: Save / Cancel */}
@@ -422,14 +408,14 @@ export function EmployeeHoursTable({
 
                 return (
                   <TableRow key={entry.EHSEQ} className="h-[56px] text-lg">
-                    <TableCell className="font-mono">{formatTime(entry.EHDEBUT)}</TableCell>
-                    <TableCell className="font-mono">{formatTime(entry.EHFIN)}</TableCell>
-                    <TableCell className="font-mono">{formatDuration(entry.EHDUREE)}</TableCell>
+                    <TableCell className="tabular-nums">{formatTime(entry.EHDEBUT)}</TableCell>
+                    <TableCell className="tabular-nums">{formatTime(entry.EHFIN)}</TableCell>
+                    <TableCell className="tabular-nums">{formatDuration(entry.EHDUREE)}</TableCell>
                     <TableCell>{entry.DECODE}</TableCell>
                     <TableCell>{lang === "fr" ? entry.MACHINE_P : entry.MACHINE_S}</TableCell>
                     <TableCell>{entry.EMNOM}</TableCell>
-                    <TableCell className="font-mono">{entry.EFFORTRATE}%</TableCell>
-                    <TableCell className="font-mono font-bold">{formatDuration(entry.HOURSWORKED)}</TableCell>
+                    <TableCell className="tabular-nums">{entry.EFFORTRATE}%</TableCell>
+                    <TableCell className="tabular-nums font-bold">{formatDuration(entry.HOURSWORKED)}</TableCell>
                     <TableCell>
                       <div className="flex gap-1">
                         <Button
@@ -460,16 +446,15 @@ export function EmployeeHoursTable({
           {entries.length > 0 && (
             <TableFooter>
               <TableRow className="h-[56px] font-bold text-lg">
-                <TableCell colSpan={2}>{t("timeTracking.totalHours")}</TableCell>
-                <TableCell className="font-mono">{formatDuration(totals.totalDuration)}</TableCell>
+                <TableCell colSpan={2} className="uppercase">{t("timeTracking.totalHours")}</TableCell>
+                <TableCell className="tabular-nums">{formatDuration(totals.totalDuration)}</TableCell>
                 <TableCell colSpan={4} />
-                <TableCell className="font-mono">{formatDuration(totals.totalHoursWorked)}</TableCell>
+                <TableCell className="tabular-nums">{formatDuration(totals.totalHoursWorked)}</TableCell>
                 <TableCell />
               </TableRow>
             </TableFooter>
           )}
-        </Table>
-      </div>
+      </table>
 
       <ConfirmDialog
         open={deleteTarget !== null}

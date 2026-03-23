@@ -231,6 +231,8 @@
     "deleteEntry": "Delete",
     "modifyEntry": "Modify",
     "totalHours": "Total Hours",
+    "totalTime": "Total Time",
+    "totalQtyLabel": "Total Qty Good / Defective",
     "confirmDelete": "Confirm deletion?",
     "entryDeleted": "Entry deleted",
     "entryUpdated": "Entry updated",

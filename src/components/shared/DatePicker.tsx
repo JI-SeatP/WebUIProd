@@ -34,7 +34,7 @@ export function DatePicker({ value, onChange, className }: DatePickerProps) {
         <Button
           variant="outline"
           className={cn(
-            "touch-target w-[165px] justify-start text-left font-normal gap-2 text-[0.94rem] uppercase",
+            "touch-target w-[149px] justify-start text-left font-normal gap-2 text-[0.94rem] uppercase",
             !value && "text-muted-foreground",
             className
           )}

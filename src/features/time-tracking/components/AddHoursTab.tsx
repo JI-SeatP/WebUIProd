@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useAddHours } from "../hooks/useAddHours";
 import { EmployeeHoursTable } from "./EmployeeHoursTable";
 import { apiGet, apiPost } from "@/api/client";
+import { getEffortRate } from "@/api/timeTracking";
 import type { Employee } from "@/types/employee";
 import type { Department } from "@/types/department";
 import type { Machine } from "@/types/machine";
@@ -55,6 +56,7 @@ export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
       });
       if (res.success && res.data) {
         updateField("employeeName", res.data.EMNOM);
+        updateField("employeeSeq", String(res.data.EMSEQ));
       }
     } catch {
       // ignore
@@ -95,18 +97,18 @@ export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
   };
 
   return (
-  <div className="space-y-3">
-    <div className="overflow-hidden rounded-lg bg-white pb-[14px]">
+  <div className="flex flex-col flex-1 min-h-0 gap-3">
+    <div className="overflow-hidden rounded-lg bg-white pb-[14px] shrink-0">
       <div className="relative flex min-h-[52px] items-center justify-center bg-black px-3 py-2 rounded-t-lg">
         {form.employeeName ? (
-          <div className="pointer-events-none absolute left-5 top-1/2 z-10 max-w-[min(38%,260px)] -translate-y-1/2 truncate text-left">
+          <div className="pointer-events-none absolute left-5 top-1/2 z-10 max-w-[min(50%,400px)] -translate-y-1/2 truncate text-left">
             <span className="text-lg font-semibold text-white">{form.employeeName}</span>
           </div>
         ) : null}
         <div className="flex shrink-0 items-center">{tabsList}</div>
       </div>
       <div className="space-y-4 p-2 pt-4">
-      <div className="flex items-end gap-3 flex-wrap">
+      <div className="flex items-end gap-1.5 flex-wrap">
         {/* Employee Code */}
         <div className="flex flex-col gap-1 ml-5">
           <Label className="text-sm text-muted-foreground">{t("timeTracking.employeeCode")}</Label>
@@ -115,7 +117,7 @@ export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
               <Input
                 value={form.employeeCode}
                 readOnly
-                className="w-[96px] touch-target !text-lg font-mono cursor-pointer"
+                className="w-[90px] touch-target !text-lg tabular-nums cursor-pointer"
                 placeholder="0"
               />
             </PopoverTrigger>
@@ -130,7 +132,7 @@ export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
           </Popover>
         </div>
 
-        <div className="w-[19px]" />
+        <div className="w-[6px]" />
 
         {/* Date */}
         <div className="flex flex-col gap-1">
@@ -138,23 +140,27 @@ export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
           <DatePicker
             value={form.date}
             onChange={(v) => updateField("date", v)}
+            className="!w-[140px]"
           />
         </div>
 
-        {/* Department */}
+        {/* Department — onChange clears machine (replicates afficheMachines cascade in sp_js.cfm:546-555) */}
         <div className="flex flex-col gap-1">
           <Label className="text-sm text-muted-foreground">{t("operation.department")}</Label>
           <Select
             value={form.department || "__none__"}
-            onValueChange={(v) => updateField("department", v === "__none__" ? "" : v)}
+            onValueChange={(v) => {
+              updateField("department", v === "__none__" ? "" : v);
+              updateField("machine", "");
+            }}
           >
-            <SelectTrigger className="w-[220px] !h-12">
+            <SelectTrigger className="w-[176px] !h-12 !text-lg">
               <SelectValue placeholder={t("operation.department")} />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">—</SelectItem>
+            <SelectContent className="text-lg">
+              <SelectItem value="__none__" className="text-lg">—</SelectItem>
               {departments.map((d) => (
-                <SelectItem key={d.DESEQ} value={String(d.DESEQ)}>
+                <SelectItem key={d.DESEQ} value={String(d.DESEQ)} className="text-lg">
                   {d.DEDESCRIPTION_P}
                 </SelectItem>
               ))}
@@ -162,20 +168,33 @@ export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
           </Select>
         </div>
 
-        {/* Machine */}
+        {/* Machine — onChange cascades to fetch effort rate (replicates trouveEffort in sp_js.cfm:580-591) */}
         <div className="flex flex-col gap-1">
           <Label className="text-sm text-muted-foreground">{t("operation.machine")}</Label>
           <Select
             value={form.machine || "__none__"}
-            onValueChange={(v) => updateField("machine", v === "__none__" ? "" : v)}
+            onValueChange={async (v) => {
+              const machineVal = v === "__none__" ? "" : v;
+              updateField("machine", machineVal);
+              if (machineVal) {
+                try {
+                  const res = await getEffortRate(Number(machineVal));
+                  if (res.success && res.data) {
+                    updateField("effortRate", String(Math.round(res.data.effortRate)));
+                  }
+                } catch { /* ignore */ }
+              }
+            }}
           >
-            <SelectTrigger className="w-[250px] !h-12">
+            <SelectTrigger className="w-[250px] !h-12 !text-lg">
               <SelectValue placeholder={t("operation.machine")} />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">—</SelectItem>
-              {machines.map((m) => (
-                <SelectItem key={m.MASEQ} value={String(m.MASEQ)}>
+            <SelectContent className="text-lg">
+              <SelectItem value="__none__" className="text-lg">—</SelectItem>
+              {machines
+                .filter((m) => !form.department || m.DEPARTEMENT === Number(form.department))
+                .map((m) => (
+                <SelectItem key={m.MASEQ} value={String(m.MASEQ)} className="text-lg">
                   {m.MACODE} — {m.MADESC_P}
                 </SelectItem>
               ))}
@@ -188,20 +207,23 @@ export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
           <Label className="text-sm text-muted-foreground">{t("timeTracking.shift")}</Label>
           <Select
             value={form.shift}
-            onValueChange={(v) => updateField("shift", v)}
+            onValueChange={(v) => {
+              updateField("shift", v);
+              setRefreshTrigger((prev) => prev + 1);
+            }}
           >
-            <SelectTrigger className="w-[150px] !h-12">
+            <SelectTrigger className="w-[234px] !h-12 !text-lg uppercase">
               <SelectValue placeholder={t("timeTracking.shift")} />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1">{t("timeTracking.shift1")}</SelectItem>
-              <SelectItem value="2">{t("timeTracking.shift2")}</SelectItem>
-              <SelectItem value="3">{t("timeTracking.shift3")}</SelectItem>
+            <SelectContent className="text-lg uppercase">
+              <SelectItem value="1" className="text-lg uppercase">{t("timeTracking.shift1")}</SelectItem>
+              <SelectItem value="2" className="text-lg uppercase">{t("timeTracking.shift2")}</SelectItem>
+              <SelectItem value="3" className="text-lg uppercase">{t("timeTracking.shift3")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        <div className="w-[19px]" />
+        <div className="w-[6px]" />
 
         {/* Start Time */}
         <div className="flex flex-col gap-1">
@@ -211,7 +233,7 @@ export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
               <Input
                 value={form.startTime || "—"}
                 readOnly
-                className="w-[100px] touch-target !text-lg font-mono cursor-pointer"
+                className="w-[100px] touch-target !text-lg tabular-nums cursor-pointer"
               />
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
@@ -242,7 +264,7 @@ export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
               <Input
                 value={form.endTime || "—"}
                 readOnly
-                className="w-[100px] touch-target !text-lg font-mono cursor-pointer"
+                className="w-[100px] touch-target !text-lg tabular-nums cursor-pointer"
               />
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
@@ -273,7 +295,7 @@ export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
               <Input
                 value={form.effortRate}
                 readOnly
-                className="w-[80px] touch-target !text-lg font-mono cursor-pointer"
+                className="w-[80px] touch-target !text-lg tabular-nums cursor-pointer"
               />
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
@@ -287,21 +309,21 @@ export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
           </Popover>
         </div>
 
-        <div className="w-[19px]" />
+        <div className="w-[6px]" />
 
         {/* Hours Worked */}
         <div className="flex flex-col gap-1">
           <Label className="text-sm text-muted-foreground">{t("timeTracking.hoursWorked")}</Label>
-          <div className="touch-target flex items-center px-3 rounded-md border bg-muted font-mono text-lg font-medium">{hoursWorked.toFixed(2)}h</div>
+          <div className="w-[90px] touch-target flex items-center justify-center px-3 rounded-md border bg-muted tabular-nums text-lg font-medium">{hoursWorked.toFixed(2)}h</div>
         </div>
 
-        <div className="w-[19px]" />
+        <div className="w-[6px]" />
 
         {/* Submit */}
         <Button
-          className="touch-target gap-2 bg-green-600 hover:bg-green-700 text-white"
+          className="touch-target gap-2 bg-green-600 hover:bg-green-700 text-white w-[128px]"
           onClick={handleSubmit}
-          disabled={loading || !form.employeeCode || !form.startTime || !form.endTime}
+          disabled={loading || !form.employeeSeq || !form.startTime || !form.endTime}
         >
           {t("actions.submit")}
         </Button>
@@ -310,9 +332,9 @@ export function AddHoursTab({ tabsList }: { tabsList?: React.ReactNode }) {
 
     </div>
 
-    <div className="bg-white rounded-lg p-1.5">
+    <div className="bg-white rounded-lg p-1.5 flex-1 min-h-0 overflow-auto">
       <EmployeeHoursTable
-        employeeCode={form.employeeCode}
+        employeeCode={form.employeeSeq}
         date={form.date}
         refreshTrigger={refreshTrigger}
       />

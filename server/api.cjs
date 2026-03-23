@@ -3871,6 +3871,264 @@ app.post(
   })
 );
 
+// ─── GET /getEmployeeHours.cfm ───────────────────────────────────────────────
+// Exact replica of afficheTempsEmploye (operation.cfc:5560-5734)
+app.get(
+  "/getEmployeeHours.cfm",
+  handler(async (req, res) => {
+    const employeeCode = parseInt(req.query.employeeCode, 10) || 0;
+    const dateStr = req.query.date; // yyyy-mm-dd
+
+    // Create date range from single date (operation.cfc:5582-5584)
+    const dateDebut = `${dateStr} 00:00:00`;
+    const dateFin = new Date(dateStr);
+    dateFin.setDate(dateFin.getDate() + 1);
+    const dateFinStr = `${dateFin.toISOString().slice(0, 10)} 00:00:00`;
+
+    // Query EMPLOYE_HEURES on EXT datasource with AutoFAB_ view joins
+    // Employee filter is optional — if 0, return all entries for that date
+    const poolExt = await getPoolExt();
+    const request = poolExt
+      .request()
+      .input("dateDebut", sql.DateTime, new Date(dateDebut))
+      .input("dateFin", sql.DateTime, new Date(dateFinStr));
+
+    let employeeFilter = "";
+    if (employeeCode > 0) {
+      request.input("employe", sql.Int, employeeCode);
+      employeeFilter = "AND EH.EMPLOYE = @employe";
+    }
+
+    const result = await request.query(`
+        SELECT EH.EMPHSEQ, EH.EMPHDATEDEBUT, EH.EMPHDATEFIN, EH.DEPARTEMENT, EH.MACHINE,
+          EH.EMPLOYE, EH.EMPHEFFORT_HOMME,
+          D.deDescription_P, D.DeDescription_S,
+          M.MADESC_P, M.MADESC_S, M.MACODE,
+          E.EMNOM
+        FROM EMPLOYE_HEURES EH
+        INNER JOIN AutoFAB_DEPARTEMENT D ON EH.DEPARTEMENT = D.DESEQ
+        INNER JOIN AutoFAB_MACHINE M ON EH.MACHINE = M.MASEQ
+        INNER JOIN AutoFAB_EMPLOYE E ON EH.EMPLOYE = E.EMSEQ
+        WHERE 0=0
+        AND EH.EMPHDATEDEBUT >= @dateDebut
+        AND EH.EMPHDATEFIN <= @dateFin
+        ${employeeFilter}
+        ORDER BY EH.EMPHDATEDEBUT DESC, EH.EMPHDATEFIN DESC
+      `);
+
+    const data = result.recordset.map((r) => {
+      const start = new Date(r.EMPHDATEDEBUT);
+      const end = new Date(r.EMPHDATEFIN);
+      const durationMin = Math.round((end - start) / 60000);
+      return {
+        EHSEQ: r.EMPHSEQ,
+        EHDEBUT: r.EMPHDATEDEBUT ? r.EMPHDATEDEBUT.toISOString().replace("T", " ").slice(0, 19) : "",
+        EHFIN: r.EMPHDATEFIN ? r.EMPHDATEFIN.toISOString().replace("T", " ").slice(0, 19) : "",
+        EHDUREE: durationMin,
+        DEPARTEMENT: r.DEPARTEMENT,
+        DECODE: r.deDescription_P || "",
+        DECODE_S: r.DeDescription_S || "",
+        MACHINE: r.MACHINE,
+        MACODE: r.MACODE || "",
+        MACHINE_P: r.MADESC_P || "",
+        MACHINE_S: r.MADESC_S || "",
+        EMNOM: r.EMNOM || "",
+        EMNOIDENT: r.EMPLOYE,
+        EFFORTRATE: (r.EMPHEFFORT_HOMME || 0) * 100,
+        HOURSWORKED: Math.round(durationMin * (r.EMPHEFFORT_HOMME || 0)),
+      };
+    });
+
+    res.json({ success: true, data, message: "Employee hours retrieved" });
+  })
+);
+
+// ─── GET /getEffortRate.cfm ─────────────────────────────────────────────────
+// Exact replica of trouveEffort (operation.cfc:6026-6042)
+app.get(
+  "/getEffortRate.cfm",
+  handler(async (req, res) => {
+    const machine = parseInt(req.query.machine, 10) || 0;
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input("machine", sql.Int, machine)
+      .query("SELECT MAEFFORTHOMME FROM MACHINE WHERE MASEQ = @machine");
+
+    const effort = result.recordset.length > 0 ? (result.recordset[0].MAEFFORTHOMME || 0) * 100 : 0;
+    res.json({ success: true, data: { effortRate: effort }, message: "Effort rate retrieved" });
+  })
+);
+
+// ─── POST /addHours.cfm ─────────────────────────────────────────────────────
+// Exact replica of ajouteModifieTempsHomme with EMPHSEQ=0 (operation.cfc:5780-5847)
+app.post(
+  "/addHours.cfm",
+  handler(async (req, res) => {
+    const { employeeCode, date, startTime, endTime, department, machine, effortRate } = req.body;
+
+    // Construct full datetime strings
+    let dateDebut = `${date} ${startTime}`;
+    let dateFin = `${date} ${endTime}`;
+
+    // Handle overnight shifts
+    const startHour = parseInt(startTime.split(":")[0], 10);
+    const endHour = parseInt(endTime.split(":")[0], 10);
+    if (endHour < startHour || (endHour === 0 && startHour > 0)) {
+      const nextDay = new Date(date);
+      nextDay.setDate(nextDay.getDate() + 1);
+      dateFin = `${nextDay.toISOString().slice(0, 10)} ${endTime}`;
+    }
+
+    // Duration check
+    const diffMs = new Date(dateFin) - new Date(dateDebut);
+    const diffMin = diffMs / 60000;
+    if (diffMin <= 0) {
+      return res.json({ success: false, data: "", error: "Negative or zero duration" });
+    }
+
+    const effortDecimal = parseFloat((effortRate / 100).toFixed(2));
+    const poolExt = await getPoolExt();
+
+    // Duplicate check (operation.cfc:5799-5808)
+    const dupCheck = await poolExt
+      .request()
+      .input("dateDebut", sql.DateTime, new Date(dateDebut))
+      .input("dateFin", sql.DateTime, new Date(dateFin))
+      .input("dept", sql.Int, department)
+      .input("machine", sql.Int, machine)
+      .input("employe", sql.Int, employeeCode)
+      .input("effort", sql.Float, effortDecimal)
+      .query(`
+        SELECT EMPHSEQ FROM EMPLOYE_HEURES
+        WHERE EMPHDATEDEBUT = @dateDebut AND EMPHDATEFIN = @dateFin
+        AND DEPARTEMENT = @dept AND MACHINE = @machine AND EMPLOYE = @employe
+        AND EMPHEFFORT_HOMME = @effort
+      `);
+
+    if (dupCheck.recordset.length > 0) {
+      return res.json({ success: false, data: "", error: "Duplicate entry" });
+    }
+
+    // Insert (operation.cfc:5812-5825)
+    const insertResult = await poolExt
+      .request()
+      .input("dateDebut", sql.DateTime, new Date(dateDebut))
+      .input("dateFin", sql.DateTime, new Date(dateFin))
+      .input("effort", sql.Float, effortDecimal)
+      .input("dept", sql.Int, department)
+      .input("machine", sql.Int, machine)
+      .input("employe", sql.Int, employeeCode)
+      .query(`
+        SET NOCOUNT ON
+        INSERT INTO EMPLOYE_HEURES (EMPHDATEDEBUT, EMPHDATEFIN, EMPHEFFORT_HOMME, DEPARTEMENT, MACHINE, EMPLOYE)
+        VALUES (@dateDebut, @dateFin, @effort, @dept, @machine, @employe)
+        SELECT NouvTempsID = @@IDENTITY
+        SET NOCOUNT OFF
+      `);
+
+    const newId = insertResult.recordset[0]?.NouvTempsID;
+    res.json({ success: true, data: { EHSEQ: newId }, message: "Hours added" });
+  })
+);
+
+// ─── POST /updateEmployeeHours.cfm ──────────────────────────────────────────
+// Exact replica of ajouteModifieTempsHomme with EMPHSEQ>0 (operation.cfc:5780-5847)
+app.post(
+  "/updateEmployeeHours.cfm",
+  handler(async (req, res) => {
+    const { ehseq, startTime, endTime, department, machine, effortRate } = req.body;
+
+    const dateDebut = startTime.replace("T", " ");
+    const dateFin = endTime.replace("T", " ");
+
+    const diffMs = new Date(dateFin) - new Date(dateDebut);
+    const diffMin = diffMs / 60000;
+    if (diffMin <= 0) {
+      return res.json({ success: false, data: "", error: "Negative or zero duration" });
+    }
+
+    const effortDecimal = parseFloat((effortRate / 100).toFixed(2));
+    const poolExt = await getPoolExt();
+
+    // Get existing row for EMPLOYE value
+    const existing = await poolExt
+      .request()
+      .input("ehseq", sql.Int, ehseq)
+      .query("SELECT EMPHSEQ, EMPLOYE FROM EMPLOYE_HEURES WHERE EMPHSEQ = @ehseq");
+
+    if (existing.recordset.length === 0) {
+      return res.json({ success: false, data: "", error: "Record not found" });
+    }
+    const employe = existing.recordset[0].EMPLOYE;
+
+    // Duplicate check
+    const dupCheck = await poolExt
+      .request()
+      .input("dateDebut", sql.DateTime, new Date(dateDebut))
+      .input("dateFin", sql.DateTime, new Date(dateFin))
+      .input("dept", sql.Int, department)
+      .input("machine", sql.Int, machine)
+      .input("employe", sql.Int, employe)
+      .input("effort", sql.Float, effortDecimal)
+      .query(`
+        SELECT EMPHSEQ FROM EMPLOYE_HEURES
+        WHERE EMPHDATEDEBUT = @dateDebut AND EMPHDATEFIN = @dateFin
+        AND DEPARTEMENT = @dept AND MACHINE = @machine AND EMPLOYE = @employe
+        AND EMPHEFFORT_HOMME = @effort
+      `);
+
+    if (dupCheck.recordset.length > 0) {
+      return res.json({ success: false, data: "", error: "Duplicate entry" });
+    }
+
+    // Update (operation.cfc:5830-5838)
+    await poolExt
+      .request()
+      .input("dateDebut", sql.DateTime, new Date(dateDebut))
+      .input("dateFin", sql.DateTime, new Date(dateFin))
+      .input("effort", sql.Float, effortDecimal)
+      .input("dept", sql.Int, department)
+      .input("machine", sql.Int, machine)
+      .input("employe", sql.Int, employe)
+      .input("ehseq", sql.Int, ehseq)
+      .query(`
+        UPDATE EMPLOYE_HEURES
+        SET EMPHDATEDEBUT = @dateDebut, EMPHDATEFIN = @dateFin,
+            EMPHEFFORT_HOMME = @effort,
+            DEPARTEMENT = @dept, MACHINE = @machine, EMPLOYE = @employe
+        WHERE EMPHSEQ = @ehseq
+      `);
+
+    res.json({ success: true, data: { EHSEQ: ehseq }, message: "Hours updated" });
+  })
+);
+
+// ─── POST /deleteEmployeeHours.cfm ──────────────────────────────────────────
+// Exact replica of retireTempsHomme (operation.cfc:5736-5753)
+app.post(
+  "/deleteEmployeeHours.cfm",
+  handler(async (req, res) => {
+    const { ehseq } = req.body;
+    const poolExt = await getPoolExt();
+
+    // Verify exists (operation.cfc:5741-5744)
+    const existing = await poolExt
+      .request()
+      .input("ehseq", sql.Int, ehseq)
+      .query("SELECT EMPHSEQ FROM EMPLOYE_HEURES WHERE EMPHSEQ = @ehseq");
+
+    // Delete (operation.cfc:5746-5749)
+    await poolExt
+      .request()
+      .input("ehseq", sql.Int, ehseq)
+      .query("DELETE FROM EMPLOYE_HEURES WHERE EMPHSEQ = @ehseq");
+
+    const returnId = existing.recordset.length > 0 ? existing.recordset[0].EMPHSEQ : ehseq;
+    res.json({ success: true, data: { EHSEQ: returnId }, message: "Entry deleted" });
+  })
+);
+
 // ─── Start server ────────────────────────────────────────────────────────────
 const PORT = 3001;
 app.listen(PORT, () => {

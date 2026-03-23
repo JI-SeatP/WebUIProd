@@ -13,7 +13,7 @@ export function useEmployeeHours() {
     async (employeeCode: number, date: string) => {
       setLoading(true);
       try {
-        const res = await getEmployeeHours({ employeeCode, date });
+        const res = await getEmployeeHours({ employeeCode: employeeCode || undefined, date });
         if (res.success) {
           setEntries(res.data);
         } else {

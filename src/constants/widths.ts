@@ -176,7 +176,7 @@ export const W_TIME_TRACKING = {
   productionFiltersMachineTriggerPx: 240,
   productionFiltersDeptPopover: "w-[360px]",
   productionFiltersMachinePopover: "w-[396px]",
-  productionFiltersSearchButtonMin: "min-w-[10.8rem]",
+  productionFiltersSearchButtonMin: "min-w-fit",
 } as const;
 
 // ───────────────────────────────────────
@@ -200,7 +200,7 @@ export const W_EMPLOYEE_HOURS = {
   startEnd:    "w-[150px]",
   duration:    "w-[90px]",
   department:  "w-[120px]",
-  machine:     "w-[120px]",
+  machine:     "w-[25%]",
   employee:    "w-[160px]",
   effortRate:  "w-[90px]",
   hoursWorked: "w-[110px]",

@@ -51,11 +51,11 @@ export function updateTimeEntry(payload: UpdateTimeEntryPayload) {
 }
 
 export function getEmployeeHours(params: {
-  employeeCode: number;
+  employeeCode?: number;
   date: string;
 }) {
   const query = new URLSearchParams();
-  query.set("employeeCode", String(params.employeeCode));
+  if (params.employeeCode) query.set("employeeCode", String(params.employeeCode));
   query.set("date", params.date);
   return apiGet<EmployeeHoursEntry[]>(`getEmployeeHours.cfm?${query}`);
 }
@@ -73,6 +73,12 @@ export function updateEmployeeHours(payload: {
   effortRate: number;
 }) {
   return apiPost<{ EHSEQ: number }>("updateEmployeeHours.cfm", payload);
+}
+
+export function getEffortRate(machine: number) {
+  const query = new URLSearchParams();
+  query.set("machine", String(machine));
+  return apiGet<{ effortRate: number }>(`getEffortRate.cfm?${query}`);
 }
 
 export function searchTimeEntries(params: {
