@@ -38,7 +38,7 @@ export function WorkOrderListPage() {
     <div className="flex flex-col h-full gap-3">
       {/* Toolbar */}
       <div className="flex items-center gap-3 shrink-0 bg-white rounded-lg p-2">
-        <h1 className="text-2xl font-bold shrink-0">{t("order.title")}</h1>
+        <h1 className="text-2xl font-bold shrink-0 ml-3">{t("order.title")}</h1>
         <span className="text-muted-foreground text-base shrink-0">
           ({orders.length})
         </span>

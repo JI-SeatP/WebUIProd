@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { apiGet } from "@/api/client";
 import { ProductionTimeFilters } from "./ProductionTimeFilters";
 import { ProductionTimeTable } from "./ProductionTimeTable";
@@ -55,6 +55,10 @@ export function ProductionTimeTab({ tabsList }: { tabsList?: React.ReactNode }) 
     fetchEntries(filters);
   };
 
+  const handleShiftSearch = (newFilters: TimeTrackingFilters) => {
+    fetchEntries(newFilters);
+  };
+
   // Parse search terms: split on space or + for AND matching
   const searchTerms = useMemo(() => {
     const raw = filters.searchText.trim().toLowerCase();
@@ -88,12 +92,16 @@ export function ProductionTimeTab({ tabsList }: { tabsList?: React.ReactNode }) 
     ? new Set(machineOptions.map((o) => o.value).filter((v) => !activeMachines.has(v)))
     : undefined;
 
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const toggleFullscreen = useCallback(() => setIsFullscreen((v) => !v), []);
+
   return (
     <div className="flex flex-col gap-3 flex-1 min-h-0">
       <ProductionTimeFilters
         filters={filters}
         onFiltersChange={setFilters}
         onSearch={handleSearch}
+        onShiftSearch={handleShiftSearch}
         tabsList={tabsList}
         deptOptions={deptOptions}
         machineOptions={machineOptions}
@@ -103,7 +111,11 @@ export function ProductionTimeTab({ tabsList }: { tabsList?: React.ReactNode }) 
       {loading ? (
         <LoadingSpinner />
       ) : (
-        <div className="bg-white rounded-lg p-1.5 flex-1 min-h-0 flex flex-col">
+        <div className={
+          isFullscreen
+            ? "fixed inset-0 z-50 bg-white p-1.5 flex flex-col"
+            : "bg-white rounded-lg p-1.5 flex-1 min-h-0 flex flex-col"
+        }>
           <ProductionTimeTable
             entries={filteredEntries}
             totals={totals}
@@ -112,6 +124,8 @@ export function ProductionTimeTab({ tabsList }: { tabsList?: React.ReactNode }) 
             onLoadMore={fetchMore}
             onStatusChange={changeStatus}
             showYear={filters.startDate.slice(0, 4) !== filters.endDate.slice(0, 4)}
+            isFullscreen={isFullscreen}
+            onToggleFullscreen={toggleFullscreen}
           />
         </div>
       )}

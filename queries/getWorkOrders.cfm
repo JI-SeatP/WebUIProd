@@ -15,8 +15,10 @@
 	<!--- Set datasources based on environment ----->
 	<cfset isProduction = (GetEnvironmentVariable("CF_ENVIRONMENT", "test") EQ "production")>
 	<cfif isProduction>
+		<cfset datasourcePrimary = "AF_SEATPLY">
 		<cfset datasourceExt = "AF_SEATPLY_EXT">
 	<cfelse>
+		<cfset datasourcePrimary = "TS_SEATPL">
 		<cfset datasourceExt = "TS_SEATPL_EXT">
 	</cfif>
 
@@ -38,7 +40,8 @@
 			v.NO_PROD,
 			v.NOM_CLIENT,
 			v.CODE_CLIENT,
-			v.CONOPO,
+			VBE.CONOPO,
+			v.TREPOSTER_TRANSFERT,
 			v.OPERATION,
 			v.OPERATION_P,
 			v.OPERATION_S,
@@ -91,7 +94,7 @@
 			v.ENTREPOT_P,
 			v.ENTREPOT_S,
 			<!--- Detail quantities from VSP_BonTravail_Entete --->
-			VBE.DCQTE_A_FAB AS DCQTE_A_FAB,
+			VBE.DCQTE_A_FAB AS VBE_DCQTE_A_FAB,
 			VBE.DCQTE_A_PRESSER,
 			VBE.DCQTE_PRESSED,
 			VBE.DCQTE_PENDING_TO_PRESS,
@@ -101,12 +104,17 @@
 			VBE.PCS_PER_PANEL,
 			VBE.SHARE_PRESSING,
 			VBE.PAGE_COMPO,
-			VBE.Panel_NiSeq
+			VBE.Panel_NiSeq,
+			<!--- V-CUT fields from the view --->
+			v.VCUT_INNOINV,
+			v.VCUT_INDESC1,
+			v.VCUT_INDESC2
 		FROM vEcransProduction v
 		INNER JOIN AUTOFAB_DET_COMM dc ON v.TRANSAC = dc.TRANSAC
 		LEFT OUTER JOIN dbo.VSP_BonTravail_Entete AS VBE ON VBE.TRANSAC = v.TRANSAC
 		WHERE v.OPERATION <> 'FINSH'
 		AND (dc.DCPRIORITE < 100000 OR v.DATE_DEBUT_PREVU IS NOT NULL)
+		AND v.MACODE <> 'PRESS_NS'
 
 		<!--- Department filter --->
 		<cfif Val(url.departement) NEQ 0>
@@ -166,6 +174,7 @@
 		<cfset row["NOM_CLIENT"] = qWorkOrders.NOM_CLIENT>
 		<cfset row["CODE_CLIENT"] = qWorkOrders.CODE_CLIENT>
 		<cfset row["CONOPO"] = qWorkOrders.CONOPO>
+		<cfset row["TREPOSTER_TRANSFERT"] = qWorkOrders.TREPOSTER_TRANSFERT>
 		<cfset row["OPERATION"] = qWorkOrders.OPERATION>
 		<cfset row["OPERATION_P"] = qWorkOrders.OPERATION_P>
 		<cfset row["OPERATION_S"] = qWorkOrders.OPERATION_S>
@@ -218,7 +227,7 @@
 		<cfset row["ENTREPOT_P"] = qWorkOrders.ENTREPOT_P>
 		<cfset row["ENTREPOT_S"] = qWorkOrders.ENTREPOT_S>
 		<!--- Detail quantities --->
-		<cfset row["DCQTE_A_FAB"] = qWorkOrders.DCQTE_A_FAB>
+		<cfset row["VBE_DCQTE_A_FAB"] = qWorkOrders.VBE_DCQTE_A_FAB>
 		<cfset row["DCQTE_A_PRESSER"] = qWorkOrders.DCQTE_A_PRESSER>
 		<cfset row["DCQTE_PRESSED"] = qWorkOrders.DCQTE_PRESSED>
 		<cfset row["DCQTE_PENDING_TO_PRESS"] = qWorkOrders.DCQTE_PENDING_TO_PRESS>
@@ -229,12 +238,83 @@
 		<cfset row["SHARE_PRESSING"] = qWorkOrders.SHARE_PRESSING>
 		<cfset row["PAGE_COMPO"] = qWorkOrders.PAGE_COMPO>
 		<cfset row["Panel_NiSeq"] = qWorkOrders.Panel_NiSeq>
+		<!--- V-CUT fields --->
+		<cfset row["VCUT_INNOINV"] = qWorkOrders.VCUT_INNOINV>
+		<cfset row["VCUT_INDESC1"] = qWorkOrders.VCUT_INDESC1>
+		<cfset row["VCUT_INDESC2"] = qWorkOrders.VCUT_INDESC2>
 		<cfset ArrayAppend(rows, row)>
 	</cfloop>
 
+	<!--- V-CUT: compute big sheet qty used per TRANSAC (matches old trouveQteBigSheets query) --->
+	<cfset vcutTransacs = []>
+	<cfloop array="#rows#" index="r">
+		<cfif (r["NO_INVENTAIRE"] EQ "VCUT" OR r["PRODUIT_CODE"] EQ "VCUT") AND NOT ArrayFind(vcutTransacs, r["TRANSAC"])>
+			<cfset ArrayAppend(vcutTransacs, r["TRANSAC"])>
+		</cfif>
+	</cfloop>
+	<cfif ArrayLen(vcutTransacs) GT 0>
+		<cfset vcutMap = StructNew()>
+		<cfloop array="#vcutTransacs#" index="tr">
+			<cfquery name="qBigSheet" datasource="#datasourcePrimary#">
+				SELECT SUM(det.DTRQTE) AS TotalBigSheet
+				FROM DET_TRANS det
+				INNER JOIN TRANSAC t ON det.TRANSAC = t.TRSEQ
+				WHERE t.TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(tr)#">
+				AND t.TRNO_EQUATE = 7
+			</cfquery>
+			<cfset vcutMap[tr] = Val(qBigSheet.TotalBigSheet)>
+		</cfloop>
+		<!--- Inject VCUT_QTE_UTILISEE into matching rows --->
+		<cfloop from="1" to="#ArrayLen(rows)#" index="i">
+			<cfif StructKeyExists(vcutMap, rows[i]["TRANSAC"])>
+				<cfset rows[i]["VCUT_QTE_UTILISEE"] = vcutMap[rows[i]["TRANSAC"]]>
+			</cfif>
+		</cfloop>
+	</cfif>
+
+	<!--- Big sheet inventory info per TRANSAC (matches old trouveInfoBIGSHEET query) --->
+	<cfif ArrayLen(vcutTransacs) GT 0>
+		<cfloop array="#vcutTransacs#" index="tr">
+			<cfquery name="qBigSheetInfo" datasource="#datasourcePrimary#">
+				SELECT TOP 1 INVENTAIRE, INVENTAIRE_INNOINV, INVENTAIRE_INDESC1, INVENTAIRE_INDESC2
+				FROM cNOMENCOP
+				WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(tr)#">
+				AND INVENTAIRE_P NOT IN (SELECT INSEQ FROM INVENTAIRE WHERE INNOINV='VCUT')
+			</cfquery>
+			<cfif qBigSheetInfo.RecordCount GT 0>
+				<cfloop from="1" to="#ArrayLen(rows)#" index="i">
+					<cfif rows[i]["TRANSAC"] EQ tr>
+						<cfset rows[i]["BIGSHEET_INNOINV"] = qBigSheetInfo.INVENTAIRE_INNOINV>
+						<cfset rows[i]["BIGSHEET_INDESC1"] = qBigSheetInfo.INVENTAIRE_INDESC1>
+						<cfset rows[i]["BIGSHEET_INDESC2"] = qBigSheetInfo.INVENTAIRE_INDESC2>
+					</cfif>
+				</cfloop>
+			</cfif>
+		</cfloop>
+	</cfif>
+
+	<!--- Row grouping: replicate old ColdFusion <cfloop GROUP="..."> behavior.
+	      Dept 9 (Sanding) and 11: group by NO_PROD (one row per order).
+	      All other depts: group by NOPSEQ (one row per nomenclature operation).
+	      Keeps the first row encountered per group key (query is already sorted by DCPRIORITE, NO_PROD). --->
+	<cfset groupedRows = []>
+	<cfset seenKeys = StructNew()>
+	<cfloop from="1" to="#ArrayLen(rows)#" index="i">
+		<cfset r = rows[i]>
+		<cfif Val(r["DESEQ"]) EQ 9 OR Val(r["DESEQ"]) EQ 11>
+			<cfset groupKey = r["NO_PROD"]>
+		<cfelse>
+			<cfset groupKey = r["NOPSEQ"]>
+		</cfif>
+		<cfif NOT StructKeyExists(seenKeys, groupKey)>
+			<cfset seenKeys[groupKey] = true>
+			<cfset ArrayAppend(groupedRows, r)>
+		</cfif>
+	</cfloop>
+
 	<cfset response["success"] = true>
-	<cfset response["data"] = rows>
-	<cfset response["message"] = "Retrieved " & ArrayLen(rows) & " work orders">
+	<cfset response["data"] = groupedRows>
+	<cfset response["message"] = "Retrieved " & ArrayLen(groupedRows) & " work orders">
 
 	<cfcatch type="any">
 		<cfset response = StructNew()>

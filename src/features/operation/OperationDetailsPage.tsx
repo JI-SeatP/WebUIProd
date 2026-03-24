@@ -15,6 +15,7 @@ import { StatusActionBar } from "./components/StatusActionBar";
 import { PpapAlert } from "./components/PpapAlert";
 import { DoNotPressAlert } from "./components/DoNotPressAlert";
 import { useOperation } from "./hooks/useOperation";
+import { useVcutData } from "./hooks/useVcutData";
 import { apiGet } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,6 +31,10 @@ export function OperationDetailsPage() {
   const { t } = useTranslation();
   const { operation, loading, error, refetch } = useOperation(transac!, copmachine!);
   const [localStatus, setLocalStatus] = useState<string | null>(null);
+
+  // VCUT-specific data — fetched only when operation is VCUT
+  const isVcutCheck = operation?.NO_INVENTAIRE === "VCUT" || operation?.PRODUIT_CODE === "VCUT" || (operation?.FMCODE ?? "") === "TableSaw";
+  const { vcutData, loading: vcutLoading } = useVcutData(isVcutCheck ? Number(transac) : null);
 
   // Register with global refresh so the Header refresh button re-fetches this page's data
   useRegisterRefresh(refetch);
@@ -228,7 +233,7 @@ export function OperationDetailsPage() {
     (state.language === "fr" ? fr : en) ?? fr ?? "—";
   const isPress = fmcode.toUpperCase().includes("PRESS");
   const isCnc = fmcode.toUpperCase().includes("CNC") || fmcode.toUpperCase().includes("SAND");
-  const isVcut = operation.NO_INVENTAIRE === "VCUT" || fmcode === "TableSaw";
+  const isVcut = operation.NO_INVENTAIRE === "VCUT" || operation.PRODUIT_CODE === "VCUT" || fmcode === "TableSaw";
 
   // PPAP and DoNotPress flags — will be populated from extended operation data
   const hasPpap = false;
@@ -242,12 +247,12 @@ export function OperationDetailsPage() {
         {hasDoNotPress && <DoNotPressAlert />}
 
         {/* Header */}
-        <OperationHeader operation={operation} language={state.language} statusCode={localStatus ?? operation.STATUT_CODE} />
+        <OperationHeader operation={operation} language={state.language} statusCode={localStatus ?? operation.STATUT_CODE} isVcut={isVcut} vcutData={vcutData} />
 
         {/* All cards (left 50%) + technical drawing (right 50%) */}
         <div className="flex gap-2 items-stretch">
-          {/* Left 50%: machine overview + operation-specific detail cards */}
-          <div className="w-1/2 min-w-0 flex flex-col gap-2">
+          {/* Left: machine overview + operation-specific detail cards (full width for VCUT) */}
+          <div className={cn(isVcut ? "w-full" : "w-1/2", "min-w-0 flex flex-col gap-2")}>
             {/* Machine overview: materials (left) + next step (CNC only, centre) + machine info panel (right) */}
             <div className="flex gap-2 items-stretch">
               {(isPress || isCnc) && (
@@ -302,9 +307,11 @@ export function OperationDetailsPage() {
                 );
               })()}
 
-              <div className={cn("flex-1", W_PRESS_SECTION.machineInfoMin)}>
-                <MachineInfoPanel operation={operation} />
-              </div>
+              {!isVcut && (
+                <div className={cn("flex-1", W_PRESS_SECTION.machineInfoMin)}>
+                  <MachineInfoPanel operation={operation} />
+                </div>
+              )}
             </div>
 
             {/* Operation-specific detail cards */}
@@ -379,7 +386,7 @@ export function OperationDetailsPage() {
                 </div>
               </>
             )}
-            {isVcut && <VcutInfoSection operation={operation} language={state.language} />}
+            {isVcut && <VcutInfoSection vcutData={vcutData} language={state.language} loading={vcutLoading} />}
             {!isPress && !isCnc && !isVcut && (
               <div className="text-muted-foreground text-center py-8">
                 Operation type: {fmcode}
@@ -387,19 +394,21 @@ export function OperationDetailsPage() {
             )}
           </div>
 
-          {/* Right 50%: technical drawing or step instructions */}
-          <div className={W_DRAWING_PANEL.container}>
-            {activeStep ? (
-              <StepDetailsViewer
-                step={activeStep}
-                stepNumber={activeStepNumber}
-                language={state.language}
-                onClose={() => setActiveStep(null)}
-              />
-            ) : (
-              <DrawingViewer images={drawingUrls} />
-            )}
-          </div>
+          {/* Right 50%: technical drawing or step instructions (hidden for VCUT) */}
+          {!isVcut && (
+            <div className={W_DRAWING_PANEL.container}>
+              {activeStep ? (
+                <StepDetailsViewer
+                  step={activeStep}
+                  stepNumber={activeStepNumber}
+                  language={state.language}
+                  onClose={() => setActiveStep(null)}
+                />
+              ) : (
+                <DrawingViewer images={drawingUrls} />
+              )}
+            </div>
+          )}
         </div>
       </div>
 

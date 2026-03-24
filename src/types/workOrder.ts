@@ -62,6 +62,16 @@ export interface WorkOrder {
   ENTREPOT_CODE: string | null;
   ENTREPOT_P: string | null;
   ENTREPOT_S: string | null;
+  TREPOSTER_TRANSFERT: number | null;
+  // V-CUT fields
+  VCUT_INNOINV: string | null;
+  VCUT_INDESC1: string | null;
+  VCUT_INDESC2: string | null;
+  VCUT_QTE_UTILISEE: number | null;
+  // Big sheet inventory info
+  BIGSHEET_INNOINV: string | null;
+  BIGSHEET_INDESC1: string | null;
+  BIGSHEET_INDESC2: string | null;
 }
 
 export interface StepImage {
@@ -143,4 +153,46 @@ export interface WorkOrderDetail {
   PANEL_SOURCE: string | null;
   PV_PANEAU: string | null;
   steps: OperationStep[];
+}
+
+export interface VcutComponent {
+  NISEQ: number;
+  NIQTE: number;
+  INVENTAIRE_M: number;
+  INVENTAIRE_M_INNOINV: string;
+  INDESC1: string;
+  INDESC2: string;
+  NIVALEUR_CHAR1: string | null;
+  QTY_REQ: number;
+  NILONGUEUR: number;
+  NILARGEUR: number;
+  totalProd: number;
+  totalDefect: number;
+  totalBigSheet: number;
+}
+
+export interface VcutContainer {
+  CONTENANT_CON_NUMERO: string;
+  DTRQTE: number;
+  ENTREPOT_ENCODE: string;
+  ENDESC_P: string;
+  ENDESC_S: string;
+  SPECIE: string | null;
+  GRADE: string | null;
+  THICKNESS: string | null;
+  CUT: string | null;
+  LONGUEUR: number | null;
+  LARGEUR: number | null;
+}
+
+export interface VcutData {
+  components: VcutComponent[];
+  containers: VcutContainer[];
+  qteForcee: number;
+  qteUtilisee: number;
+  bigsheetDesc_P: string | null;
+  bigsheetDesc_S: string | null;
+  bigsheetCode: string | null;
+  vcutDesc_P: string | null;
+  vcutDesc_S: string | null;
 }

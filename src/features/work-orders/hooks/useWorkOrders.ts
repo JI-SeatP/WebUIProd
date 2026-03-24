@@ -114,8 +114,7 @@ export function useWorkOrders(filters: WorkOrderFilters) {
       result = result.filter((wo) => wo.FMCODE?.toUpperCase().includes(opType));
     }
 
-    // Filter out "0 Pressing not scheduled" machine (MACODE = "PRESS_NS")
-    result = result.filter((wo) => wo.MACODE !== "PRESS_NS");
+    // PRESS_NS exclusion is now handled server-side in getWorkOrders.cfm
 
     // Sort
     result.sort((a, b) => {

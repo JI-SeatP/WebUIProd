@@ -88,6 +88,7 @@ app.get(
     let where = `
       WHERE v.OPERATION <> 'FINSH'
       AND (dc.DCPRIORITE < 100000 OR v.DATE_DEBUT_PREVU IS NOT NULL)
+      AND v.MACODE <> 'PRESS_NS'
     `;
 
     if (parseInt(departement)) {
@@ -145,7 +146,9 @@ app.get(
     const result = await request.query(`
       SELECT DISTINCT
         v.TRANSAC, v.COPMACHINE, v.NOPSEQ, v.TJSEQ,
-        v.NO_PROD, v.NOM_CLIENT, v.CODE_CLIENT, v.CONOPO,
+        v.NO_PROD, v.NOM_CLIENT, v.CODE_CLIENT,
+        VBE.CONOPO,
+        v.TREPOSTER_TRANSFERT,
         v.OPERATION, v.OPERATION_P, v.OPERATION_S, v.OPERATION_SEQ,
         v.MACHINE, v.MACODE, v.MACHINE_P, v.MACHINE_S,
         v.DEPARTEMENT, v.DESEQ, v.DECODE, v.DeDescription_P, v.DeDescription_S,
@@ -164,7 +167,8 @@ app.get(
         VBE.DCQTE_A_PRESSER, VBE.DCQTE_PRESSED,
         VBE.DCQTE_PENDING_TO_PRESS, VBE.DCQTE_PENDING_TO_MACHINE,
         VBE.DCQTE_FINISHED, VBE.DCQTE_REJET,
-        VBE.PCS_PER_PANEL, VBE.SHARE_PRESSING, VBE.PAGE_COMPO, VBE.Panel_NiSeq
+        VBE.PCS_PER_PANEL, VBE.SHARE_PRESSING, VBE.PAGE_COMPO, VBE.Panel_NiSeq,
+        v.VCUT_INNOINV, v.VCUT_INDESC1, v.VCUT_INDESC2
       FROM vEcransProduction v
       INNER JOIN AUTOFAB_DET_COMM dc ON v.TRANSAC = dc.TRANSAC
       LEFT OUTER JOIN dbo.VSP_BonTravail_Entete AS VBE ON VBE.TRANSAC = v.TRANSAC
@@ -172,10 +176,207 @@ app.get(
       ORDER BY dc.DCPRIORITE, v.NO_PROD, v.DATE_DEBUT_PREVU
     `);
 
+    let rows = result.recordset;
+
+    // V-CUT enrichment: compute big sheet qty used per TRANSAC
+    const vcutTransacs = [...new Set(
+      rows
+        .filter((r) => r.NO_INVENTAIRE === "VCUT" || r.PRODUIT_CODE === "VCUT")
+        .map((r) => r.TRANSAC)
+    )];
+
+    if (vcutTransacs.length > 0) {
+      const poolPrimary = await getPool();
+
+      for (const tr of vcutTransacs) {
+        // Big sheet qty used
+        const bsResult = await poolPrimary.request()
+          .input("tr", sql.Int, tr)
+          .query(`
+            SELECT SUM(det.DTRQTE) AS TotalBigSheet
+            FROM DET_TRANS det
+            INNER JOIN TRANSAC t ON det.TRANSAC = t.TRSEQ
+            WHERE t.TRANSAC = @tr AND t.TRNO_EQUATE = 7
+          `);
+        const totalBigSheet = bsResult.recordset[0]?.TotalBigSheet || 0;
+
+        // Big sheet inventory info
+        const bsInfo = await poolPrimary.request()
+          .input("tr", sql.Int, tr)
+          .query(`
+            SELECT TOP 1 INVENTAIRE_INNOINV, INVENTAIRE_INDESC1, INVENTAIRE_INDESC2
+            FROM cNOMENCOP
+            WHERE TRANSAC = @tr
+            AND INVENTAIRE_P NOT IN (SELECT INSEQ FROM INVENTAIRE WHERE INNOINV='VCUT')
+          `);
+        const info = bsInfo.recordset[0];
+
+        // Inject into matching rows
+        for (const row of rows) {
+          if (row.TRANSAC === tr) {
+            row.VCUT_QTE_UTILISEE = totalBigSheet;
+            if (info) {
+              row.BIGSHEET_INNOINV = info.INVENTAIRE_INNOINV;
+              row.BIGSHEET_INDESC1 = info.INVENTAIRE_INDESC1;
+              row.BIGSHEET_INDESC2 = info.INVENTAIRE_INDESC2;
+            }
+          }
+        }
+      }
+    }
+
+    // Row grouping: replicate old ColdFusion <cfloop GROUP="..."> behavior
+    // Dept 9 & 11: group by NO_PROD; others: group by NOPSEQ
+    const seenKeys = new Set();
+    rows = rows.filter((r) => {
+      const groupKey = (r.DESEQ === 9 || r.DESEQ === 11)
+        ? r.NO_PROD
+        : String(r.NOPSEQ);
+      if (seenKeys.has(groupKey)) return false;
+      seenKeys.add(groupKey);
+      return true;
+    });
+
     res.json({
       success: true,
-      data: result.recordset,
-      message: `Retrieved ${result.recordset.length} work orders`,
+      data: rows,
+      message: `Retrieved ${rows.length} work orders`,
+    });
+  })
+);
+
+// ─── GET /getVcutData.cfm ────────────────────────────────────────────────────
+// Returns VCUT-specific data: components, containers, quantities, big sheet info.
+// Replicates old trouveUnTableauVCut + trouveContenantsVCut + VCUT info queries.
+app.get(
+  "/getVcutData.cfm",
+  handler(async (req, res) => {
+    const transac = parseInt(req.query.transac) || 0;
+    if (!transac) {
+      return res.json({ success: false, error: "transac parameter is required" });
+    }
+
+    const pool = await getPool();
+    const poolExt = await getPoolExt();
+
+    // VCUT Info (QTE_FORCEE, VCUT descriptions)
+    const vcutInfoResult = await poolExt.request()
+      .input("tr", sql.Int, transac)
+      .query(`
+        SELECT TOP 1 v.QTE_FORCEE, v.VCUT_INNOINV, v.VCUT_INDESC1, v.VCUT_INDESC2
+        FROM vEcransProduction v
+        WHERE v.OPERATION <> 'FINSH'
+        AND v.TRANSAC = @tr AND v.NO_INVENTAIRE = 'VCUT'
+        ORDER BY v.OrdreRecette
+      `);
+    const vcutInfo = vcutInfoResult.recordset[0];
+
+    // BigSheet total used
+    const bsTotalResult = await pool.request()
+      .input("tr", sql.Int, transac)
+      .query(`
+        SELECT SUM(det.DTRQTE) AS TotalBigSheet
+        FROM DET_TRANS det
+        INNER JOIN TRANSAC t ON det.TRANSAC = t.TRSEQ
+        WHERE t.TRANSAC = @tr AND t.TRNO_EQUATE = 7
+      `);
+
+    // BigSheet inventory info
+    const bsInfoResult = await pool.request()
+      .input("tr", sql.Int, transac)
+      .query(`
+        SELECT TOP 1 INVENTAIRE_INNOINV, INVENTAIRE_INDESC1, INVENTAIRE_INDESC2
+        FROM cNOMENCOP
+        WHERE TRANSAC = @tr
+        AND INVENTAIRE_P NOT IN (SELECT INSEQ FROM INVENTAIRE WHERE INNOINV='VCUT')
+      `);
+    const bsInfo = bsInfoResult.recordset[0];
+
+    // VCUT Components (replicates trouveUnTableauVCut)
+    const compResult = await pool.request()
+      .input("tr", sql.Int, transac)
+      .query(`
+        SELECT CNOMENCLATURE.NISEQ, CNOMENCLATURE.NIQTE, CNOMENCLATURE.INVENTAIRE_M,
+          CNOMENCLATURE.INVENTAIRE_M_INNOINV, INVENTAIRE.INDESC1, INVENTAIRE.INDESC2,
+          CNOMENCLATURE.NIVALEUR_CHAR1, CEILING(VENEER.QTY_REQ) AS QTY_REQ,
+          CNOMENCLATURE.NILONGUEUR, CNOMENCLATURE.NILARGEUR
+        FROM CNOMENCLATURE
+        LEFT OUTER JOIN INVENTAIRE ON (INVENTAIRE.INSEQ = cNOMENCLATURE.INVENTAIRE_M)
+        OUTER APPLY (
+          SELECT (CN_FILS.NIQTE * CNOMENCLATURE.NIQTE) QTY_REQ
+          FROM cNOMENCLATURE CN_FILS
+          WHERE CN_FILS.NISEQ_PERE = CNOMENCLATURE.NISEQ
+        ) VENEER
+        WHERE CNOMENCLATURE.TRANSAC = @tr
+        AND CNOMENCLATURE.NISEQ_PERE IS NULL
+      `);
+
+    // Per-component quantities
+    const components = [];
+    for (const comp of compResult.recordset) {
+      // Good & defect from TEMPSPROD
+      const qteResult = await pool.request()
+        .input("tr", sql.Int, transac)
+        .input("invM", sql.Int, comp.INVENTAIRE_M)
+        .input("niseq", sql.Int, comp.NISEQ)
+        .query(`
+          SELECT SUM(TJQTEPROD) AS TOTALPROD, SUM(TJQTEDEFECT) AS TOTALDEFECT
+          FROM TEMPSPROD
+          WHERE TRANSAC = @tr
+          AND (INVENTAIRE_C = @invM OR cNOMENCLATURE = @niseq)
+        `);
+
+      // Big sheets used per component
+      const bsCompResult = await pool.request()
+        .input("tr", sql.Int, transac)
+        .input("niseq", sql.Int, comp.NISEQ)
+        .query(`
+          SELECT SUM(det.DTRQTE) AS TotalBigSheet
+          FROM DET_TRANS det
+          INNER JOIN TRANSAC t ON det.TRANSAC = t.TRSEQ
+          WHERE t.TRANSAC = @tr AND t.TRNO_EQUATE = 7
+          AND det.TRANSAC_TRNO IN (
+            SELECT SMNOTRANS FROM TEMPSPROD WHERE cNOMENCLATURE = @niseq
+          )
+        `);
+
+      const qte = qteResult.recordset[0];
+      const bsComp = bsCompResult.recordset[0];
+      components.push({
+        ...comp,
+        totalProd: qte?.TOTALPROD || 0,
+        totalDefect: qte?.TOTALDEFECT || 0,
+        totalBigSheet: bsComp?.TotalBigSheet || 0,
+      });
+    }
+
+    // Veneer Containers (view in EXT db, ENTREPOT table in primary db)
+    const contResult = await poolExt.request()
+      .input("tr", sql.Int, transac)
+      .query(`
+        SELECT v.CONTENANT_CON_NUMERO, v.DTRQTE,
+          v.ENTREPOT_ENCODE,
+          e.ENDESC_P, e.ENDESC_S,
+          v.SPECIE, v.GRADE, v.THICKNESS, v.CUT,
+          v.LONGUEUR, v.LARGEUR
+        FROM VSP_BonTravail_VeneerReserve v
+        LEFT OUTER JOIN TS_SEATPL.dbo.ENTREPOT e ON v.ENTREPOT = e.ENSEQ
+        WHERE v.TRANSAC = @tr
+      `);
+
+    res.json({
+      success: true,
+      data: {
+        components,
+        containers: contResult.recordset,
+        qteForcee: vcutInfo?.QTE_FORCEE || 0,
+        qteUtilisee: bsTotalResult.recordset[0]?.TotalBigSheet || 0,
+        bigsheetDesc_P: bsInfo?.INVENTAIRE_INDESC1 || "",
+        bigsheetDesc_S: bsInfo?.INVENTAIRE_INDESC2 || "",
+        bigsheetCode: bsInfo?.INVENTAIRE_INNOINV || "",
+        vcutDesc_P: vcutInfo?.VCUT_INDESC1 || "",
+        vcutDesc_S: vcutInfo?.VCUT_INDESC2 || "",
+      },
     });
   })
 );
@@ -1050,6 +1251,81 @@ app.get(
       ORDER BY DEDESCRIPTION_P
     `);
     res.json({ success: true, data: result.recordset });
+  })
+);
+
+// ─── GET /getAvailableMachines.cfm ───────────────────────────────────────────
+// Returns machines available for a given family + department (operation screen dropdown).
+// Replicates old tableau.cfc:78 ListeMachines query.
+app.get(
+  "/getAvailableMachines.cfm",
+  handler(async (req, res) => {
+    const famillemachine = parseInt(req.query.famillemachine) || 0;
+    const departement = parseInt(req.query.departement) || 0;
+    const pool = await getPool();
+    const result = await pool.request()
+      .input("fm", sql.Int, famillemachine)
+      .input("dept", sql.Int, departement)
+      .query(`
+        SELECT MASEQ, MACODE, MADESC_S, MADESC_P
+        FROM MACHINE
+        WHERE FamilleMachine = @fm AND DEPARTEMENT = @dept
+        ORDER BY MADESC_P
+      `);
+    res.json({ success: true, data: result.recordset });
+  })
+);
+
+// ─── GET /changeMachine.cfm ─────────────────────────────────────────────────
+// Updates the machine assignment for an operation.
+// Replicates old operation.cfc:afficheMachineAttribuee (lines 1649-1684).
+app.get(
+  "/changeMachine.cfm",
+  handler(async (req, res) => {
+    const machineId = parseInt(req.query.machine) || 0;
+    const copmachine = parseInt(req.query.copmachine) || 0;
+    const nopseq = parseInt(req.query.nopseq) || 0;
+
+    if (!machineId) {
+      return res.json({ success: false, error: "machine parameter is required" });
+    }
+
+    const pool = await getPool();
+
+    // Get machine details
+    const machineResult = await pool.request()
+      .input("m", sql.Int, machineId)
+      .query(`SELECT MASEQ, MACODE, MADESC_S, MADESC_P FROM MACHINE WHERE MASEQ = @m`);
+
+    if (!machineResult.recordset.length) {
+      return res.json({ success: false, error: "Machine not found" });
+    }
+
+    // Update cNomencOp_Machine
+    if (copmachine) {
+      await pool.request()
+        .input("m", sql.Int, machineId)
+        .input("cop", sql.Int, copmachine)
+        .query(`UPDATE cNomencOp_Machine SET MACHINE = @m WHERE CNOM_SEQ = @cop`);
+    }
+
+    // Update PL_RESULTAT
+    if (nopseq) {
+      await pool.request()
+        .input("m", sql.Int, machineId)
+        .input("nop", sql.Int, nopseq)
+        .input("cop", sql.Int, copmachine)
+        .query(`
+          UPDATE PL_RESULTAT SET MACHINE = @m
+          WHERE CNOMENCOP = @nop AND (CNOMENCOP_MACHINE = @cop OR COPMACHINE = 0)
+        `);
+    }
+
+    res.json({
+      success: true,
+      data: machineResult.recordset[0],
+      message: "Machine updated successfully",
+    });
   })
 );
 

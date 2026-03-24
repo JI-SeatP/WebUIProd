@@ -7,7 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn, pressQtyDisplay, computeQteRestante } from "@/lib/utils";
+import { cn, pressQtyDisplay, computeQteRestante, isVcutCompleted } from "@/lib/utils";
 import { W_WORK_ORDERS } from "@/constants/widths";
 import {
   StatusBadge,
@@ -193,7 +193,9 @@ export function WorkOrderTable({
             </TableRow>
           ) : (
             orders.map((order, idx) => {
-              const status = statusCodeToEnum(order.STATUT_CODE);
+              const isVcut = order.NO_INVENTAIRE === "VCUT" || order.PRODUIT_CODE === "VCUT";
+              // V-CUT auto-complete override (old CF logic: operation.cfc:1114-1124)
+              const status = isVcutCompleted(order) ? "COMP" as const : statusCodeToEnum(order.STATUT_CODE);
               const isPPAP = false; // PPAP flag not in current mock data — will be wired later
               const hasComments = false; // Same — comments will come from extended data
 
@@ -230,13 +232,18 @@ export function WorkOrderTable({
                   </TableCell>
                   <TableCell className={cn(W_WORK_ORDERS.product, "text-base")}>
                     {(() => {
-                      // Match old software cascading logic for PRODUIT column
-                      if (order.NO_INVENTAIRE === "VCUT") {
+                      // VCUT: show "OPERATION - VCUT desc" + "BIG SHEET: QTE_FORCEE bigsheet desc"
+                      // Matches old Tableau_principal.cfm lines 61-66
+                      if (isVcut) {
+                        const opName = getLocalizedText(order.OPERATION_P, order.OPERATION_S);
+                        const bigsheetDesc = getLocalizedText(order.BIGSHEET_INDESC1 ?? order.VCUT_INDESC1 ?? order.INVENTAIRE_P, order.BIGSHEET_INDESC2 ?? order.VCUT_INDESC2 ?? order.INVENTAIRE_S);
                         return (
                           <>
-                            <div className="truncate font-semibold">{order.NO_INVENTAIRE}</div>
-                            <div className="text-base text-muted-foreground truncate -mt-0.5">
-                              {getLocalizedText(order.INVENTAIRE_P, order.INVENTAIRE_S)}
+                            <div className="truncate text-muted-foreground">
+                              {opName}
+                            </div>
+                            <div className="text-base font-bold text-foreground truncate -mt-0.5">
+                              BIG SHEET: {order.QTE_FORCEE ?? 0} {bigsheetDesc}
                             </div>
                           </>
                         );
@@ -286,19 +293,22 @@ export function WorkOrderTable({
                     })()}
                   </TableCell>
                   <TableCell className={cn(W_WORK_ORDERS.group, "text-base")}>
-                    {order.GROUPE ?? "—"}
+                    {isVcut ? "" : (order.GROUPE ?? "—")}
                   </TableCell>
                   <TableCell className={cn(W_WORK_ORDERS.panel, "text-base font-semibold")}>
-                    {order.Panneau ?? "—"}
+                    {isVcut ? "" : (order.Panneau ?? "—")}
                   </TableCell>
                   <TableCell className={cn(W_WORK_ORDERS.mold, "text-base")}>
-                    {order.MOULE_CODE ?? "—"}
+                    {isVcut ? "" : (order.MOULE_CODE ?? "—")}
                   </TableCell>
                   <TableCell className={cn(W_WORK_ORDERS.qtyTotal, "text-right tabular-nums text-base")}>
-                    {pressQtyDisplay(order.QTE_A_FAB, order.DCQTE_A_PRESSER, order.DCQTE_REJET, order.FMCODE, order.VBE_DCQTE_A_FAB, order.PCS_PER_PANEL)}
+                    {isVcut
+                      ? (order.QTE_FORCEE ?? 0)
+                      : pressQtyDisplay(order.QTE_A_FAB, order.DCQTE_A_PRESSER, order.DCQTE_REJET, order.FMCODE, order.VBE_DCQTE_A_FAB, order.PCS_PER_PANEL, order.FAMILLEMACHINE)
+                    }
                   </TableCell>
                   <TableCell className={cn(W_WORK_ORDERS.qtyProduced, "text-right tabular-nums text-base")}>
-                    {order.QTE_PRODUITE ?? 0}
+                    {isVcut ? (order.VCUT_QTE_UTILISEE ?? 0) : (order.QTE_PRODUITE ?? 0)}
                   </TableCell>
                   <TableCell className={cn(W_WORK_ORDERS.qtyRemaining, "text-right tabular-nums text-base font-semibold")}>
                     {computeQteRestante(order)}

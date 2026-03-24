@@ -207,7 +207,7 @@ export function Header() {
                 key={deseq}
                 type="button"
                 className={cn(
-                  "w-full text-left px-3 py-2 rounded-md text-base hover:bg-muted cursor-pointer transition-colors",
+                  "w-full text-left px-3 py-2.5 rounded-md text-xl hover:bg-muted cursor-pointer transition-colors",
                   isActive && "font-semibold"
                 )}
                 style={isActive ? { backgroundColor: "#aeffae" } : undefined}
@@ -237,7 +237,7 @@ export function Header() {
                 <button
                   type="button"
                   className={cn(
-                    "w-full text-left px-3 py-2 rounded-md text-base font-medium hover:bg-muted cursor-pointer transition-colors mb-1 border-b pb-2",
+                    "w-full text-left px-3 py-2.5 rounded-md text-xl font-medium hover:bg-muted cursor-pointer transition-colors mb-1 border-b pb-2.5",
                     !state.department && "font-semibold"
                   )}
                   style={!state.department ? { backgroundColor: "#aeffae" } : undefined}

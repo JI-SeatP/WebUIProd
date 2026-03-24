@@ -1,18 +1,30 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusBadge, statusCodeToEnum } from "@/components/shared/StatusBadge";
 import { cn, pressQtyDisplay, computeQteRestante } from "@/lib/utils";
+import { apiGet } from "@/api/client";
 import { useOrderOperations } from "../hooks/useOrderOperations";
 import type { OperationData } from "../hooks/useOperation";
+import type { VcutData } from "@/types/workOrder";
+
+interface AvailableMachine {
+  MASEQ: number;
+  MACODE: string;
+  MADESC_P: string;
+  MADESC_S: string;
+}
 
 interface OperationHeaderProps {
   operation: OperationData;
   language: "fr" | "en";
   statusCode?: string | number | null;
+  isVcut?: boolean;
+  vcutData?: VcutData | null;
 }
 
 function Field({ label, value, className }: { label: string; value: React.ReactNode; className?: string }) {
@@ -52,18 +64,56 @@ function QtyField({
   );
 }
 
-export function OperationHeader({ operation, language, statusCode }: OperationHeaderProps) {
+export function OperationHeader({ operation, language, statusCode, isVcut, vcutData }: OperationHeaderProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const { operations } = useOrderOperations(operation.NO_PROD);
 
+  // Available machines for dropdown
+  const [availableMachines, setAvailableMachines] = useState<AvailableMachine[]>([]);
+  const [selectedMaseq, setSelectedMaseq] = useState<string>(String(operation.MACHINE));
+  const [machineLabel, setMachineLabel] = useState<string>("");
+
   const loc = (fr: string | null | undefined, en: string | null | undefined) =>
     (language === "fr" ? fr : en) ?? fr ?? "—";
 
+  // Fetch available machines for the operation's family + department
+  useEffect(() => {
+    const fm = (operation as unknown as Record<string, unknown>).FAMILLEMACHINE;
+    const dept = operation.DESEQ;
+    if (!fm || !dept) return;
+    apiGet<AvailableMachine[]>(`getAvailableMachines.cfm?famillemachine=${fm}&departement=${dept}`)
+      .then((res) => {
+        if (res.success) setAvailableMachines(res.data);
+      })
+      .catch(() => { /* ignore */ });
+  }, [operation]);
+
+  // Keep selected machine and label in sync with operation data
+  useEffect(() => {
+    setSelectedMaseq(String(operation.MACHINE));
+    setMachineLabel(loc(operation.MACHINE_P, operation.MACHINE_S));
+  }, [operation.MACHINE]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleMachineChange = useCallback((maseq: string) => {
+    setSelectedMaseq(maseq);
+    const copmachine = operation.COPMACHINE ?? 0;
+    const nopseq = (operation as unknown as Record<string, unknown>).NOPSEQ ?? 0;
+    apiGet<AvailableMachine>(`changeMachine.cfm?machine=${maseq}&copmachine=${copmachine}&nopseq=${nopseq}`)
+      .then((res) => {
+        if (res.success) {
+          setMachineLabel(loc(res.data.MADESC_P, res.data.MADESC_S));
+        }
+      })
+      .catch(() => { /* ignore */ });
+  }, [operation]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const status = statusCodeToEnum(statusCode ?? operation.STATUT_CODE);
 
-  const qtyLabel = operation.FMCODE?.includes("PRESS")
+  const qtyLabel = isVcut
+    ? t("vcut.qtyUsed")
+    : operation.FMCODE?.includes("PRESS")
     ? t("order.qtyPressed")
     : operation.FMCODE?.includes("CNC")
     ? t("order.qtyMachined")
@@ -93,34 +143,52 @@ export function OperationHeader({ operation, language, statusCode }: OperationHe
           <StatusBadge status={status} />
         </div>
 
-        {/* Client + Product — share available width */}
+        {/* Client + Product — share available width (Client hidden for VCUT) */}
         <div className="flex justify-evenly min-w-0">
-          <div className="min-w-0 shrink-1">
-            <Field label={t("order.client")} value={operation.NOM_CLIENT} />
-            {operation.CONOPO && (
-              <div className="text-base text-muted-foreground mt-0.5">
-                PO: {operation.CONOPO}
-              </div>
-            )}
-          </div>
+          {!isVcut && (
+            <div className="min-w-0 shrink-1">
+              <Field label={t("order.client")} value={operation.NOM_CLIENT} />
+              {operation.CONOPO && (
+                <div className="text-base text-muted-foreground mt-0.5">
+                  PO: {operation.CONOPO}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="min-w-0 shrink-1">
-            <Field
-              label={t("order.product")}
-              value={
-                <div>
+            {isVcut && vcutData ? (
+              <Field
+                label={t("order.product")}
+                value={
                   <div>
-                    {(operation as unknown as Record<string, unknown>).PRODUIT_CODE as string ?? "—"}
-                    {operation.REVISION && (
-                      <span className="text-sm text-muted-foreground ml-2">
-                        Rev. {operation.REVISION}
-                      </span>
+                    <div className="text-xl font-bold text-foreground">
+                      BIG SHEET: {vcutData.qteForcee} {loc(vcutData.bigsheetDesc_P, vcutData.bigsheetDesc_S)}
+                    </div>
+                    {vcutData.bigsheetCode && (
+                      <div className="text-base text-muted-foreground">({vcutData.bigsheetCode})</div>
                     )}
                   </div>
-                  <div>{loc(operation.PRODUIT_P, operation.PRODUIT_S) || loc(operation.INVENTAIRE_P, operation.INVENTAIRE_S)}</div>
-                </div>
-              }
-            />
+                }
+              />
+            ) : (
+              <Field
+                label={t("order.product")}
+                value={
+                  <div>
+                    <div>
+                      {(operation as unknown as Record<string, unknown>).PRODUIT_CODE as string ?? "—"}
+                      {operation.REVISION && (
+                        <span className="text-sm text-muted-foreground ml-2">
+                          Rev. {operation.REVISION}
+                        </span>
+                      )}
+                    </div>
+                    <div>{loc(operation.PRODUIT_P, operation.PRODUIT_S) || loc(operation.INVENTAIRE_P, operation.INVENTAIRE_S)}</div>
+                  </div>
+                }
+              />
+            )}
           </div>
         </div>
 
@@ -133,28 +201,51 @@ export function OperationHeader({ operation, language, statusCode }: OperationHe
 
         {/* Quantities */}
         <div className="flex items-start gap-[9px]">
-          <QtyField
-            label={t("order.qtyToMake")}
-            value={pressQtyDisplay(operation.QTE_A_FAB, operation.DCQTE_A_PRESSER, operation.DCQTE_REJET, operation.FMCODE, operation.VBE_DCQTE_A_FAB, operation.PCS_PER_PANEL)}
-            backgroundColor="#F2F2F2"
-          />
-          <QtyField 
-            label={qtyLabel} 
-            value={operation.QTE_PRODUITE ?? 0}
-            textColor="#008000"
-            backgroundColor="#F2F2F2"
-          />
-          <QtyField
-            label={t("order.qtyDefect")}
-            value={operation.NOPQTESCRAP ?? 0}
-            textColor="#BF0000"
-            backgroundColor="#F2F2F2"
-          />
-          <QtyField
-            label={t("order.qtyRemaining")}
-            value={computeQteRestante(operation)}
-            backgroundColor="#FFF88E"
-          />
+          {isVcut && vcutData ? (
+            <>
+              <QtyField
+                label={t("order.qtyToMake")}
+                value={vcutData.qteForcee}
+                backgroundColor="#F2F2F2"
+              />
+              <QtyField
+                label={qtyLabel}
+                value={vcutData.qteUtilisee}
+                textColor="#008000"
+                backgroundColor="#F2F2F2"
+              />
+              <QtyField
+                label={t("order.qtyRemaining")}
+                value={Math.max(vcutData.qteForcee - vcutData.qteUtilisee, 0)}
+                backgroundColor="#FFF88E"
+              />
+            </>
+          ) : (
+            <>
+              <QtyField
+                label={t("order.qtyToMake")}
+                value={pressQtyDisplay(operation.QTE_A_FAB, operation.DCQTE_A_PRESSER, operation.DCQTE_REJET, operation.FMCODE, operation.VBE_DCQTE_A_FAB, operation.PCS_PER_PANEL)}
+                backgroundColor="#F2F2F2"
+              />
+              <QtyField
+                label={qtyLabel}
+                value={operation.QTE_PRODUITE ?? 0}
+                textColor="#008000"
+                backgroundColor="#F2F2F2"
+              />
+              <QtyField
+                label={t("order.qtyDefect")}
+                value={operation.NOPQTESCRAP ?? 0}
+                textColor="#BF0000"
+                backgroundColor="#F2F2F2"
+              />
+              <QtyField
+                label={t("order.qtyRemaining")}
+                value={computeQteRestante(operation)}
+                backgroundColor="#FFF88E"
+              />
+            </>
+          )}
         </div>
 
         {/* Operation / Machine */}
@@ -207,9 +298,24 @@ export function OperationHeader({ operation, language, statusCode }: OperationHe
             </PopoverContent>
           </Popover>
 
-          <div className="text-[1.15rem] font-medium px-3 py-1 rounded-lg bg-muted text-center">
-            {loc(operation.MACHINE_P, operation.MACHINE_S) ?? "—"}
-          </div>
+          {availableMachines.length > 1 ? (
+            <Select value={selectedMaseq} onValueChange={handleMachineChange}>
+              <SelectTrigger className="w-full text-[1.15rem] font-medium h-auto px-3 py-1 rounded-lg bg-muted justify-center [&>span]:text-center [&_svg]:absolute [&_svg]:right-2 relative">
+                <SelectValue>{machineLabel || loc(operation.MACHINE_P, operation.MACHINE_S) || "—"}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {availableMachines.map((m) => (
+                  <SelectItem key={m.MASEQ} value={String(m.MASEQ)} className="text-base py-2">
+                    {loc(m.MADESC_P, m.MADESC_S)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <div className="text-[1.15rem] font-medium px-3 py-1 rounded-lg bg-muted text-center">
+              {machineLabel || (loc(operation.MACHINE_P, operation.MACHINE_S) ?? "—")}
+            </div>
+          )}
         </div>
 
 

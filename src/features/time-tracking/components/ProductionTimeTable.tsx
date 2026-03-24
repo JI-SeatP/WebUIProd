@@ -17,7 +17,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Pencil, Loader2, Circle } from "lucide-react";
+import { Pencil, Loader2, Circle, Maximize2, Minimize2 } from "lucide-react";
 import { W_TIME_TRACKING } from "@/constants/widths";
 import { STATUS_COLORS, STATUS_COLOR_DEFAULT } from "@/constants/statusColors";
 import type { TimeEntry, ProductionTimeTotals } from "@/types/timeTracking";
@@ -30,6 +30,8 @@ interface ProductionTimeTableProps {
   onLoadMore: () => void;
   onStatusChange: (tjseq: number, statusCode: number) => void;
   showYear?: boolean;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
 /** Build unique status options from loaded entries (bilingual) */
@@ -108,6 +110,8 @@ export function ProductionTimeTable({
   onLoadMore,
   onStatusChange,
   showYear = false,
+  isFullscreen = false,
+  onToggleFullscreen,
 }: ProductionTimeTableProps) {
   const { t } = useTranslation();
   const { state } = useSession();
@@ -265,7 +269,19 @@ export function ProductionTimeTable({
               </TableCell>
               <TableCell className={`${W_TIME_TRACKING.qty} text-xl`}>{totals.totalQtyGood}</TableCell>
               <TableCell className={`${W_TIME_TRACKING.qty} text-xl text-red-600`}>{totals.totalQtyDefect}</TableCell>
-              <TableCell className={W_TIME_TRACKING.actions} />
+              <TableCell className={W_TIME_TRACKING.actions}>
+                {onToggleFullscreen && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="touch-target"
+                    title={isFullscreen ? t("timeTracking.shrink") : t("timeTracking.expand")}
+                    onClick={onToggleFullscreen}
+                  >
+                    {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                  </Button>
+                )}
+              </TableCell>
             </TableRow>
           </tfoot>
         </Table>

@@ -26,7 +26,7 @@ function TabsNav() {
 
 export function TimeTrackingPage() {
   return (
-    <div className="flex flex-col flex-1 min-h-0 p-3">
+    <div className="flex flex-col flex-1 min-h-0 px-3 pt-1.5 pb-3">
       <Tabs defaultValue="production" className="flex-1 min-h-0 flex flex-col">
         <TabsContent value="production" className="flex-1 min-h-0 mt-0 flex flex-col">
           <ProductionTimeTab tabsList={<TabsNav />} />

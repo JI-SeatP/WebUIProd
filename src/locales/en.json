@@ -95,6 +95,19 @@
     "warehouse": "Warehouse",
     "description": "Description"
   },
+  "vcut": {
+    "qtyUsed": "Qty Used",
+    "bigSheet": "Big Sheet",
+    "components": "Components",
+    "containers": "Containers",
+    "skidNumber": "SKID #",
+    "noContainers": "NO CONTAINERS",
+    "order": "Order",
+    "good": "Good",
+    "defect": "Defect",
+    "productNo": "Product No.",
+    "warehouse": "Warehouse"
+  },
   "dates": {
     "scheduledStart": "Sched. Start",
     "scheduledEnd": "Sched. End",
@@ -224,6 +237,10 @@
     "showAll": "All",
     "showOnlyQty": "Only Quantities",
     "searchPlaceholder": "Search here",
+    "previousDay": "Previous day",
+    "nextDay": "Next day",
+    "expand": "EXPAND",
+    "shrink": "SHRINK",
     "hoursSaved": "Hours saved successfully",
     "combined": "Combined",
     "todayEntries": "Today's Entries",

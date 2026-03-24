@@ -95,6 +95,19 @@
     "warehouse": "Entrepôt",
     "description": "Description"
   },
+  "vcut": {
+    "qtyUsed": "Qté utilisée",
+    "bigSheet": "Grande feuille",
+    "components": "Composantes",
+    "containers": "Contenants",
+    "skidNumber": "# SKID",
+    "noContainers": "AUCUN CONTENANT",
+    "order": "Commande",
+    "good": "Bonnes",
+    "defect": "Défaut",
+    "productNo": "No. produit",
+    "warehouse": "Entrepôt"
+  },
   "dates": {
     "scheduledStart": "Début prog.",
     "scheduledEnd": "Fin prog.",
@@ -224,6 +237,10 @@
     "showAll": "Tous",
     "showOnlyQty": "Quantités seulement",
     "searchPlaceholder": "Rechercher ici",
+    "previousDay": "Jour précédent",
+    "nextDay": "Lendemain",
+    "expand": "AUGMENTER",
+    "shrink": "SE CONTRACTER",
     "hoursSaved": "Heures enregistrées avec succès",
     "combined": "Combiné",
     "todayEntries": "Entrées du jour",

@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { MultiSelectFilter } from "@/components/shared/MultiSelectFilter";
 import type { FilterOption } from "@/components/shared/MultiSelectFilter";
-import { Search } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import type { TimeTrackingFilters } from "@/types/timeTracking";
 import { W_TIME_TRACKING } from "@/constants/widths";
 
@@ -20,6 +20,7 @@ interface ProductionTimeFiltersProps {
   filters: TimeTrackingFilters;
   onFiltersChange: (filters: TimeTrackingFilters) => void;
   onSearch: () => void;
+  onShiftSearch?: (newFilters: TimeTrackingFilters) => void;
   tabsList?: React.ReactNode;
   deptOptions?: FilterOption[];
   machineOptions?: FilterOption[];
@@ -31,6 +32,7 @@ export function ProductionTimeFilters({
   filters,
   onFiltersChange,
   onSearch,
+  onShiftSearch,
   tabsList,
   deptOptions = [],
   machineOptions = [],
@@ -46,6 +48,24 @@ export function ProductionTimeFilters({
     onFiltersChange({ ...filters, [key]: value });
   };
 
+  const shiftDates = (days: number) => {
+    const shiftDate = (dateStr: string) => {
+      const d = new Date(dateStr + "T00:00:00");
+      d.setDate(d.getDate() + days);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    };
+    const newFilters = {
+      ...filters,
+      startDate: shiftDate(filters.startDate),
+      endDate: shiftDate(filters.endDate),
+    };
+    onFiltersChange(newFilters);
+    onShiftSearch?.(newFilters);
+  };
+
   return (
     <div className="overflow-hidden rounded-lg bg-white pb-[14px]">
       {tabsList ? (
@@ -55,7 +75,16 @@ export function ProductionTimeFilters({
       ) : null}
       <div className="space-y-4 p-2 pt-4">
       <div className="flex w-full flex-wrap items-end gap-3">
-      <div className="flex flex-col gap-1 ml-5">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="!h-12 w-10 shrink-0 ml-5"
+        title={t("timeTracking.previousDay")}
+        onClick={() => shiftDates(-1)}
+      >
+        <ChevronLeft size={20} />
+      </Button>
+      <div className="flex flex-col gap-1">
         <Label className="text-sm text-muted-foreground">{t("timeTracking.dateStart")}</Label>
         <DatePicker
           value={filters.startDate}
@@ -69,6 +98,15 @@ export function ProductionTimeFilters({
           onChange={(v) => updateFilter("endDate", v)}
         />
       </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="!h-12 w-10 shrink-0"
+        title={t("timeTracking.nextDay")}
+        onClick={() => shiftDates(1)}
+      >
+        <ChevronRight size={20} />
+      </Button>
       <div className="ml-[30px] mr-10 flex flex-col gap-1 flex-1 min-w-0">
         <Label className="text-sm text-muted-foreground">{t("actions.search")}</Label>
         <Input
