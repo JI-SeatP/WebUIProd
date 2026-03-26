@@ -43,4 +43,8 @@ async function getPoolExt() {
   return poolExt;
 }
 
-module.exports = { sql, getPool, getPoolExt };
+// Database names for cross-DB references (mirrors CF's #datasourceExt# pattern)
+const DB_PRIMARY = configPrimary.database;
+const DB_EXT = configExt.database;
+
+module.exports = { sql, getPool, getPoolExt, DB_PRIMARY, DB_EXT };
