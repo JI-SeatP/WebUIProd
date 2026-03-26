@@ -85,6 +85,7 @@ export function statusCodeToEnum(code: number | string): OperationStatus {
     complete:  "COMP",
     completed: "COMP",
     complété:  "COMP",
+    hold:     "ON_HOLD",
     on_hold:  "ON_HOLD",
     done:     "DONE",
   };

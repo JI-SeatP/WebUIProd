@@ -49,24 +49,22 @@
 		<cfoutput>#SerializeJSON(response)#</cfoutput><cfabort>
 	</cfif>
 
-	<!--- 2. Update nomenclature component machine table --->
-	<cfif copmachineId NEQ 0>
-		<cfquery datasource="#datasourcePrimary#">
-			UPDATE cNomencOp_Machine
-			SET MACHINE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#machineId#">
-			WHERE CNOM_SEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#copmachineId#">
-		</cfquery>
-	</cfif>
+	<!--- 2. Update nomenclature component machine table (always runs, matches old software) --->
+	<cfquery datasource="#datasourcePrimary#">
+		UPDATE cNomencOp_Machine
+		SET MACHINE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#machineId#">
+		WHERE CNOM_SEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#copmachineId#">
+	</cfquery>
 
-	<!--- 3. Update production results --->
-	<cfif nopseqId NEQ 0>
-		<cfquery datasource="#datasourcePrimary#">
-			UPDATE PL_RESULTAT
-			SET MACHINE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#machineId#">
-			WHERE CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseqId#">
-			AND (CNOMENCOP_MACHINE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#copmachineId#"> OR COPMACHINE = 0)
-		</cfquery>
-	</cfif>
+	<!--- 3. Update production results (always runs, matches old software) --->
+	<cfquery datasource="#datasourcePrimary#">
+		UPDATE PL_RESULTAT
+		SET MACHINE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#machineId#">
+		WHERE CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseqId#">
+		<cfif copmachineId NEQ 0>
+			AND CNOMENCOP_MACHINE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#copmachineId#">
+		</cfif>
+	</cfquery>
 
 	<cfset data = StructNew("ordered")>
 	<cfset data["MASEQ"] = qMachine.MASEQ>

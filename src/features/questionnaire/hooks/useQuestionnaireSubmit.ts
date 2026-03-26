@@ -17,6 +17,10 @@ interface QuestionnairePayload {
   defects: { qty: string; typeId: string; notes: string }[];
   finishedProducts?: { product: string; qty: string; container: string }[];
   nopseq?: number;
+  isVcut?: boolean;
+  listeTjseq?: string;
+  listeEpfSeq?: string;
+  smnotrans?: string;
 }
 
 interface ValidationErrors {

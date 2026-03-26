@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "SOURCE_FEATURES/S007-Time tracking and Production Entries Screens-Analysis.md",
+                "file": "status_action_button/00- Action Button Research Queries.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "S007-Time tracking and Production Entries Screens-Analysis"
+              "title": "00- Action Button Research Queries"
             }
           }
         ]
@@ -78,7 +78,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 200
+    "width": 267.50909423828125
   },
   "right": {
     "id": "bde83791f210fb5f",
@@ -185,8 +185,28 @@
   },
   "active": "0f1d19d77d8b4ba7",
   "lastOpenFiles": [
-    "SOURCE_FEATURES/S010-Corrections-Analysis.md",
+    "status_action_button/03a-status-on-load-flow.md",
+    "status_action_button/03-frontend-flow.md",
+    "status_action_button/02-button-visibility-matrix.md",
+    "status_action_button/00- Action Button Research Queries.md",
+    "status_action_button/07-old-vs-new-comparison.md",
+    "status_action_button/07-old-vs-new-comparison.md.tmp.44632.1774536926266",
+    "status_action_button/07-old-vs-new-comparison.md.tmp.44632.1774536883096",
+    "status_action_button/03-frontend-flow.md.tmp.44632.1774536868081",
+    "status_action_button/03-frontend-flow.md.tmp.44632.1774536861164",
+    "status_action_button/04-backend-flow.md.tmp.44632.1774536806670",
+    "status_action_button/04-backend-flow.md.tmp.44632.1774536795883",
+    "status_action_button/04-backend-flow.md.tmp.44632.1774536794107",
+    "status_action_button/04-backend-flow.md.tmp.44632.1774536764886",
+    "status_action_button/01-overview.md.tmp.44632.1774536744408",
+    "status_action_button/01-overview.md.tmp.44632.1774536740812",
+    "status_action_button/01-overview.md",
+    "status_action_button/04-backend-flow.md",
+    "status_action_button/06-database-tables.md",
+    "status_action_button/05-stored-procedures.md",
     "SOURCE_FEATURES/S007-Time tracking and Production Entries Screens-Analysis.md",
+    "VCUT_OPERATION_CODE_REVIEW.md",
+    "SOURCE_FEATURES/S010-Corrections-Analysis.md",
     "Untitled.md",
     "SOURCE_FEATURES/S003-Database-Operations-Audit.md",
     "Pasted image 20260317101241.png",
@@ -199,8 +219,6 @@
     "New Labels/Pressing Label/FP Label Sample_data.png",
     "New Labels/Pressing Label/FINISHED PRODUCT LABEL.md",
     "New Labels/Pressing Label/CNC Label Sample_data.png",
-    "New Labels/Pressing Label",
-    "New Labels",
     "NEW FEATURES/PROD QUANTITY LOG/Files/PQTT_reference.png",
     "NEW FEATURES/PROD QUANTITY LOG/Files/PQTT_FieldNames.png",
     "NEW FEATURES/PROD QUANTITY LOG/Files/PQTT_Field styles.png",
@@ -208,28 +226,10 @@
     "NEW FEATURES/CNC INSPECTION/Files/Inspection Component location.png",
     "NEW FEATURES/PRODUCTION TARGETS/Production Targets.md",
     "NEW FEATURES/PROD QUANTITY LOG/Production Quantity Target Toolbar (PQTT).md",
-    "NEW FEATURES/PROD QUANTITY LOG/Files",
-    "NEW FEATURES/CNC INSPECTION/Files",
     "NEW FEATURES/CNC INSPECTION/CNC_Inspection Screen.md",
-    "NEW FEATURES/PRODUCTION TARGETS",
-    "NEW FEATURES/PROD QUANTITY LOG",
-    "NEW FEATURES/CNC INSPECTION",
-    "NEW FEATURES",
-    "SOURCE_FEATURES/S003-Database-Operations-Audit.md.tmp.70212.1773954629676",
     "SOURCE_FEATURES/S003-OperationDetails-Analysis.md",
     "Untitled 1.md",
     "Untitled 2.md",
-    "Untitled 3.md",
-    "WEB UI FEATURES v2/Containers In Transit/Containers In Transit.md",
-    "WEB UI FEATURES v2/Containers In Transit/ContainerTracking_Requirements_v1.1-SPECS.md",
-    "WEB UI FEATURES v2/Containers In Transit/ContainerTracking_Requirements_v1.1 (4).md",
-    "WEB UI FEATURES v2/Containers In Transit/~$ContainerTracking_Requirements_v1.0.tmp",
-    "DATABASE NOTES/DATABASE NOTES.md",
-    "CODE and Git notes/GIT Workflow.md",
-    "Scheduler/Requirements for AFAB.md",
-    "WEB UI FEATURES v2/Productivity Targets/Styling Notes.md",
-    "WebUI Masterplan.md",
-    "WEB UI FEATURES v2/Productivity Targets/Scheduled Machines Overview.md",
-    "4.0 Manufacturing/BACCI.md"
+    "Untitled 3.md"
   ]
 }

@@ -247,7 +247,7 @@ export function OperationDetailsPage() {
         {hasDoNotPress && <DoNotPressAlert />}
 
         {/* Header */}
-        <OperationHeader operation={operation} language={state.language} statusCode={localStatus ?? operation.STATUT_CODE} isVcut={isVcut} vcutData={vcutData} />
+        <OperationHeader operation={operation} language={state.language} statusCode={localStatus ?? operation.STATUT_CODE} isVcut={isVcut} vcutData={vcutData} onMachineChanged={refetch} />
 
         {/* All cards (left 50%) + technical drawing (right 50%) */}
         <div className="flex gap-2 items-stretch">

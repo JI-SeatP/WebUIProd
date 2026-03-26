@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
-import { apiPost } from "@/api/client";
+import { apiGet, apiPost } from "@/api/client";
 import { useOperation } from "@/features/operation/hooks/useOperation";
 import { useQuestionnaireSubmit } from "./hooks/useQuestionnaireSubmit";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -13,8 +13,11 @@ import { MoldActionSection } from "./components/MoldActionSection";
 import { StopCauseSection } from "./components/StopCauseSection";
 import { DefectQuantitySection } from "./components/DefectQuantitySection";
 import { GoodQuantitySection } from "./components/GoodQuantitySection";
+import { VcutQuantitySection } from "./components/VcutQuantitySection";
+import { ProducedItemsTable } from "./components/ProducedItemsTable";
 import { FinishedProductsSection } from "./components/FinishedProductsSection";
 import { MaterialOutputSection } from "./components/MaterialOutputSection";
+import type { ProducedItem } from "./components/VcutQuantitySection";
 import { Button } from "@/components/ui/button";
 import { X, Check } from "lucide-react";
 import { W_QUESTIONNAIRE } from "@/constants/widths";
@@ -47,6 +50,7 @@ export function QuestionnairePage() {
     state.employee?.EMNOIDENT?.toString() ?? ""
   );
   const [employeeName, setEmployeeName] = useState(state.employee?.EMNOM ?? "");
+  const [employeeSeq, setEmployeeSeq] = useState<number>(state.employee?.EMSEQ ?? 0);
   const [moldAction, setMoldAction] = useState("keep");
   const [primaryCause, setPrimaryCause] = useState("8");       // Production
   const [secondaryCause, setSecondaryCause] = useState("40");  // Fin de quart de travail
@@ -61,6 +65,9 @@ export function QuestionnairePage() {
   const [smMaterials, setSmMaterials] = useState<MaterialRow[]>([]);
   const [savedDefects, setSavedDefects] = useState<SavedDefect[]>([]);
   const [smLoading, setSmLoading] = useState(false);
+  const [vcutProducedItems, setVcutProducedItems] = useState<ProducedItem[]>([]);
+  const [vcutListeTjseq, setVcutListeTjseq] = useState("");
+  const [vcutListeEpfSeq, setVcutListeEpfSeq] = useState("");
 
   const {
     loading: submitLoading,
@@ -73,6 +80,7 @@ export function QuestionnairePage() {
   const handleEmployeeFound = useCallback((employee: Employee) => {
     setEmployeeName(employee.EMNOM);
     setEmployeeCode(String(employee.EMNOIDENT));
+    setEmployeeSeq(employee.EMSEQ);
   }, []);
 
   // Write-as-you-go: good qty OK button → creates/updates SM
@@ -83,6 +91,8 @@ export function QuestionnairePage() {
     setSmLoading(true);
     try {
       const nopseq = (operation as unknown as Record<string, unknown>)?.NOPSEQ ?? 0;
+      const fmc = operation?.FMCODE ?? "";
+      const vcutOp = operation?.NO_INVENTAIRE === "VCUT" || fmc === "TableSaw";
       const res = await apiPost<{
         smnotrans: string;
         smseq: number;
@@ -93,6 +103,8 @@ export function QuestionnairePage() {
         nopseq: Number(nopseq),
         qteBonne: Number(goodQty) || 0,
         smnotrans,
+        // VCUT-specific params for SM batch calculation
+        ...(vcutOp ? { isVcut: true, listeTjseq: vcutListeTjseq } : {}),
       });
       if (res.success && res.data) {
         setSmnotrans(res.data.smnotrans || "");
@@ -102,7 +114,7 @@ export function QuestionnairePage() {
     } finally {
       setSmLoading(false);
     }
-  }, [transac, copmachine, operation, goodQty, smnotrans]);
+  }, [transac, copmachine, operation, goodQty, smnotrans, vcutListeTjseq]);
 
   // Write-as-you-go: add defect → writes to DB, refreshes list, recalcs SM
   // In the old software, after adding a defect, calculeQteSMQS is ALWAYS called
@@ -164,6 +176,26 @@ export function QuestionnairePage() {
     }
 
     const nopseq = (operation as unknown as Record<string, unknown>).NOPSEQ ?? 0;
+    // For VCUT: fetch fresh lists at submit time to ensure they're up to date
+    const fmc = operation?.FMCODE ?? "";
+    const vcutOp = operation?.NO_INVENTAIRE === "VCUT" || fmc === "TableSaw";
+    let effectiveGoodQty = goodQty;
+    let submitListeTjseq = vcutListeTjseq;
+    let submitListeEpfSeq = vcutListeEpfSeq;
+    let submitSmnotrans = smnotrans;
+    if (vcutOp) {
+      try {
+        const freshRes = await apiGet<{ producedItems: ProducedItem[]; listeTjseq?: string; listeEpfSeq?: string; smnotrans?: string }>(
+          `getVcutComponents.cfm?transac=${operation.TRANSAC}&nopseq=${nopseq}&copmachine=${copmachine}`
+        );
+        if (freshRes.success && freshRes.data) {
+          effectiveGoodQty = String(freshRes.data.producedItems.reduce((sum, item) => sum + (item.qty || 0), 0));
+          submitListeTjseq = freshRes.data.listeTjseq || vcutListeTjseq;
+          submitListeEpfSeq = freshRes.data.listeEpfSeq || vcutListeEpfSeq;
+          if (freshRes.data.smnotrans) submitSmnotrans = freshRes.data.smnotrans;
+        }
+      } catch { /* use existing state */ }
+    }
     const validationErrors = submit({
       transac: Number(transac),
       copmachine: Number(copmachine),
@@ -173,7 +205,10 @@ export function QuestionnairePage() {
       secondaryCause: isStop ? secondaryCause : undefined,
       notes: isStop ? notes : undefined,
       moldAction: showMoldAction ? moldAction : undefined,
-      goodQty,
+      goodQty: effectiveGoodQty,
+      isVcut: vcutOp,
+      // VCUT: pass ListeTJSEQ, ListeEPFSEQ, SMNOTRANS for SM/EPF posting (old software lines 773-933)
+      ...(vcutOp ? { listeTjseq: submitListeTjseq, listeEpfSeq: submitListeEpfSeq, smnotrans: submitSmnotrans } : {}),
       defects: savedDefects.map((d) => ({ qty: String(d.qty), typeId: String(d.typeId), notes: d.notes })),
       finishedProducts:
         showFinishedProducts
@@ -283,64 +318,130 @@ export function QuestionnairePage() {
               <MoldActionSection value={moldAction} onChange={setMoldAction} />
             )}
 
-            {/* Row 1: Employee | QTÉ PRODUITE | QUANTITÉ DÉFECTUEUSE — 3 × 1/3 */}
-            <div className="flex gap-4 items-start">
-              <div className="flex-1">
-                <EmployeeEntry
-                  employeeCode={employeeCode}
-                  employeeName={employeeName}
-                  onCodeChange={setEmployeeCode}
-                  onEmployeeFound={handleEmployeeFound}
-                  error={errors.employeeCode}
-                />
-              </div>
-              <div className="flex-1">
-                {showFinishedProducts ? (
-                  <FinishedProductsSection
-                    products={finishedProducts}
-                    onProductsChange={setFinishedProducts}
-                  />
-                ) : (
-                  <GoodQuantitySection value={goodQty} onChange={setGoodQty} onOkPress={handleGoodQtyOk} loading={smLoading} />
-                )}
-              </div>
-              {showDefects && (
-                <div className="flex-1">
-                  <DefectQuantitySection
-                    language={state.language}
-                    fmcode={fmcode}
-                    onAddDefect={handleAddDefect}
-                    onRemoveDefect={handleRemoveDefect}
-                    savedDefects={savedDefects}
-                    loading={smLoading}
-                  />
+            {isVcut ? (
+              /* ── VCUT LAYOUT: stacked single-column matching old software ── */
+              <>
+                {/* Row 1: Employee (left) | Stop Cause (right, if STOP) */}
+                <div className="flex gap-4 items-start">
+                  <div className="shrink-0">
+                    <EmployeeEntry
+                      employeeCode={employeeCode}
+                      employeeName={employeeName}
+                      onCodeChange={setEmployeeCode}
+                      onEmployeeFound={handleEmployeeFound}
+                      error={errors.employeeCode}
+                    />
+                  </div>
+                  {isStop && (
+                    <div className="flex-1">
+                      <StopCauseSection
+                        language={state.language}
+                        primaryCause={primaryCause}
+                        secondaryCause={secondaryCause}
+                        notes={notes}
+                        onPrimaryCauseChange={setPrimaryCause}
+                        onSecondaryCauseChange={setSecondaryCause}
+                        onNotesChange={setNotes}
+                        error={errors.primaryCause}
+                      />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* Row 2: Stop Cause (isStop, 1/3) | Material Output (2/3) */}
-            <div className="flex gap-4 items-start">
-              {isStop && (
-                <div className="flex-1">
-                  <StopCauseSection
-                    language={state.language}
-                    primaryCause={primaryCause}
-                    secondaryCause={secondaryCause}
-                    notes={notes}
-                    onPrimaryCauseChange={setPrimaryCause}
-                    onSecondaryCauseChange={setSecondaryCause}
-                    onNotesChange={setNotes}
-                    error={errors.primaryCause}
-                  />
-                </div>
-              )}
-              <div className="flex-[2]">
+                {/* Row 2: QUANTITÉ input table (full width) */}
+                <VcutQuantitySection
+                  operation={operation}
+                  language={state.language}
+                  employeeSeq={employeeSeq}
+                  onItemAdded={async () => {
+                    // Refresh produced items
+                    try {
+                      const res = await apiGet<{ producedItems: ProducedItem[]; listeTjseq?: string; listeEpfSeq?: string }>(
+                        `getVcutComponents.cfm?transac=${operation.TRANSAC}&nopseq=${(operation as unknown as Record<string, unknown>).NOPSEQ}&copmachine=${copmachine}`
+                      );
+                      if (res.success && res.data) {
+                        setVcutProducedItems(res.data.producedItems);
+                        if (res.data.listeTjseq) setVcutListeTjseq(res.data.listeTjseq);
+                        if (res.data.listeEpfSeq) setVcutListeEpfSeq(res.data.listeEpfSeq);
+                      }
+                    } catch { /* ignore */ }
+                    // Trigger SM recalc via existing ajouteSM flow (VCUT path)
+                    handleGoodQtyOk();
+                  }}
+                />
+
+                {/* Row 3: QTÉ PRODUITE table (full width) */}
+                <ProducedItemsTable items={vcutProducedItems} language={state.language} />
+
+                {/* Row 4: SORTIE DE MATÉRIEL (full width) */}
                 <MaterialOutputSection
                   materials={smMaterials}
                   smnotrans={smnotrans}
                 />
-              </div>
-            </div>
+              </>
+            ) : (
+              /* ── NON-VCUT LAYOUT: standard side-by-side ── */
+              <>
+                {/* Row 1: Employee | QTÉ PRODUITE | QUANTITÉ DÉFECTUEUSE */}
+                <div className="flex gap-4 items-start">
+                  <div className="flex-1">
+                    <EmployeeEntry
+                      employeeCode={employeeCode}
+                      employeeName={employeeName}
+                      onCodeChange={setEmployeeCode}
+                      onEmployeeFound={handleEmployeeFound}
+                      error={errors.employeeCode}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    {showFinishedProducts ? (
+                      <FinishedProductsSection
+                        products={finishedProducts}
+                        onProductsChange={setFinishedProducts}
+                      />
+                    ) : (
+                      <GoodQuantitySection value={goodQty} onChange={setGoodQty} onOkPress={handleGoodQtyOk} loading={smLoading} />
+                    )}
+                  </div>
+                  {showDefects && (
+                    <div className="flex-1">
+                      <DefectQuantitySection
+                        language={state.language}
+                        fmcode={fmcode}
+                        onAddDefect={handleAddDefect}
+                        onRemoveDefect={handleRemoveDefect}
+                        savedDefects={savedDefects}
+                        loading={smLoading}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Row 2: Stop Cause (isStop, 1/3) | Material Output (2/3) */}
+                <div className="flex gap-4 items-start">
+                  {isStop && (
+                    <div className="flex-1">
+                      <StopCauseSection
+                        language={state.language}
+                        primaryCause={primaryCause}
+                        secondaryCause={secondaryCause}
+                        notes={notes}
+                        onPrimaryCauseChange={setPrimaryCause}
+                        onSecondaryCauseChange={setSecondaryCause}
+                        onNotesChange={setNotes}
+                        error={errors.primaryCause}
+                      />
+                    </div>
+                  )}
+                  <div className="flex-[2]">
+                    <MaterialOutputSection
+                      materials={smMaterials}
+                      smnotrans={smnotrans}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

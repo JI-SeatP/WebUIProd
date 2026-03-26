@@ -38,21 +38,28 @@ export function useStatusChange(
         employeeCode: state.employee?.EMSEQ ?? 0,
       });
 
-      if (res.success) {
-        // Update local status immediately
-        onStatusChanged?.(confirmAction);
-
-        // STOP and COMP navigate to questionnaire
-        if (confirmAction === "STOP" || confirmAction === "COMP") {
-          const type = confirmAction === "STOP" ? "stop" : "comp";
-          const copValue = copmachine ?? 0;
-          navigate(`/orders/${transac}/questionnaire/${type}?copmachine=${copValue}&fromStatus=${encodeURIComponent(currentStatus)}`);
-        }
-        // PROD from SETUP: ask if worker wants to fill Setup Questionnaire
-        else if (confirmAction === "PROD" && currentStatus === "SETUP") {
-          setShowSetupPrompt(true);
-        }
+      if (!res.success) {
+        console.error("[StatusChange] API error:", res.error ?? res.message);
+        alert(res.error ?? res.message ?? "Status change failed");
+        return;
       }
+
+      // Update local status immediately
+      onStatusChanged?.(confirmAction);
+
+      // STOP and COMP navigate to questionnaire
+      if (confirmAction === "STOP" || confirmAction === "COMP") {
+        const type = confirmAction === "STOP" ? "stop" : "comp";
+        const copValue = copmachine ?? 0;
+        navigate(`/orders/${transac}/questionnaire/${type}?copmachine=${copValue}&fromStatus=${encodeURIComponent(currentStatus)}`);
+      }
+      // PROD from SETUP: ask if worker wants to fill Setup Questionnaire
+      else if (confirmAction === "PROD" && currentStatus === "SETUP") {
+        setShowSetupPrompt(true);
+      }
+    } catch (err) {
+      console.error("[StatusChange] Network error:", err);
+      alert("Network error: could not change status. Please try again.");
     } finally {
       setLoading(false);
       setConfirmAction(null);

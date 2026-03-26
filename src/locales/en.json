@@ -181,7 +181,16 @@
     "causeRequired": "Stop cause is required",
     "addProduct": "Add Product",
     "confirmQuantities": "Confirm Quantities",
-    "materialOutputHint": "Enter a quantity and press OK to see material output"
+    "materialOutputHint": "Enter a quantity and press OK to see material output",
+    "qtyProducedRatio": "Qty Produced",
+    "qtyGood": "Qty Good",
+    "qtyDefective": "Qty Defective",
+    "productCode": "Product (Code)",
+    "action": "Action",
+    "bigSheetQty": "Number of Big Sheets",
+    "bigSheetContainer": "Big Sheet Container",
+    "producedQty": "Qty Produced",
+    "finishedProduct": "Finished Product"
   },
   "dialogs": {
     "loading": "Please wait...",

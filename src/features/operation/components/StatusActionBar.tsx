@@ -57,7 +57,7 @@ function getAllActions(status: OperationStatus, t: (key: string) => string): Act
       icon: <Wrench className="size-[24px]" />,
       label: t("actions.setup"),
       bgColor: "#9333ea",
-      active: notStarted || stopped || onHold,
+      active: notStarted || inProd || paused || stopped || onHold,
     },
     {
       action: "PROD",

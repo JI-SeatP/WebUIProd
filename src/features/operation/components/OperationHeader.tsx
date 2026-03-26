@@ -25,6 +25,7 @@ interface OperationHeaderProps {
   statusCode?: string | number | null;
   isVcut?: boolean;
   vcutData?: VcutData | null;
+  onMachineChanged?: () => void;
 }
 
 function Field({ label, value, className }: { label: string; value: React.ReactNode; className?: string }) {
@@ -64,7 +65,7 @@ function QtyField({
   );
 }
 
-export function OperationHeader({ operation, language, statusCode, isVcut, vcutData }: OperationHeaderProps) {
+export function OperationHeader({ operation, language, statusCode, isVcut, vcutData, onMachineChanged }: OperationHeaderProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -104,6 +105,7 @@ export function OperationHeader({ operation, language, statusCode, isVcut, vcutD
       .then((res) => {
         if (res.success) {
           setMachineLabel(loc(res.data.MADESC_P, res.data.MADESC_S));
+          onMachineChanged?.();
         }
       })
       .catch(() => { /* ignore */ });

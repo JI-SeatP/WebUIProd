@@ -181,7 +181,16 @@
     "causeRequired": "La cause d'arrêt est requise",
     "addProduct": "Ajouter produit",
     "confirmQuantities": "Confirmer les quantités",
-    "materialOutputHint": "Entrez une quantité et appuyez OK pour voir la sortie matériel"
+    "materialOutputHint": "Entrez une quantité et appuyez OK pour voir la sortie matériel",
+    "qtyProducedRatio": "Qté produite",
+    "qtyGood": "Qté bonnes",
+    "qtyDefective": "Qté défectueuses",
+    "productCode": "Produit (Code)",
+    "action": "Action",
+    "bigSheetQty": "Nombre de Big Sheets",
+    "bigSheetContainer": "Contenant Big Sheet",
+    "producedQty": "Qté produite",
+    "finishedProduct": "Produit fini"
   },
   "dialogs": {
     "loading": "Veuillez patienter...",
