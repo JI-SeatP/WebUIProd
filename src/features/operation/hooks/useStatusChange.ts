@@ -8,6 +8,7 @@ export type StatusAction = "SETUP" | "PROD" | "PAUSE" | "STOP" | "COMP" | "ON_HO
 export function useStatusChange(
   transac: number,
   copmachine: number | null,
+  nopseq: number | null,
   currentStatus: string,
   onStatusChanged?: (newStatus: string) => void
 ) {
@@ -34,6 +35,7 @@ export function useStatusChange(
       const res = await apiPost("changeStatus.cfm", {
         transac,
         copmachine,
+        nopseq,
         newStatus: confirmAction,
         employeeCode: state.employee?.EMSEQ ?? 0,
       });
@@ -51,7 +53,7 @@ export function useStatusChange(
       if (confirmAction === "STOP" || confirmAction === "COMP") {
         const type = confirmAction === "STOP" ? "stop" : "comp";
         const copValue = copmachine ?? 0;
-        navigate(`/orders/${transac}/questionnaire/${type}?copmachine=${copValue}&fromStatus=${encodeURIComponent(currentStatus)}`);
+        navigate(`/orders/${transac}/questionnaire/${type}?copmachine=${copValue}&nopseq=${nopseq ?? 0}&fromStatus=${encodeURIComponent(currentStatus)}`);
       }
       // PROD from SETUP: ask if worker wants to fill Setup Questionnaire
       else if (confirmAction === "PROD" && currentStatus === "SETUP") {
@@ -64,13 +66,13 @@ export function useStatusChange(
       setLoading(false);
       setConfirmAction(null);
     }
-  }, [confirmAction, transac, copmachine, currentStatus, state.employee, navigate, onStatusChanged]);
+  }, [confirmAction, transac, copmachine, nopseq, currentStatus, state.employee, navigate, onStatusChanged]);
 
   const acceptSetupQuestionnaire = useCallback(() => {
     setShowSetupPrompt(false);
     const copValue = copmachine ?? 0;
-    navigate(`/orders/${transac}/questionnaire/setup?copmachine=${copValue}`);
-  }, [transac, copmachine, navigate]);
+    navigate(`/orders/${transac}/questionnaire/setup?copmachine=${copValue}&nopseq=${nopseq ?? 0}`);
+  }, [transac, copmachine, nopseq, navigate]);
 
   const declineSetupQuestionnaire = useCallback(() => {
     setShowSetupPrompt(false);

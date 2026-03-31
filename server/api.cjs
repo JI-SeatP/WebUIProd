@@ -3724,7 +3724,7 @@ app.post(
 app.post(
   "/changeStatus.cfm",
   handler(async (req, res) => {
-    const { transac, copmachine, newStatus, employeeCode } = req.body;
+    const { transac, copmachine, nopseq: frontendNopseq, newStatus, employeeCode } = req.body;
 
     if (!transac || !newStatus) {
       return res.json({ success: false, error: "transac and newStatus are required" });
@@ -3762,6 +3762,14 @@ app.post(
     if (copmachine) {
       opReq.input("copmachine", sql.Int, copmachine);
       opWhere += ` AND v.COPMACHINE = @copmachine`;
+    }
+    // VCUT orders have multiple rows in vEcransProduction (parent + component).
+    // Without NOPSEQ filter, TOP 1 returns indeterminate row — may pick the parent
+    // instead of the component, causing CNOMENCOP mismatch on the new TEMPSPROD row.
+    // The old software passes NOPSEQ from the rendered button (support.cfc:482).
+    if (Number(frontendNopseq)) {
+      opReq.input("nopseq", sql.Int, Number(frontendNopseq));
+      opWhere += ` AND v.NOPSEQ = @nopseq`;
     }
     const opResult = await opReq.query(`
       SELECT TOP 1 v.OPERATION_SEQ, v.MACHINE, v.INVENTAIRE_SEQ, v.CNOMENCLATURE, v.NOPSEQ, v.COPMACHINE,
@@ -5392,14 +5400,14 @@ app.post(
       if (componentTjseq) {
         // Update TEMPSPROD with qty (ProduitFini.cfc:1505-1512).
         // Old software overwrites TJQTEPROD with current entry qty (not accumulate).
-        // Clear SMNOTRANS so ajouteSM creates a new SM (in old software, each session
-        // starts with a fresh Prod row from changeStatus that has no SMNOTRANS).
+        // Do NOT clear SMNOTRANS — within a session, SM is reused on 2nd "+" click.
+        // Fresh Prod rows from changeStatus naturally have empty SMNOTRANS.
         await pool.request()
           .input("tjseq", sql.Int, componentTjseq)
           .input("qty", sql.Float, goodQty)
           .input("cnomencop", sql.Int, nopseq)
           .input("invC", sql.Int, inventaireP || 0)
-          .query(`UPDATE TEMPSPROD SET TJQTEPROD = @qty, CNOMENCOP = @cnomencop, INVENTAIRE_C = @invC, SMNOTRANS = '' WHERE TJSEQ = @tjseq`);
+          .query(`UPDATE TEMPSPROD SET TJQTEPROD = @qty, CNOMENCOP = @cnomencop, INVENTAIRE_C = @invC WHERE TJSEQ = @tjseq`);
       }
     }
 

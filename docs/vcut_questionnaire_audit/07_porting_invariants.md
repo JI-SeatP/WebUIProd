@@ -99,27 +99,27 @@ When the operation is complete, the following writes must occur in this order:
 
 ---
 
-### I10a — New SM created per "+" click (both cross-NOPSEQ and same-NOPSEQ)
+### I10a — SM creation depends on session state (fresh Prod row from changeStatus)
 
-The old software creates a **new SM transaction** on every "+" button click, regardless of whether the component's NOPSEQ matches the main operation NOPSEQ or not. An existing SM is never reused within the same "+" click.
+A **new SM** is created on the **first "+" click** of each questionnaire session. On **subsequent "+" clicks within the same session on the same component**, the existing SM is **reused and updated** (SMNOTRANS persists on the TEMPSPROD row).
 
-**Mechanism:** Each questionnaire session starts when changeStatus creates a fresh Prod TEMPSPROD row with `SMNOTRANS = NULL`. When ajouteSM's `qTJSEQPROD` query (`WHERE CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'PROD' ORDER BY TJSEQ DESC`) finds this fresh row, pass 1 returns empty → all passes return empty → `InsertSortieMateriel` creates a new SM.
+**Mechanism:** Each questionnaire session starts when changeStatus creates a fresh Prod TEMPSPROD row with `SMNOTRANS = NULL`. When ajouteSM's `qTJSEQPROD` query (`WHERE CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'PROD' ORDER BY TJSEQ DESC`) finds this fresh row, pass 1 returns empty → all passes return empty → `InsertSortieMateriel` creates a new SM → writes `SMNOTRANS` to the row. On the next "+" click, pass 1 finds the populated `SMNOTRANS` → SM is reused via `Nba_Sp_Sortie_Materiel` (update, not insert).
 
-For **cross-NOPSEQ** orders: `addVcutQty` creates a brand new TEMPSPROD row (via `Nba_Sp_Insert_Production`) which naturally has no SMNOTRANS.
+**CRITICAL dependency — changeStatus NOPSEQ:** The fresh Prod row must have the correct `CNOMENCOP` matching the component's operation NOPSEQ. The old software passes `arguments.NOPSEQ` from the rendered button (support.cfc:482) to `ajouteModifieStatut`, which sets `CNOMENCOP = arguments.NOPSEQ` on the new row (QuestionnaireSortie.cfc:1554). If `changeStatus` uses the wrong NOPSEQ (e.g., parent 213765 instead of component 213766 for VCUT), `addVcutQty` and `ajouteSM` will find old rows instead of the fresh one → SM reused from previous session instead of creating new.
 
-For **same-NOPSEQ** orders: `addVcutQty` finds and updates the existing PROD row. The old software's flow starts each session with a fresh Prod row (from changeStatus) that has no SMNOTRANS. If the new software reuses a row from a previous session that already has SMNOTRANS, it must clear SMNOTRANS during the update to match the old software's "fresh row" behavior.
+**Evidence:** Database test on CO-016897-002 — two entries across two sessions (12 pcs → STOP → back to Prod → 15 pcs) produced two separate SMs (SM-079133 qty=12, SM-079134 qty=15). Each session's changeStatus created a fresh Prod row with empty SMNOTRANS.
 
-**Evidence:** Database test on CO-016897-002 — two sequential "+" clicks (12 pcs, 15 pcs) produced two separate SMs (SM-079133 qty=12, SM-079134 qty=15). Both exist in SORTIEMATERIEL independently.
-
-**Why:** Each component entry creates its own SM for material tracking. The SM/REPORT posting at submit time posts each SM independently.
+**Why:** Each session needs its own SM for independent material tracking. Within a session, the SM is updated as the user adjusts quantities.
 
 ---
 
 ### I10b — Same-NOPSEQ TEMPSPROD qty is overwritten (not accumulated)
 
-For same-NOPSEQ orders, the existing TEMPSPROD row's `TJQTEPROD` is set to the current entry's qty, **not** accumulated with previous entries. The `ENTRERPRODFINI_PFNOTRANS` is also overwritten with the new EPF link.
+For same-NOPSEQ orders, the TEMPSPROD row's `TJQTEPROD` is set to the **current entry's qty**, not accumulated with previous entries. The `ENTRERPRODFINI_PFNOTRANS` is also overwritten with the new EPF link. `SMNOTRANS` is **NOT** modified by `addVcutQty` — it persists from the previous "+" click (or is empty on a fresh session's Prod row).
 
-**Evidence:** `ProduitFini.cfc:1505-1512` — `SET TJQTEPROD = #val(LaQteAjoutee)#` where `LaQteAjoutee = val(arguments.Qte)` (line 1338, current entry only). `ENTRERPRODFINI_PFNOTRANS` is set to the new EPF's PFNOTRANS. The `cNOMENCOP.NOPQTETERMINE` accumulated total (12+15=27) is computed separately at submit time from EPF detail records, not from TEMPSPROD.TJQTEPROD.
+**Why this doesn't lose data:** Each questionnaire session (STOP → Prod → entry → STOP) creates its own Prod row via changeStatus. Entry 1 lives on row A (TJQTEPROD=12), entry 2 lives on row B (TJQTEPROD=15). At submit time, `cNOMENCOP.NOPQTETERMINE` = `SUM(TJQTEPROD)` across ALL Prod rows = 12+15 = 27. Within a single session, a 2nd "+" click overwrites the 1st — this is intentional (user correcting their entry). Each "+" creates its own EPF regardless.
+
+**Evidence:** `ProduitFini.cfc:1338` — `LaQteAjoutee = val(arguments.Qte)` (current entry only). `ProduitFini.cfc:1505-1512` — `SET ENTRERPRODFINI_PFNOTRANS = ?, TJQTEPROD = LaQteAjoutee WHERE TJSEQ = LeTJSEQEPF`. Database test on CO-016897-002 confirmed: row 289651 has TJQTEPROD=12, row 289653 has TJQTEPROD=15 (separate sessions, separate rows).
 
 ---
 
