@@ -25,7 +25,7 @@ function App() {
               <Route element={<AppLayout />}>
                 <Route path="/orders" element={<WorkOrderListPage />} />
                 <Route
-                  path="/orders/:transac/operation/:copmachine"
+                  path="/orders/:transac/operation/:copmachine/:nopseq"
                   element={<OperationDetailsPage />}
                 />
                 <Route

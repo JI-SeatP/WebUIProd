@@ -282,7 +282,7 @@ export function OperationHeader({ operation, language, statusCode, isVcut, vcutD
                         )}
                         onClick={() => {
                           setSwitcherOpen(false);
-                          navigate(`/orders/${op.TRANSAC}/operation/${op.COPMACHINE ?? 0}`);
+                          navigate(`/orders/${op.TRANSAC}/operation/${op.COPMACHINE ?? 0}/${op.NOPSEQ ?? 0}`);
                         }}
                         disabled={isCurrent}
                       >

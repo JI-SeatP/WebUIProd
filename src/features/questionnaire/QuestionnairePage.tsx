@@ -38,7 +38,11 @@ export function QuestionnairePage() {
     state.activeOperation?.COPMACHINE?.toString() ??
     "0";
   const fromStatus = searchParams.get("fromStatus") ?? "";
-  const { operation, loading: opLoading } = useOperation(transac!, copmachine);
+  const nopseqParam =
+    searchParams.get("nopseq") ??
+    state.activeOperation?.NOPSEQ?.toString() ??
+    "0";
+  const { operation, loading: opLoading } = useOperation(transac!, copmachine, nopseqParam);
 
   const isStop = type === "stop";
   const isComp = type === "comp";
@@ -196,7 +200,8 @@ export function QuestionnairePage() {
         if (res.success) {
           const { toast } = await import("sonner");
           toast.success(t("questionnaire.submitSuccess"));
-          navigate(`/orders/${transac}/operation/${copmachine}`);
+          const nopseqNav = (operation as unknown as Record<string, unknown>)?.NOPSEQ ?? 0;
+          navigate(`/orders/${transac}/operation/${copmachine}/${nopseqNav}`);
         }
       } catch {
         const { toast } = await import("sonner");
@@ -290,7 +295,8 @@ export function QuestionnairePage() {
       listeEpfSeq: vcutListeEpfSeq,
       listeSmseq: vcutListeSmseq,
     });
-    navigate(`/orders/${transac}/operation/${copmachine}`);
+    const nopseqNav = (operation as unknown as Record<string, unknown>)?.NOPSEQ ?? 0;
+    navigate(`/orders/${transac}/operation/${copmachine}/${nopseqNav}`);
   }, [transac, copmachine, smnotrans, smseq, vcutListeTjseq, vcutListeEpfSeq, vcutListeSmseq, navigate, operation]);
 
   if (opLoading) {

@@ -25,6 +25,7 @@
 	<!--- Required parameters --->
 	<cfparam name="url.transac" default="0">
 	<cfparam name="url.copmachine" default="0">
+	<cfparam name="url.nopseq" default="0">
 
 	<cfif Val(url.transac) EQ 0>
 		<cfset response["success"] = false>
@@ -33,26 +34,35 @@
 		<cfabort>
 	</cfif>
 
-	<!--- Step 1: Look up TJSEQ from vEcransProduction (EXT datasource) --->
-	<cfquery name="qLookup" datasource="#datasourcePrimary#">
-		SELECT TOP 1 v.TJSEQ
+	<!--- Step 1: Look up TJSEQ from vEcransProduction (EXT datasource)
+	      Matches old code: support.cfc::trouveUneOperation (dsClientEXT)
+	      When COPMACHINE=0 or NOPSEQ=0, those filters are skipped (old CF pattern).
+	      TJSEQ may be NULL for orders that have not started production — this is valid. --->
+	<cfquery name="qLookup" datasource="#datasourceExt#">
+		SELECT TOP 1 v.TJSEQ, v.NOPSEQ, v.COPMACHINE
 		FROM vEcransProduction v
+		LEFT OUTER JOIN dbo.VSP_BonTravail_Entete AS VBE ON VBE.TRANSAC = (SELECT TOP 1 TRANSAC FROM dbo.VSP_BonTravail_Entete VBE2 WHERE VBE2.TRANSAC = v.TRANSAC)
 		WHERE v.TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(url.transac)#">
 		AND v.OPERATION <> 'FINSH'
 		<cfif Val(url.copmachine) NEQ 0>
 			AND v.COPMACHINE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(url.copmachine)#">
 		</cfif>
+		<cfif Val(url.nopseq) NEQ 0>
+			AND v.NOPSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(url.nopseq)#">
+		</cfif>
 		ORDER BY v.TJSEQ DESC
 	</cfquery>
 
-	<cfif qLookup.RecordCount EQ 0 OR Val(qLookup.TJSEQ) EQ 0>
+	<cfif qLookup.RecordCount EQ 0>
 		<cfset response["success"] = false>
-		<cfset response["error"] = "Operation not found for transac=#url.transac# copmachine=#url.copmachine#">
+		<cfset response["error"] = "Operation not found for transac=#url.transac# copmachine=#url.copmachine# nopseq=#url.nopseq#">
 		<cfoutput>#SerializeJSON(response)#</cfoutput>
 		<cfabort>
 	</cfif>
 
-	<cfset theTJSEQ = qLookup.TJSEQ>
+	<!--- TJSEQ can be 0/NULL for unstarted orders (no TEMPSPROD record yet) --->
+	<cfset theTJSEQ = Val(qLookup.TJSEQ)>
+	<cfset theNOPSEQ = Val(qLookup.NOPSEQ)>
 
 	<!--- Step 2: Exact RequeteAlternative.cfm query from legacy code (datasource = primary DB)
 	      Cross-database reference to EXT for VSP_BonTravail_Entete and FctGet_PANNEAUX --->
@@ -135,20 +145,24 @@
 		LEFT OUTER JOIN DET_CNOMENCOP D ON D.NOMENCOP = CNOP.NOPSEQ
 		LEFT OUTER JOIN CNOMENCLATURE CN_MAT ON CN_MAT.NISEQ = D.NOMENCLATURE OR CN_MAT.NISEQ = CNOP.NOMENCLATURE
 		LEFT OUTER JOIN CNOMENCOP_MACHINE CNOM ON CNOM.CNOMENCOP = CNOP.NOPSEQ AND CNOM.CNOM_SEQ = PL.CNOMENCOP_MACHINE
-		INNER JOIN MACHINE MA ON MA.MASEQ = PL.MACHINE
-		INNER JOIN FAMILLEMACHINE f ON f.FMSEQ = MA.FAMILLEMACHINE
+		LEFT OUTER JOIN MACHINE MA ON MA.MASEQ = PL.MACHINE
+		LEFT OUTER JOIN FAMILLEMACHINE f ON f.FMSEQ = MA.FAMILLEMACHINE
 		LEFT OUTER JOIN OPERATION OP ON CNOP.OPERATION = OP.OPSEQ
 		OUTER APPLY (SELECT TOP 1 PPINNOINV FROM PRIXCLIENT WHERE CNOP.INVENTAIRE_P = INVENTAIRE) AS PC
 		LEFT OUTER JOIN cNOMENCLATURE AS MCX_KIT ON MCX_KIT.TRANSAC = CNOP.TRANSAC AND MCX_KIT.NIREGRP_PROD1 in ('KIT','AP')
 		OUTER APPLY(SELECT I.INLONGUEUR_MSE, I.INLARGEUR_MSE FROM INVENTAIRE I WHERE I.INSEQ = CNOP.INVENTAIRE) SRC
 		OUTER APPLY (SELECT TOP 1 TE.TREPOSTER FROM TRANSFENTREP TE Where TE.CNOMENCOP = CNOP.NOPSEQ ORDER BY TE.TRESEQ DESC) AS TRANSFERT
-		INNER JOIN TEMPSPROD TPROD ON T.TRSEQ = TPROD.TRANSAC AND CNOP.NOPSEQ = TPROD.CNOMENCOP
-		WHERE TPROD.TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(theTJSEQ)#">
+		LEFT OUTER JOIN TEMPSPROD TPROD ON T.TRSEQ = TPROD.TRANSAC AND CNOP.NOPSEQ = TPROD.CNOMENCOP
+			<cfif theTJSEQ GT 0>AND TPROD.TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#theTJSEQ#"></cfif>
+		WHERE CNOP.NOPSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#theNOPSEQ#">
+		<cfif theTJSEQ GT 0>
+			AND TPROD.TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#theTJSEQ#">
+		</cfif>
 	</cfquery>
 
 	<cfif trouveOperation.RecordCount EQ 0>
 		<cfset response["success"] = false>
-		<cfset response["error"] = "Operation not found for TJSEQ=#theTJSEQ#">
+		<cfset response["error"] = "Operation not found for transac=#url.transac# nopseq=#theNOPSEQ# TJSEQ=#theTJSEQ#">
 		<cfoutput>#SerializeJSON(response)#</cfoutput>
 		<cfabort>
 	</cfif>

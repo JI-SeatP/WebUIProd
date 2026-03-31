@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 interface StatusActionBarProps {
   transac: number;
   copmachine: number | null;
+  nopseq: number | null;
   statusCode: number | string;
   orderNumber: string;
   /** Localized operation label (matches header) */
@@ -111,6 +112,7 @@ const STATUS_DISPLAY: Record<OperationStatus, { labelKey: string; bgColor: strin
 export function StatusActionBar({
   transac,
   copmachine,
+  nopseq,
   statusCode,
   orderNumber,
   operationLabel,
@@ -128,7 +130,7 @@ export function StatusActionBar({
     executeChange,
     acceptSetupQuestionnaire,
     declineSetupQuestionnaire,
-  } = useStatusChange(transac, copmachine, status, onStatusChanged);
+  } = useStatusChange(transac, copmachine, nopseq, status, onStatusChanged);
 
   const actions = getAllActions(status, t);
 

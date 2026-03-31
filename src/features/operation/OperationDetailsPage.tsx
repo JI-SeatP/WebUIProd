@@ -26,10 +26,10 @@ import type { OperationStep } from "@/types/workOrder";
 import { useRegisterRefresh } from "@/context/RefreshContext";
 
 export function OperationDetailsPage() {
-  const { transac, copmachine } = useParams<{ transac: string; copmachine: string }>();
+  const { transac, copmachine, nopseq } = useParams<{ transac: string; copmachine: string; nopseq: string }>();
   const { state } = useSession();
   const { t } = useTranslation();
-  const { operation, loading, error, refetch } = useOperation(transac!, copmachine!);
+  const { operation, loading, error, refetch } = useOperation(transac!, copmachine!, nopseq ?? "0");
   const [localStatus, setLocalStatus] = useState<string | null>(null);
 
   // VCUT-specific data — fetched only when operation is VCUT
@@ -416,6 +416,7 @@ export function OperationDetailsPage() {
       <StatusActionBar
         transac={operation.TRANSAC}
         copmachine={operation.COPMACHINE ?? Number(copmachine)}
+        nopseq={operation.NOPSEQ ?? Number(nopseq)}
         statusCode={localStatus ?? operation.STATUT_CODE}
         orderNumber={operation.NO_PROD}
         operationLabel={locOp(operation.OPERATION_P, operation.OPERATION_S)}

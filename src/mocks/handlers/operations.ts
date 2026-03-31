@@ -6,6 +6,7 @@ export const operationHandlers = [
     const url = new URL(request.url);
     const transac = url.searchParams.get("transac");
     const copmachine = url.searchParams.get("copmachine");
+    const nopseq = url.searchParams.get("nopseq");
 
     if (!transac) {
       return HttpResponse.json({
@@ -17,11 +18,16 @@ export const operationHandlers = [
     const workOrders = await loadWorkOrders();
     const details = await loadWorkOrderDetails();
 
-    const order = workOrders.find(
-      (wo) =>
-        wo.TRANSAC === Number(transac) &&
-        (copmachine ? wo.COPMACHINE === Number(copmachine) : true)
-    );
+    // Match old CF logic: skip COPMACHINE filter when 0, use NOPSEQ when available
+    const copmachineNum = Number(copmachine) || 0;
+    const nopseqNum = Number(nopseq) || 0;
+
+    const order = workOrders.find((wo) => {
+      if (wo.TRANSAC !== Number(transac)) return false;
+      if (copmachineNum !== 0 && wo.COPMACHINE !== copmachineNum) return false;
+      if (nopseqNum !== 0 && wo.NOPSEQ !== nopseqNum) return false;
+      return true;
+    });
 
     if (!order) {
       return HttpResponse.json({

@@ -5,7 +5,7 @@ import type { WorkOrderDetail } from "@/types/workOrder";
 
 export type OperationData = WorkOrder & Partial<WorkOrderDetail>;
 
-export function useOperation(transac: string, copmachine: string) {
+export function useOperation(transac: string, copmachine: string, nopseq: string = "0") {
   const [operation, setOperation] = useState<OperationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -15,7 +15,7 @@ export function useOperation(transac: string, copmachine: string) {
     setError(null);
     try {
       const res = await apiGet<OperationData>(
-        `getOperation.cfm?transac=${transac}&copmachine=${copmachine}`
+        `getOperation.cfm?transac=${transac}&copmachine=${copmachine}&nopseq=${nopseq}`
       );
       if (res.success) {
         setOperation(res.data);
@@ -27,7 +27,7 @@ export function useOperation(transac: string, copmachine: string) {
     } finally {
       setLoading(false);
     }
-  }, [transac, copmachine]);
+  }, [transac, copmachine, nopseq]);
 
   useEffect(() => {
     fetchOperation();

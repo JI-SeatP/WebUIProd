@@ -59,7 +59,7 @@ export function useQuestionnaireSubmit() {
         const res = await apiPost("submitQuestionnaire.cfm", payload as unknown as Record<string, unknown>);
         if (res.success) {
           toast.success(t("questionnaire.submitSuccess"));
-          navigate(`/orders/${payload.transac}/operation/${payload.copmachine ?? ""}`);
+          navigate(`/orders/${payload.transac}/operation/${payload.copmachine ?? 0}/${payload.nopseq ?? 0}`);
         } else {
           toast.error(res.error ?? t("questionnaire.submitError"));
         }
@@ -108,8 +108,8 @@ export function useQuestionnaireSubmit() {
   }, []);
 
   const cancel = useCallback(
-    (transac: number, copmachine: number | null) => {
-      navigate(`/orders/${transac}/operation/${copmachine ?? ""}`);
+    (transac: number, copmachine: number | null, nopseq?: number) => {
+      navigate(`/orders/${transac}/operation/${copmachine ?? 0}/${nopseq ?? 0}`);
     },
     [navigate]
   );

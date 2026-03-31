@@ -59,13 +59,13 @@ export function ActionsDropdown({ order }: ActionsDropdownProps) {
 
   const handleView = () => {
     navigate(
-      `/orders/${order.TRANSAC}/operation/${order.COPMACHINE ?? 0}`
+      `/orders/${order.TRANSAC}/operation/${order.COPMACHINE ?? 0}/${order.NOPSEQ ?? 0}`
     );
   };
 
   const handleGo = () => {
     navigate(
-      `/orders/${order.TRANSAC}/operation/${order.COPMACHINE ?? 0}`
+      `/orders/${order.TRANSAC}/operation/${order.COPMACHINE ?? 0}/${order.NOPSEQ ?? 0}`
     );
   };
 
