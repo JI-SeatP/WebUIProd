@@ -2489,8 +2489,10 @@ app.post(
     updateReq.input("INVENTAIRE_C", sql.Int, tp.INVENTAIRE_C || 0);
     updateReq.input("TJVALIDE", sql.Bit, 1);
     updateReq.input("TJPROD_TERMINE", sql.Bit, isComp ? 1 : 0);
-    updateReq.input("TJQTEPROD", sql.Float, qteBonne);
-    updateReq.input("TJQTEDEFECT", sql.Float, qteDefect);
+    // VCUT: use the PROD row's existing TJQTEPROD/TJQTEDEFECT (matches old software
+    // QuestionnaireSortie.cfc line 752 — passes qPrevRow.TJQTEPROD, not frontend goodQty)
+    updateReq.input("TJQTEPROD", sql.Float, frontendIsVcut ? (tp.TJQTEPROD || 0) : qteBonne);
+    updateReq.input("TJQTEDEFECT", sql.Float, frontendIsVcut ? (tp.TJQTEDEFECT || 0) : qteDefect);
     updateReq.input("StrDateD", sql.Char(10), startDateStr);
     updateReq.input("StrHeureD", sql.Char(8), startTimeStr);
     updateReq.input("StrDateF", sql.Char(10), dateNow);
@@ -2584,56 +2586,190 @@ app.post(
       console.warn("[submitQuestionnaire] Nba_Update_ProduitEnCours skipped:", err.message);
     }
 
-    // ── Fix 6: Update cNOMENCOP quantity totals from all PROD rows
-    try {
-      await pool.request()
-        .input("transac", sql.Int, transac)
-        .input("nopseq", sql.Int, nopseq)
-        .query(`
-          UPDATE CNOMENCOP SET
-            NOPQTETERMINE = (SELECT ISNULL(SUM(TJQTEPROD), 0) FROM TEMPSPROD WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'Prod'),
-            NOPQTESCRAP = (SELECT ISNULL(SUM(TJQTEDEFECT), 0) FROM TEMPSPROD WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'Prod'),
-            NOPQTERESTE = NOPQTEAFAIRE - (SELECT ISNULL(SUM(TJQTEPROD), 0) + ISNULL(SUM(TJQTEDEFECT), 0) FROM TEMPSPROD WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'Prod')
-          WHERE NOPSEQ = @nopseq
-        `);
-      console.log(`[submitQuestionnaire] cNOMENCOP quantities updated for NOPSEQ=${nopseq}`);
-    } catch (err) {
-      console.warn("[submitQuestionnaire] cNOMENCOP quantity update skipped:", err.message);
-    }
+    // ── Fix 6: Update cNOMENCOP quantity totals + completion logic
+    // VCUT uses per-component cNOMENCOP updates + QTE_FORCEE threshold (I2, I9)
+    // Non-VCUT uses aggregate SUM across all PROD rows
+    if (frontendIsVcut && frontendListeEpfSeq && frontendListeTjseq && isComp) {
+      // ── VCUT completion check (QuestionnaireSortie.cfc:1124-1290) ──
+      // Only runs for COMP, not STOP — the old software does not reset cNOMENCOP on STOP
+      try {
+        // Get QTE_FORCEE as completion threshold (I2 — NOT QTE_A_FAB / DCQTE_A_FAB)
+        const poolExtVcut = await getPoolExt();
+        const qteForceResult = await poolExtVcut.request()
+          .input("transac", sql.Int, transac)
+          .query(`SELECT TOP 1 QTE_FORCEE FROM vEcransProduction WHERE TRANSAC = @transac AND OPERATION <> 'FINSH' AND (NO_INVENTAIRE = 'VCUT' OR PRODUIT_CODE = 'VCUT')`);
+        const qteForcee = qteForceResult.recordset[0]?.QTE_FORCEE || 0;
 
-    // ── STEP 9: Mark operation as complete in PL_RESULTAT if COMP
-    if (isComp) {
-      await pool.request()
-        .input("nopseq", sql.Int, nopseq)
-        .query(`UPDATE PL_RESULTAT SET PR_TERMINE = 1 WHERE cNOMENCOP = @nopseq`);
-    }
+        // Current total produced across batch (MAX not SUM — I6)
+        const vcutTjseqs = String(frontendListeTjseq).split(",").map(s => parseInt(s, 10)).filter(n => !isNaN(n));
+        let leTjqteProd = 0;
+        if (vcutTjseqs.length) {
+          const totalProdResult = await pool.request()
+            .input("tjseqs", sql.VarChar(4000), vcutTjseqs.join(","))
+            .query(`SELECT MAX(ISNULL(TJQTEPROD, 0)) AS LeTJQTEPROD FROM TEMPSPROD WHERE TJSEQ IN (${vcutTjseqs.join(",")}) AND MODEPROD_MPCODE = 'Prod'`);
+          leTjqteProd = totalProdResult.recordset[0]?.LeTJQTEPROD || 0;
+        }
 
-    // ── STEP 10: Auto-complete if STOP but total qty meets target (line 1130)
-    if (isStop) {
-      const totalResult = await pool.request()
-        .input("transac", sql.Int, transac)
-        .input("nopseq", sql.Int, nopseq)
-        .query(`
-          SELECT ISNULL(SUM(TJQTEPROD), 0) AS TotalPROD
-          FROM TEMPSPROD
-          WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE IN ('Prod','STOP','COMP')
-        `);
-      const totalProd = totalResult.recordset[0]?.TotalPROD || 0;
+        console.log(`[submitQuestionnaire] VCUT completion check: QTE_FORCEE=${qteForcee} LeTJQTEPROD=${leTjqteProd} threshold=${qteForcee - leTjqteProd}`);
 
-      const poolExt = await getPoolExt();
-      const targetResult = await poolExt.request()
-        .input("transac", sql.Int, transac)
-        .input("nopseq2", sql.Int, nopseq)
-        .query(`SELECT TOP 1 v.QTE_A_FAB FROM vEcransProduction v WHERE v.TRANSAC = @transac AND v.NOPSEQ = @nopseq2`);
-      const targetQty = targetResult.recordset[0]?.QTE_A_FAB || 0;
+        if (qteForcee > 0 && (qteForcee - leTjqteProd) <= 0) {
+          // ── VCUT-COMPLETE block (QuestionnaireSortie.cfc:1186-1290) ──
+          console.log(`[submitQuestionnaire] VCUT-COMPLETE block firing`);
 
-      if (targetQty > 0 && totalProd >= targetQty) {
+          // Step 9a: Per-EPF — update cNOMENCOP with per-component quantities (I9 step 1)
+          const epfSeqList = String(frontendListeEpfSeq).split(",").map(s => parseInt(s, 10)).filter(n => !isNaN(n));
+          for (const pfseq of epfSeqList) {
+            const pfnoResult = await pool.request()
+              .input("pfseq", sql.Int, pfseq)
+              .query(`SELECT PFNOTRANS FROM ENTRERPRODFINI WHERE PFSEQ = @pfseq`);
+            if (!pfnoResult.recordset.length) continue;
+            const pfnotrans = (pfnoResult.recordset[0].PFNOTRANS || "").trim();
+            if (!pfnotrans) continue;
+
+            // Find TEMPSPROD linked to this EPF → get INVENTAIRE_C and quantities
+            const tpForEpf = await pool.request()
+              .input("pfnotrans", sql.VarChar(9), pfnotrans.substring(0, 9))
+              .query(`
+                SELECT INVENTAIRE_C, SUM(TJQTEPROD) AS totalGood, SUM(TJQTEDEFECT) AS totalDefect
+                FROM TEMPSPROD
+                WHERE ENTRERPRODFINI_PFNOTRANS = @pfnotrans
+                GROUP BY INVENTAIRE_C
+              `);
+            if (!tpForEpf.recordset.length) continue;
+
+            const invC = tpForEpf.recordset[0].INVENTAIRE_C;
+            const totalGood = tpForEpf.recordset[0].totalGood || 0;
+            const totalDefect = tpForEpf.recordset[0].totalDefect || 0;
+
+            // Update cNOMENCOP for this component
+            await pool.request()
+              .input("transac", sql.Int, transac)
+              .input("invP", sql.Int, invC)
+              .input("qteTermine", sql.Float, totalGood)
+              .input("qteScrap", sql.Float, totalDefect)
+              .query(`
+                UPDATE cNOMENCOP SET NOPQTETERMINE = @qteTermine, NOPQTESCRAP = @qteScrap
+                WHERE TRANSAC = @transac AND INVENTAIRE_P = @invP
+              `);
+
+            // Step 9b: Update PL_RESULTAT PR_TERMINE per cNOMENCOP (I9 step 2)
+            await pool.request()
+              .input("transac", sql.Int, transac)
+              .input("invP", sql.Int, invC)
+              .query(`
+                UPDATE PL_RESULTAT SET PR_TERMINE = 1
+                WHERE cNOMENCOP IN (
+                  SELECT NOPSEQ FROM cNOMENCOP WHERE TRANSAC = @transac AND INVENTAIRE_P = @invP
+                )
+              `);
+            console.log(`[submitQuestionnaire] VCUT-COMPLETE: cNOMENCOP updated for INVENTAIRE_C=${invC} (good=${totalGood}, defect=${totalDefect})`);
+          }
+
+          // Step 9c: All ListeTJSEQ — set COMP, TJPROD_TERMINE (I9 step 3)
+          if (vcutTjseqs.length) {
+            await pool.request()
+              .query(`
+                UPDATE TEMPSPROD SET MODEPROD_MPCODE = 'COMP', TJFINDATE = GETDATE(), TJPROD_TERMINE = 1
+                WHERE TJSEQ IN (${vcutTjseqs.join(",")})
+              `);
+            console.log(`[submitQuestionnaire] VCUT-COMPLETE: ${vcutTjseqs.length} TEMPSPROD rows set to COMP`);
+          }
+
+          // Step 9d: Hardcode — INVENTAIRE_C = 10525 (I9 step 4, audit E1)
+          // NOTE: Legacy hardcode for VCUT parent material. May be environment-specific (audit Q2).
+          await pool.request()
+            .input("transac", sql.Int, transac)
+            .query(`UPDATE TEMPSPROD SET TJQTEPROD = 1 WHERE TRANSAC = @transac AND INVENTAIRE_C = 10525`);
+          console.log(`[submitQuestionnaire] VCUT-COMPLETE: INVENTAIRE_C=10525 hardcode applied`);
+
+          // Step 9e: Close transaction (I9 step 5)
+          await pool.request()
+            .input("transac", sql.Int, transac)
+            .query(`UPDATE TRANSAC SET TRSTATUTITEM = 1 WHERE TRSEQ = @transac`);
+          console.log(`[submitQuestionnaire] VCUT-COMPLETE: TRANSAC.TRSTATUTITEM=1`);
+
+        } else {
+          // ── VCUT-INCOMPLETE: reset cNOMENCOP quantities to 0 (QuestionnaireSortie.cfc:1282)
+          const epfSeqList = String(frontendListeEpfSeq).split(",").map(s => parseInt(s, 10)).filter(n => !isNaN(n));
+          for (const pfseq of epfSeqList) {
+            const pfnoResult = await pool.request()
+              .input("pfseq", sql.Int, pfseq)
+              .query(`SELECT PFNOTRANS FROM ENTRERPRODFINI WHERE PFSEQ = @pfseq`);
+            if (!pfnoResult.recordset.length) continue;
+            const pfnotrans = (pfnoResult.recordset[0].PFNOTRANS || "").trim();
+            if (!pfnotrans) continue;
+
+            const tpForEpf = await pool.request()
+              .input("pfnotrans", sql.VarChar(9), pfnotrans.substring(0, 9))
+              .query(`SELECT DISTINCT INVENTAIRE_C FROM TEMPSPROD WHERE ENTRERPRODFINI_PFNOTRANS = @pfnotrans`);
+            for (const row of tpForEpf.recordset) {
+              await pool.request()
+                .input("transac", sql.Int, transac)
+                .input("invP", sql.Int, row.INVENTAIRE_C)
+                .query(`
+                  UPDATE cNOMENCOP SET NOPQTETERMINE = 0, NOPQTESCRAP = 0, NOPQTERESTE = 0
+                  WHERE TRANSAC = @transac AND INVENTAIRE_P = @invP
+                `);
+            }
+          }
+          console.log(`[submitQuestionnaire] VCUT-INCOMPLETE: cNOMENCOP quantities reset to 0`);
+        }
+      } catch (err) {
+        console.warn("[submitQuestionnaire] VCUT completion check error:", err.message);
+      }
+    } else {
+      // ── Non-VCUT: generic cNOMENCOP update (aggregate SUM)
+      try {
         await pool.request()
-          .input("tjseq", sql.Int, tjseq)
-          .query(`UPDATE TEMPSPROD SET TJPROD_TERMINE = 1 WHERE TJSEQ = @tjseq`);
+          .input("transac", sql.Int, transac)
+          .input("nopseq", sql.Int, nopseq)
+          .query(`
+            UPDATE CNOMENCOP SET
+              NOPQTETERMINE = (SELECT ISNULL(SUM(TJQTEPROD), 0) FROM TEMPSPROD WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'Prod'),
+              NOPQTESCRAP = (SELECT ISNULL(SUM(TJQTEDEFECT), 0) FROM TEMPSPROD WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'Prod'),
+              NOPQTERESTE = NOPQTEAFAIRE - (SELECT ISNULL(SUM(TJQTEPROD), 0) + ISNULL(SUM(TJQTEDEFECT), 0) FROM TEMPSPROD WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'Prod')
+            WHERE NOPSEQ = @nopseq
+          `);
+        console.log(`[submitQuestionnaire] cNOMENCOP quantities updated for NOPSEQ=${nopseq}`);
+      } catch (err) {
+        console.warn("[submitQuestionnaire] cNOMENCOP quantity update skipped:", err.message);
+      }
+
+      // ── STEP 9: Mark operation as complete in PL_RESULTAT if COMP (non-VCUT)
+      if (isComp) {
         await pool.request()
           .input("nopseq", sql.Int, nopseq)
           .query(`UPDATE PL_RESULTAT SET PR_TERMINE = 1 WHERE cNOMENCOP = @nopseq`);
+      }
+
+      // ── STEP 10: Auto-complete if STOP but total qty meets target (line 1130)
+      // VCUT excluded — I5: no auto-STOP→COMP for VCUT
+      if (isStop && !frontendIsVcut) {
+        const totalResult = await pool.request()
+          .input("transac", sql.Int, transac)
+          .input("nopseq", sql.Int, nopseq)
+          .query(`
+            SELECT ISNULL(SUM(TJQTEPROD), 0) AS TotalPROD
+            FROM TEMPSPROD
+            WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE IN ('Prod','STOP','COMP')
+          `);
+        const totalProd = totalResult.recordset[0]?.TotalPROD || 0;
+
+        const poolExt = await getPoolExt();
+        const targetResult = await poolExt.request()
+          .input("transac", sql.Int, transac)
+          .input("nopseq2", sql.Int, nopseq)
+          .query(`SELECT TOP 1 v.QTE_A_FAB FROM vEcransProduction v WHERE v.TRANSAC = @transac AND v.NOPSEQ = @nopseq2`);
+        const targetQty = targetResult.recordset[0]?.QTE_A_FAB || 0;
+
+        if (targetQty > 0 && totalProd >= targetQty) {
+          await pool.request()
+            .input("tjseq", sql.Int, tjseq)
+            .query(`UPDATE TEMPSPROD SET TJPROD_TERMINE = 1 WHERE TJSEQ = @tjseq`);
+          await pool.request()
+            .input("nopseq", sql.Int, nopseq)
+            .query(`UPDATE PL_RESULTAT SET PR_TERMINE = 1 WHERE cNOMENCOP = @nopseq`);
+        }
       }
     }
 
@@ -2713,19 +2849,15 @@ app.post(
         leTjseqProd = vcutProdResult.recordset[0].TJSEQ;
       }
 
-      // VCUT: compute listeTjseq server-side (avoids React state race condition)
-      const allTjResult = await pool.request()
-        .input("transac", sql.Int, transac)
-        .input("copmachine", sql.Int, copmachine || 0)
-        .query(`
-          SELECT TJSEQ FROM TEMPSPROD
-          WHERE TRANSAC = @transac AND MODEPROD_MPCODE = 'PROD'
-          AND TJNOTE LIKE 'Ecran de production pour Temps prod%'
-          ${Number(copmachine) ? "AND cNOMENCOP_MACHINE = @copmachine" : ""}
-        `);
-      tjseqList = allTjResult.recordset.map(r => r.TJSEQ);
+      // VCUT: scope batch to current PROD row only (matches old software's session-scoped ListeTJSEQ).
+      // The old software builds ListeTJSEQ incrementally during the session — on a fresh "+" click
+      // it only contains the TJSEQ just created by addVcutQty. Using ALL PROD rows would include
+      // historical rows with SMNOTRANS populated, causing SM reuse instead of creation.
+      // (SortieMateriel.cfc:1534-1536, 1706-1718)
+      tjseqList = [leTjseqProd];
 
-      // VCUT: use MAX(TJQTEPROD/TJQTEDEFECT) from batch (SortieMateriel.cfc:1706-1718)
+      // VCUT: compute batch quantity using MAX not SUM (SortieMateriel.cfc:1706-1718).
+      // Exact same query as old software, scoped to session-scoped tjseqList.
       if (tjseqList.length > 0) {
         const vcutTotals = await pool.request()
           .query(`
@@ -2733,11 +2865,9 @@ app.post(
             FROM TEMPSPROD
             WHERE TJSEQ IN (${tjseqList.join(",")}) AND MODEPROD_MPCODE = 'PROD'
           `);
-        const vcutBonne = vcutTotals.recordset[0]?.TOTALQTEPROD || 0;
-        const vcutDef = vcutTotals.recordset[0]?.TOTALQTEDEFECT || 0;
-        totalQte = vcutBonne + vcutDef;
+        totalQte = (vcutTotals.recordset[0]?.TOTALQTEPROD || 0) + (vcutTotals.recordset[0]?.TOTALQTEDEFECT || 0);
       } else {
-        totalQte = goodQty + defectQty;
+        totalQte = 0;
       }
 
       // VCUT overrides (ConstruitDonneesLocales:922-924)
@@ -2757,9 +2887,12 @@ app.post(
     }
 
     // Step 2: Determine if SM already exists
-    let smnotrans = (frontSmnotrans || "").trim().substring(0, 9);
+    // For VCUT: DO NOT use frontSmnotrans — the old software's three-pass lookup starts empty
+    // on each fresh "+" entry. Historical SM references from getVcutComponents must be ignored,
+    // otherwise we reuse an old SM instead of creating a new one (SortieMateriel.cfc:1664).
+    let smnotrans = isVcut ? "" : (frontSmnotrans || "").trim().substring(0, 9);
 
-    // For VCUT, also check TEMPSPROD.SMNOTRANS on the PROD row (SortieMateriel.cfc:1666-1704)
+    // Pass 1: check TEMPSPROD.SMNOTRANS on the PROD row (SortieMateriel.cfc:1666-1704)
     if (!smnotrans) {
       const smFromProd = await pool.request()
         .input("tjseq", sql.Int, leTjseqProd)
@@ -5196,10 +5329,13 @@ app.post(
 
       if (componentTjseq) {
         // UPDATE TEMPSPROD (ProduitFini.cfc:1424-1433)
+        // CRITICAL (I10a): CNOMENCOP must be set to the MAIN operation nopseq (arguments.NOPSEQ),
+        // NOT the component's trouveNOPSEQ.NOPSEQ. This ensures Flow C's qTJSEQPROD query
+        // (WHERE CNOMENCOP = @nopseq) finds this fresh row instead of an older row with SMNOTRANS.
         const updateReq = pool.request()
           .input("tjseq", sql.Int, componentTjseq)
           .input("qty", sql.Float, goodQty)
-          .input("cnomencop", sql.Int, nopseq)
+          .input("cnomencop", sql.Int, theMainNopseq)
           .input("invC", sql.Int, inventaireP || 0);
         let updateSql = `UPDATE TEMPSPROD SET TJQTEPROD = @qty, CNOMENCOP = @cnomencop, INVENTAIRE_C = @invC`;
         if (componentNiseq) {
@@ -5473,17 +5609,16 @@ app.post(
       epfTrno: r.EPF_TRNO || r.TRANSAC_TRNO,
     }));
 
-    // Get all TJSEQ for this VCUT batch (needed by SM calculation)
-    const allTjseq = await pool.request()
-      .input("transac", sql.Int, transac)
-      .input("copmachine", sql.Int, copmachine || 0)
-      .query(`
-        SELECT TJSEQ FROM TEMPSPROD
-        WHERE TRANSAC = @transac AND MODEPROD_MPCODE = 'PROD'
-        AND TJNOTE LIKE 'Ecran de production pour Temps prod%'
-        ${Number(copmachine) ? "AND cNOMENCOP_MACHINE = @copmachine" : ""}
-      `);
-    const listeTjseq = allTjseq.recordset.map(r => r.TJSEQ).join(",");
+    // Build session-scoped ListeTJSEQ (D1, I6, I10a):
+    // Old software builds ListeTJSEQ incrementally: starts with arguments.TJSEQ (current status
+    // TJSEQ, typically a STOP row), then appends each new TJSEQ via ProduitFini.cfc:1451.
+    // We replicate this by returning only the frontend-passed listeTjseq + the new componentTjseq.
+    // This ensures ajouteSM's pass 3 and MAX qty computation are session-scoped.
+    const { listeTjseq: frontendListeTjseq } = req.body;
+    const existingList = frontendListeTjseq ? String(frontendListeTjseq) : "";
+    const listeTjseq = existingList
+      ? `${existingList},${componentTjseq}`
+      : String(componentTjseq);
 
     // Get all EPF sequences for this VCUT batch (needed for posting on submit)
     const allEpf = await pool.request()

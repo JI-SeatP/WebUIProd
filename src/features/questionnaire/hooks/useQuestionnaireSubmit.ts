@@ -21,6 +21,7 @@ interface QuestionnairePayload {
   listeTjseq?: string;
   listeEpfSeq?: string;
   smnotrans?: string;
+  listeSmseq?: string;
 }
 
 interface ValidationErrors {

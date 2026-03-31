@@ -47,6 +47,7 @@ export interface ProducedItem {
   desc_P: string;
   desc_S: string;
   epfTrno: string;
+  isNew?: boolean;
 }
 
 interface VcutQuantitySectionProps {
@@ -54,9 +55,10 @@ interface VcutQuantitySectionProps {
   language: "fr" | "en";
   onItemAdded: () => void;
   employeeSeq?: number;
+  listeTjseq?: string;
 }
 
-export function VcutQuantitySection({ operation, language, onItemAdded, employeeSeq }: VcutQuantitySectionProps) {
+export function VcutQuantitySection({ operation, language, onItemAdded, employeeSeq, listeTjseq }: VcutQuantitySectionProps) {
   const { t } = useTranslation();
   const loc = (fr: string, en: string) => (language === "fr" ? fr : en) || fr;
 
@@ -134,6 +136,7 @@ export function VcutQuantitySection({ operation, language, onItemAdded, employee
         inventaireP: comp.inventaireM,
         niseq: comp.niseq,
         employeeSeq: employeeSeq || 0,
+        listeTjseq: listeTjseq || "", // session-scoped (D1): passed forward to build incrementally
       });
 
       if (res.success) {

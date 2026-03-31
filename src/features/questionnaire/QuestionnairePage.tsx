@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
@@ -68,6 +68,7 @@ export function QuestionnairePage() {
   const [vcutProducedItems, setVcutProducedItems] = useState<ProducedItem[]>([]);
   const [vcutListeTjseq, setVcutListeTjseq] = useState("");
   const [vcutListeEpfSeq, setVcutListeEpfSeq] = useState("");
+  const [vcutListeSmseq, setVcutListeSmseq] = useState("");
 
   const {
     loading: submitLoading,
@@ -76,6 +77,25 @@ export function QuestionnairePage() {
     confirmZero,
     cancelZero,
   } = useQuestionnaireSubmit();
+
+  // Populate vcutProducedItems on initial load so (NEW) labels work correctly
+  const fmcInit = operation?.FMCODE ?? "";
+  const isVcutOp = operation?.NO_INVENTAIRE === "VCUT" || operation?.PRODUIT_CODE === "VCUT" || fmcInit === "TableSaw";
+  const nopseqInit = (operation as unknown as Record<string, unknown>)?.NOPSEQ as number;
+  useEffect(() => {
+    if (!isVcutOp || !operation?.TRANSAC) return;
+    apiGet<{ producedItems: ProducedItem[]; listeTjseq?: string; listeEpfSeq?: string; smnotrans?: string }>(
+      `getVcutComponents.cfm?transac=${operation.TRANSAC}&nopseq=${nopseqInit}&copmachine=${copmachine}`
+    ).then(res => {
+      if (res.success && res.data) {
+        setVcutProducedItems(res.data.producedItems || []);
+        if (res.data.listeEpfSeq) setVcutListeEpfSeq(res.data.listeEpfSeq);
+        // Do NOT set listeTjseq or smnotrans from historical data:
+        // - listeTjseq must be session-scoped (D1) — starts empty, built incrementally by addVcutQty
+        // - smnotrans should only appear after user clicks "+" and triggers ajouteSM
+      }
+    }).catch(() => { /* ignore */ });
+  }, [isVcutOp, operation?.TRANSAC, nopseqInit, copmachine]);
 
   const handleEmployeeFound = useCallback((employee: Employee) => {
     setEmployeeName(employee.EMNOM);
@@ -92,7 +112,7 @@ export function QuestionnairePage() {
     try {
       const nopseq = (operation as unknown as Record<string, unknown>)?.NOPSEQ ?? 0;
       const fmc = operation?.FMCODE ?? "";
-      const vcutOp = operation?.NO_INVENTAIRE === "VCUT" || fmc === "TableSaw";
+      const vcutOp = operation?.NO_INVENTAIRE === "VCUT" || operation?.PRODUIT_CODE === "VCUT" || fmc === "TableSaw";
       const res = await apiPost<{
         smnotrans: string;
         smseq: number;
@@ -110,6 +130,16 @@ export function QuestionnairePage() {
         setSmnotrans(res.data.smnotrans || "");
         setSmseq(res.data.smseq);
         setSmMaterials(res.data.materials || []);
+        // Accumulate SM sequences for cancel cleanup (Flow E)
+        if (res.data.smseq) {
+          setVcutListeSmseq(prev => {
+            const existing = prev ? prev.split(",").map(Number) : [];
+            if (!existing.includes(res.data.smseq)) {
+              return [...existing, res.data.smseq].join(",");
+            }
+            return prev;
+          });
+        }
       }
     } finally {
       setSmLoading(false);
@@ -178,7 +208,7 @@ export function QuestionnairePage() {
     const nopseq = (operation as unknown as Record<string, unknown>).NOPSEQ ?? 0;
     // For VCUT: fetch fresh lists at submit time to ensure they're up to date
     const fmc = operation?.FMCODE ?? "";
-    const vcutOp = operation?.NO_INVENTAIRE === "VCUT" || fmc === "TableSaw";
+    const vcutOp = operation?.NO_INVENTAIRE === "VCUT" || operation?.PRODUIT_CODE === "VCUT" || fmc === "TableSaw";
     let effectiveGoodQty = goodQty;
     let submitListeTjseq = vcutListeTjseq;
     let submitListeEpfSeq = vcutListeEpfSeq;
@@ -208,7 +238,7 @@ export function QuestionnairePage() {
       goodQty: effectiveGoodQty,
       isVcut: vcutOp,
       // VCUT: pass ListeTJSEQ, ListeEPFSEQ, SMNOTRANS for SM/EPF posting (old software lines 773-933)
-      ...(vcutOp ? { listeTjseq: submitListeTjseq, listeEpfSeq: submitListeEpfSeq, smnotrans: submitSmnotrans } : {}),
+      ...(vcutOp ? { listeTjseq: submitListeTjseq, listeEpfSeq: submitListeEpfSeq, smnotrans: submitSmnotrans, listeSmseq: vcutListeSmseq } : {}),
       defects: savedDefects.map((d) => ({ qty: String(d.qty), typeId: String(d.typeId), notes: d.notes })),
       finishedProducts:
         showFinishedProducts
@@ -247,14 +277,21 @@ export function QuestionnairePage() {
 
   const handleCancel = useCallback(async () => {
     const nopseq = (operation as unknown as Record<string, unknown>)?.NOPSEQ ?? 0;
+    const fmc = operation?.FMCODE ?? "";
+    const vcutOp = operation?.NO_INVENTAIRE === "VCUT" || operation?.PRODUIT_CODE === "VCUT" || fmc === "TableSaw";
     await apiPost("cancelQuestionnaire.cfm", {
       transac: Number(transac),
+      copmachine: Number(copmachine),
       nopseq: Number(nopseq),
       smnotrans,
       smseq,
+      isVcut: vcutOp,
+      listeTjseq: vcutListeTjseq,
+      listeEpfSeq: vcutListeEpfSeq,
+      listeSmseq: vcutListeSmseq,
     });
     navigate(`/orders/${transac}/operation/${copmachine}`);
-  }, [transac, copmachine, smnotrans, smseq, navigate, operation]);
+  }, [transac, copmachine, smnotrans, smseq, vcutListeTjseq, vcutListeEpfSeq, vcutListeSmseq, navigate, operation]);
 
   if (opLoading) {
     return <LoadingSpinner className="flex-1" />;
@@ -271,7 +308,7 @@ export function QuestionnairePage() {
   const fmcode = operation.FMCODE ?? "";
   const isPress = fmcode.toUpperCase().includes("PRESS");
   const isCnc = fmcode.toUpperCase().includes("CNC") || fmcode.toUpperCase().includes("SAND");
-  const isVcut = operation.NO_INVENTAIRE === "VCUT" || fmcode === "TableSaw";
+  const isVcut = operation.NO_INVENTAIRE === "VCUT" || operation.PRODUIT_CODE === "VCUT" || fmcode === "TableSaw";
 
   // Show mold action for PRESS/CNC on completion
   const showMoldAction = isComp && (isPress || isCnc);
@@ -353,14 +390,20 @@ export function QuestionnairePage() {
                   operation={operation}
                   language={state.language}
                   employeeSeq={employeeSeq}
+                  listeTjseq={vcutListeTjseq}
                   onItemAdded={async () => {
-                    // Refresh produced items
+                    // Refresh produced items, marking new entries
+                    const existingTrnos = new Set(vcutProducedItems.map(p => p.epfTrno));
                     try {
                       const res = await apiGet<{ producedItems: ProducedItem[]; listeTjseq?: string; listeEpfSeq?: string }>(
                         `getVcutComponents.cfm?transac=${operation.TRANSAC}&nopseq=${(operation as unknown as Record<string, unknown>).NOPSEQ}&copmachine=${copmachine}`
                       );
                       if (res.success && res.data) {
-                        setVcutProducedItems(res.data.producedItems);
+                        const items = res.data.producedItems.map(p => ({
+                          ...p,
+                          isNew: !existingTrnos.has(p.epfTrno),
+                        }));
+                        setVcutProducedItems(items);
                         if (res.data.listeTjseq) setVcutListeTjseq(res.data.listeTjseq);
                         if (res.data.listeEpfSeq) setVcutListeEpfSeq(res.data.listeEpfSeq);
                       }

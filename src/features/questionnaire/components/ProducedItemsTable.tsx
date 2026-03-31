@@ -48,7 +48,10 @@ export function ProducedItemsTable({ items, language }: ProducedItemsTableProps)
                     <TableCell className="text-base">
                       {loc(item.desc_P, item.desc_S)} ({item.code})
                     </TableCell>
-                    <TableCell className="text-base">{item.epfTrno}</TableCell>
+                    <TableCell className="text-base">
+                      {item.epfTrno}
+                      {item.isNew && <span className="ml-2 text-sm font-bold text-green-600">(NEW)</span>}
+                    </TableCell>
                   </TableRow>
                 ))}
                 <TableRow className="bg-gray-200">
