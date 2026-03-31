@@ -5235,13 +5235,14 @@ app.get(
 app.post(
   "/addVcutQty.cfm",
   handler(async (req, res) => {
-    const { transac, copmachine, nopseq, qty, container, inventaireP, niseq: passedNiseq, mainNopseq, employeeSeq } = req.body;
+    const { transac, copmachine, nopseq, qty, defectQty: defectQtyRaw, container, inventaireP, niseq: passedNiseq, mainNopseq, employeeSeq } = req.body;
     if (!transac || !nopseq) return res.json({ success: false, error: "transac and nopseq required" });
     const emseq = Number(employeeSeq) || 0;
 
     const pool = await getPool();
     const poolExt = await getPoolExt();
     const goodQty = Number(qty) || 0;
+    const defectQty = Number(defectQtyRaw) || 0;
     // In old software, arguments.NOPSEQ is the MAIN operation's NOPSEQ (not the component's)
     const theMainNopseq = Number(mainNopseq) || Number(nopseq);
 
@@ -5354,9 +5355,10 @@ app.post(
         const updateReq = pool.request()
           .input("tjseq", sql.Int, componentTjseq)
           .input("qty", sql.Float, goodQty)
+          .input("defQty", sql.Float, defectQty)
           .input("cnomencop", sql.Int, theMainNopseq)
           .input("invC", sql.Int, inventaireP || 0);
-        let updateSql = `UPDATE TEMPSPROD SET TJQTEPROD = @qty, CNOMENCOP = @cnomencop, INVENTAIRE_C = @invC`;
+        let updateSql = `UPDATE TEMPSPROD SET TJQTEPROD = @qty, TJQTEDEFECT = @defQty, CNOMENCOP = @cnomencop, INVENTAIRE_C = @invC`;
         if (componentNiseq) {
           updateReq.input("niseq", sql.Int, componentNiseq);
           updateSql += `, cNOMENCLATURE = @niseq`;
@@ -5400,14 +5402,16 @@ app.post(
       if (componentTjseq) {
         // Update TEMPSPROD with qty (ProduitFini.cfc:1505-1512).
         // Old software overwrites TJQTEPROD with current entry qty (not accumulate).
+        // Also write TJQTEDEFECT (old software writes defect via AjouteModifieDetailDEFECTQS
+        // before calling ajouteSM — sp_js.cfm:1612-1620).
         // Do NOT clear SMNOTRANS — within a session, SM is reused on 2nd "+" click.
-        // Fresh Prod rows from changeStatus naturally have empty SMNOTRANS.
         await pool.request()
           .input("tjseq", sql.Int, componentTjseq)
           .input("qty", sql.Float, goodQty)
+          .input("defQty", sql.Float, defectQty)
           .input("cnomencop", sql.Int, nopseq)
           .input("invC", sql.Int, inventaireP || 0)
-          .query(`UPDATE TEMPSPROD SET TJQTEPROD = @qty, CNOMENCOP = @cnomencop, INVENTAIRE_C = @invC WHERE TJSEQ = @tjseq`);
+          .query(`UPDATE TEMPSPROD SET TJQTEPROD = @qty, TJQTEDEFECT = @defQty, CNOMENCOP = @cnomencop, INVENTAIRE_C = @invC WHERE TJSEQ = @tjseq`);
       }
     }
 

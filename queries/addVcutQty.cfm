@@ -141,6 +141,7 @@
 		<cfquery datasource="#datasourcePrimary#">
 			UPDATE TEMPSPROD
 			SET TJQTEPROD = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#LaQteAjoutee#">,
+				TJQTEDEFECT = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#defectQty#">,
 				CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainNopseq#">,
 				INVENTAIRE_C = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#inventaireP#">
 				<cfif niseq NEQ 0>
@@ -173,6 +174,7 @@
 			<cfquery datasource="#datasourcePrimary#">
 				UPDATE TEMPSPROD
 				SET TJQTEPROD = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#LaQteAjoutee#">,
+					TJQTEDEFECT = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#defectQty#">,
 					INVENTAIRE_C = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#inventaireP#">
 					<cfif niseq NEQ 0>
 						, cNOMENCLATURE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#niseq#">
