@@ -487,16 +487,16 @@ app.get(
 );
 
 // ─── GET /getOperation.cfm ───────────────────────────────────────────────────
-// Replicates the exact 2-step approach from the CFM getOperation.cfm:
-//   Step 1: Get TJSEQ from vEcransProduction (latest TEMPSPROD row for this operation)
-//   Step 2: Run RequeteAlternative query on PRIMARY DB with INNER JOIN TEMPSPROD
-// This gives STATUT_CODE directly from TPROD.MODEPROD_MPCODE — no override needed.
+// Replicates old code: support.cfc::trouveUneOperation (dsClientEXT)
+// When COPMACHINE=0, skip that filter. When NOPSEQ provided, use it.
+// TJSEQ can be NULL for unstarted orders (no TEMPSPROD record yet) — this is valid.
 // Cross-DB refs to EXT use DB_EXT (mirrors CF's #datasourceExt# pattern).
 app.get(
   "/getOperation.cfm",
   handler(async (req, res) => {
     const transac = parseInt(req.query.transac) || 0;
     const copmachine = parseInt(req.query.copmachine) || 0;
+    const nopseq = parseInt(req.query.nopseq) || 0;
 
     if (!transac) {
       return res.json({
@@ -505,9 +505,9 @@ app.get(
       });
     }
 
-    // ── Step 1: Get TJSEQ from vEcransProduction (same as CFM getOperation.cfm:37-46) ──
-    // The view lives on EXT database, so we use poolExt for this lookup only.
-    // CFM accesses it from datasourcePrimary via cross-DB resolution; Express uses poolExt directly.
+    // ── Step 1: Look up from vEcransProduction on EXT (matches old support.cfc:trouveUneOperation) ──
+    // When COPMACHINE=0 or NOPSEQ=0, those filters are skipped (old CF Val() NEQ 0 pattern).
+    // TJSEQ may be NULL for unstarted orders — this is valid, not an error.
     const poolExt = await getPoolExt();
     const lookupReq = poolExt.request().input("transac", sql.Int, transac);
     let lookupWhere = `WHERE v.TRANSAC = @transac AND v.OPERATION <> 'FINSH'`;
@@ -515,29 +515,38 @@ app.get(
       lookupReq.input("copmachine", sql.Int, copmachine);
       lookupWhere += ` AND v.COPMACHINE = @copmachine`;
     }
+    if (nopseq) {
+      lookupReq.input("nopseq", sql.Int, nopseq);
+      lookupWhere += ` AND v.NOPSEQ = @nopseq`;
+    }
     const lookupResult = await lookupReq.query(`
-      SELECT TOP 1 v.TJSEQ
+      SELECT TOP 1 v.TJSEQ, v.NOPSEQ, v.COPMACHINE
       FROM vEcransProduction v
       ${lookupWhere}
       ORDER BY v.TJSEQ DESC
     `);
 
-    if (!lookupResult.recordset.length || !lookupResult.recordset[0].TJSEQ) {
+    if (!lookupResult.recordset.length) {
       return res.json({
         success: false,
-        error: `Operation not found for transac=${transac} copmachine=${copmachine}`,
+        error: `Operation not found for transac=${transac} copmachine=${copmachine} nopseq=${nopseq}`,
       });
     }
 
-    const theTJSEQ = lookupResult.recordset[0].TJSEQ;
+    const theTJSEQ = lookupResult.recordset[0].TJSEQ || 0;
+    const theNOPSEQ = lookupResult.recordset[0].NOPSEQ;
 
-    // ── Step 2: RequeteAlternative on PRIMARY DB (same as CFM getOperation.cfm:59-147) ──
-    // INNER JOIN TEMPSPROD on exact TJSEQ gives STATUT_CODE directly — no override needed.
+    // ── Step 2: RequeteAlternative on PRIMARY DB ──
+    // LEFT JOIN TEMPSPROD so unstarted orders (no TEMPSPROD) still return rows.
+    // When theTJSEQ > 0, filter by TJSEQ. When 0, filter by NOPSEQ only.
     // Cross-DB refs to EXT for VBE and functions use DB_EXT.
     const pool = await getPool();
-    const result = await pool.request()
-      .input("theTJSEQ", sql.Int, theTJSEQ)
-      .query(`
+    const step2Req = pool.request()
+      .input("theNOPSEQ", sql.Int, theNOPSEQ);
+    if (theTJSEQ > 0) {
+      step2Req.input("theTJSEQ", sql.Int, theTJSEQ);
+    }
+    const result = await step2Req.query(`
       SELECT DISTINCT
         PL.PR_ORDO_DEBUT AS DATE_DEBUT_PREVU,
         PL.PR_ORDO_FIN AS DATE_FIN_PREVU,
@@ -645,16 +654,18 @@ app.get(
       LEFT OUTER JOIN DET_CNOMENCOP D ON D.NOMENCOP = CNOP.NOPSEQ
       LEFT OUTER JOIN CNOMENCLATURE CN_MAT ON CN_MAT.NISEQ = D.NOMENCLATURE OR CN_MAT.NISEQ = CNOP.NOMENCLATURE
       LEFT OUTER JOIN CNOMENCOP_MACHINE CNOM ON CNOM.CNOMENCOP = CNOP.NOPSEQ AND CNOM.CNOM_SEQ = PL.CNOMENCOP_MACHINE
-      INNER JOIN MACHINE MA ON MA.MASEQ = PL.MACHINE
-      INNER JOIN DEPARTEMENT DEP ON DEP.DESEQ = MA.DEPARTEMENT
-      INNER JOIN FAMILLEMACHINE f ON f.FMSEQ = MA.FAMILLEMACHINE
+      LEFT OUTER JOIN MACHINE MA ON MA.MASEQ = PL.MACHINE
+      LEFT OUTER JOIN DEPARTEMENT DEP ON DEP.DESEQ = MA.DEPARTEMENT
+      LEFT OUTER JOIN FAMILLEMACHINE f ON f.FMSEQ = MA.FAMILLEMACHINE
       LEFT OUTER JOIN OPERATION OP ON CNOP.OPERATION = OP.OPSEQ
       OUTER APPLY (SELECT TOP 1 PPINNOINV FROM PRIXCLIENT WHERE CNOP.INVENTAIRE_P = INVENTAIRE) AS PC
       LEFT OUTER JOIN cNOMENCLATURE AS MCX_KIT ON MCX_KIT.TRANSAC = CNOP.TRANSAC AND MCX_KIT.NIREGRP_PROD1 IN ('KIT','AP')
       OUTER APPLY (SELECT I.INLONGUEUR_MSE, I.INLARGEUR_MSE FROM INVENTAIRE I WHERE I.INSEQ = CNOP.INVENTAIRE) SRC
       OUTER APPLY (SELECT TOP 1 TE.TREPOSTER FROM TRANSFENTREP TE WHERE TE.CNOMENCOP = CNOP.NOPSEQ ORDER BY TE.TRESEQ DESC) AS TRANSFERT
-      INNER JOIN TEMPSPROD TPROD ON T.TRSEQ = TPROD.TRANSAC AND CNOP.NOPSEQ = TPROD.CNOMENCOP
-      WHERE TPROD.TJSEQ = @theTJSEQ
+      LEFT OUTER JOIN TEMPSPROD TPROD ON T.TRSEQ = TPROD.TRANSAC AND CNOP.NOPSEQ = TPROD.CNOMENCOP
+        ${theTJSEQ > 0 ? 'AND TPROD.TJSEQ = @theTJSEQ' : ''}
+      WHERE CNOP.NOPSEQ = @theNOPSEQ
+        ${theTJSEQ > 0 ? 'AND TPROD.TJSEQ = @theTJSEQ' : ''}
     `);
 
     if (!result.recordset.length) {
@@ -5379,13 +5390,16 @@ app.post(
       }
 
       if (componentTjseq) {
-        // Update TEMPSPROD with qty (same as nopseq-differs path but without SP)
+        // Update TEMPSPROD with qty (ProduitFini.cfc:1505-1512).
+        // Old software overwrites TJQTEPROD with current entry qty (not accumulate).
+        // Clear SMNOTRANS so ajouteSM creates a new SM (in old software, each session
+        // starts with a fresh Prod row from changeStatus that has no SMNOTRANS).
         await pool.request()
           .input("tjseq", sql.Int, componentTjseq)
           .input("qty", sql.Float, goodQty)
           .input("cnomencop", sql.Int, nopseq)
           .input("invC", sql.Int, inventaireP || 0)
-          .query(`UPDATE TEMPSPROD SET TJQTEPROD = @qty, CNOMENCOP = @cnomencop, INVENTAIRE_C = @invC WHERE TJSEQ = @tjseq`);
+          .query(`UPDATE TEMPSPROD SET TJQTEPROD = @qty, CNOMENCOP = @cnomencop, INVENTAIRE_C = @invC, SMNOTRANS = '' WHERE TJSEQ = @tjseq`);
       }
     }
 

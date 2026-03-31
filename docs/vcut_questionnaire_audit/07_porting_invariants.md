@@ -99,7 +99,31 @@ When the operation is complete, the following writes must occur in this order:
 
 ---
 
-### I10a — Cross-NOPSEQ TEMPSPROD row uses MAIN nopseq for CNOMENCOP
+### I10a — New SM created per "+" click (both cross-NOPSEQ and same-NOPSEQ)
+
+The old software creates a **new SM transaction** on every "+" button click, regardless of whether the component's NOPSEQ matches the main operation NOPSEQ or not. An existing SM is never reused within the same "+" click.
+
+**Mechanism:** Each questionnaire session starts when changeStatus creates a fresh Prod TEMPSPROD row with `SMNOTRANS = NULL`. When ajouteSM's `qTJSEQPROD` query (`WHERE CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'PROD' ORDER BY TJSEQ DESC`) finds this fresh row, pass 1 returns empty → all passes return empty → `InsertSortieMateriel` creates a new SM.
+
+For **cross-NOPSEQ** orders: `addVcutQty` creates a brand new TEMPSPROD row (via `Nba_Sp_Insert_Production`) which naturally has no SMNOTRANS.
+
+For **same-NOPSEQ** orders: `addVcutQty` finds and updates the existing PROD row. The old software's flow starts each session with a fresh Prod row (from changeStatus) that has no SMNOTRANS. If the new software reuses a row from a previous session that already has SMNOTRANS, it must clear SMNOTRANS during the update to match the old software's "fresh row" behavior.
+
+**Evidence:** Database test on CO-016897-002 — two sequential "+" clicks (12 pcs, 15 pcs) produced two separate SMs (SM-079133 qty=12, SM-079134 qty=15). Both exist in SORTIEMATERIEL independently.
+
+**Why:** Each component entry creates its own SM for material tracking. The SM/REPORT posting at submit time posts each SM independently.
+
+---
+
+### I10b — Same-NOPSEQ TEMPSPROD qty is overwritten (not accumulated)
+
+For same-NOPSEQ orders, the existing TEMPSPROD row's `TJQTEPROD` is set to the current entry's qty, **not** accumulated with previous entries. The `ENTRERPRODFINI_PFNOTRANS` is also overwritten with the new EPF link.
+
+**Evidence:** `ProduitFini.cfc:1505-1512` — `SET TJQTEPROD = #val(LaQteAjoutee)#` where `LaQteAjoutee = val(arguments.Qte)` (line 1338, current entry only). `ENTRERPRODFINI_PFNOTRANS` is set to the new EPF's PFNOTRANS. The `cNOMENCOP.NOPQTETERMINE` accumulated total (12+15=27) is computed separately at submit time from EPF detail records, not from TEMPSPROD.TJQTEPROD.
+
+---
+
+### I10c — Cross-NOPSEQ TEMPSPROD row uses MAIN nopseq for CNOMENCOP
 
 When AjouteEPF creates a new TEMPSPROD row for a component whose `trouveNOPSEQ.NOPSEQ` differs from `arguments.NOPSEQ` (the main operation), the subsequent UPDATE at `ProduitFini.cfc:1427` sets `CNOMENCOP = arguments.NOPSEQ` (the **main** nopseq), overwriting whatever the SP used.
 

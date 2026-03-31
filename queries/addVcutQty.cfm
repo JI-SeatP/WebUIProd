@@ -165,12 +165,16 @@
 
 		<cfif qExistingTP.RecordCount GT 0>
 			<cfset LeTJSEQEPF = Val(qExistingTP.TJSEQ)>
-			<!--- Accumulate qty on existing row --->
-			<cfset LaQteAjoutee = Val(qExistingTP.TJQTEPROD) + qty>
+			<!--- Overwrite qty on existing row (ProduitFini.cfc:1505-1512).
+			      Old software sets TJQTEPROD = arguments.Qte (current entry only, not accumulated).
+			      Clear SMNOTRANS so ajouteSM creates a new SM (in old software, each session
+			      starts with a fresh Prod row from changeStatus that has no SMNOTRANS). --->
+			<cfset LaQteAjoutee = qty>
 			<cfquery datasource="#datasourcePrimary#">
 				UPDATE TEMPSPROD
 				SET TJQTEPROD = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#LaQteAjoutee#">,
-					INVENTAIRE_C = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#inventaireP#">
+					INVENTAIRE_C = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#inventaireP#">,
+					SMNOTRANS = ''
 					<cfif niseq NEQ 0>
 						, cNOMENCLATURE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#niseq#">
 					</cfif>

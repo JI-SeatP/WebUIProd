@@ -28,7 +28,8 @@
 |-----------|---------------|--------|------|
 | Create new row | Via `Nba_Sp_Insert_Production` | `ProduitFini.cfc:1399`, `QuestionnaireSortie.cfc:1526` | EPF add (cross-NOPSEQ), status change |
 | Update employee | `EMPLOYE`, `EMPLOYE_EMNO`, `EMPLOYE_EMNOM` | `QuestionnaireSortie.cfc:700` | Submit |
-| Update quantities | `TJQTEPROD`, `CNOMENCOP` (= **main** nopseq, not component's), `INVENTAIRE_C` | `ProduitFini.cfc:1424` | EPF add (see I10a) |
+| Update quantities (cross-NOPSEQ) | `TJQTEPROD`, `CNOMENCOP` (= **main** nopseq, not component's), `INVENTAIRE_C` | `ProduitFini.cfc:1424` | EPF add (see I10c) |
+| Update quantities (same-NOPSEQ) | `TJQTEPROD` (overwrite, not accumulate), `INVENTAIRE_C`, `ENTRERPRODFINI_PFNOTRANS`, clear `SMNOTRANS` | `ProduitFini.cfc:1505` | EPF add (see I10a, I10b) |
 | Link SM | `SMNOTRANS` | `SortieMateriel.cfc:1797` | SM create (batch update) |
 | Link EPF | `ENTRERPRODFINI_PFNOTRANS` | `ProduitFini.cfc` | EPF add |
 | VCUT complete | `MODEPROD_MPCODE='COMP'`, `TJFINDATE=NOW()`, `TJPROD_TERMINE=1` | `QuestionnaireSortie.cfc:1255` | Submit (complete block) |

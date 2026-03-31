@@ -92,7 +92,9 @@ For a VCUT operation, the rendered form contains:
    - Returns `PFSEQ`
    - Then queries `ENTRERPRODFINI` for `PFNOTRANS`
 8. **Create EPF detail rows** — AutoFab SOAP `EXECUTE_TRANSACTION EPFDETAIL/INS` (called twice: DtrSeq=0 and DtrSeq=-1)
-9. **Update TEMPSPROD** — link `ENTRERPRODFINI_PFNOTRANS`, update `TJQTEPROD`
+9. **Update TEMPSPROD** (`ProduitFini.cfc:1505-1512`) — link `ENTRERPRODFINI_PFNOTRANS`, update `TJQTEPROD`:
+   - **Cross-NOPSEQ**: Updates the newly created row (from step 4). `TJQTEPROD = arguments.Qte` (current entry qty).
+   - **Same-NOPSEQ**: Updates the existing row (found in step 4 else-branch). `TJQTEPROD = arguments.Qte` (**overwrite**, not accumulate — see I10b). `ENTRERPRODFINI_PFNOTRANS` is overwritten with the new EPF. The old `SMNOTRANS` from a previous session persists on the row but becomes stale — the fresh Prod row from changeStatus (which ajouteSM finds) has no SMNOTRANS, ensuring a new SM is created (see I10a).
 10. **Container handling** (if container specified):
     - `Nba_Insert_Contenant` via AutoFab SOAP (if new container)
     - `Nba_Insert_Det_Trans_Avec_Contenant` via AutoFab SOAP
