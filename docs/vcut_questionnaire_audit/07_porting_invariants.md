@@ -195,6 +195,22 @@ SM transaction number, truncated to 9 characters via `Left(..., 9)` in some oper
 
 `EXECUTE_TRANSACTION` parameters are positional, semicolon-separated strings. `EXECUTE_STORED_PROC` concatenates SP name and arguments as `<sQuery>SP_NAME arg1, arg2, ...</sQuery>`.
 
+### I13 — SM container dropdown with VCUT priority
+
+The SM material output section must render a dropdown per DET_TRANS row showing available containers/skids. Options come from `VSP_BonTravail_VeneerReserve` (EXT datasource) for VCUT, falling back to `DET_TRANS` for non-VCUT. See [08_sm_container_dropdown.md](08_sm_container_dropdown.md) for full query details and rendering logic.
+
+**Evidence:** `SortieMateriel.cfc:553-605` (rendering), `SortieMateriel.cfc:1467-1512` (write handler)
+
+---
+
+### I14 — Container change updates DET_TRANS only
+
+When the user selects a different container, only `DET_TRANS` is updated (7 columns: CONTENANT, CONTENANT_CON_NUMERO, DTRSEQ_PERE, ENTREPOT, ENTREPOT_ENCODE, ENTREPOT_ENDESC_P, ENTREPOT_ENDESC_S). No other tables are modified.
+
+**Evidence:** `SortieMateriel.cfc:1499-1509`
+
+---
+
 ## Incidental implementation details (NOT invariants)
 
 These are legacy artifacts that should NOT be preserved:

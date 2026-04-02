@@ -9,6 +9,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export interface MaterialRow {
   id: number;
@@ -23,23 +30,38 @@ export interface MaterialRow {
   warehouse_P: string;
   warehouse_S: string;
   container: string;
+  /** Integer CON_SEQ — used as dropdown value */
+  conSeq?: number;
   /** Per-material BOM ratio (NIQTE) — kept for type compatibility */
   bomRatio?: number;
+}
+
+export interface ContainerOption {
+  conSeq: number;
+  conNumero: string;
 }
 
 interface MaterialOutputSectionProps {
   materials: MaterialRow[];
   /** SM transaction number to display */
   smnotrans?: string;
+  /** Available container/SKID options for dropdown (from VSP_BonTravail_VeneerReserve or DET_TRANS) */
+  containerOptions?: ContainerOption[];
+  /** Called when user selects a different container from the dropdown */
+  onContainerChange?: (dtrseq: number, conSeq: number) => void;
 }
 
 export function MaterialOutputSection({
   materials,
   smnotrans,
+  containerOptions,
+  onContainerChange,
 }: MaterialOutputSectionProps) {
   const { t } = useTranslation();
   const { state } = useSession();
   const lang = state.language;
+
+  const hasDropdown = containerOptions && containerOptions.length > 0 && onContainerChange;
 
   return (
     <Card className="min-h-[315px]">
@@ -67,7 +89,7 @@ export function MaterialOutputSection({
                 <TableHead className="w-[100px] text-right text-base">{t("questionnaire.qty")}</TableHead>
                 <TableHead className="w-[80px] text-base">{t("material.unit")}</TableHead>
                 <TableHead className="w-[120px] text-base">{t("questionnaire.warehouse")}</TableHead>
-                <TableHead className="w-[120px] text-base">{t("questionnaire.skid")}</TableHead>
+                <TableHead className="w-[160px] text-base">{t("questionnaire.skid")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -82,7 +104,31 @@ export function MaterialOutputSection({
                     {lang === "fr" ? row.unit_P : row.unit_S}
                   </TableCell>
                   <TableCell className="text-base">{lang === "fr" ? row.warehouse_P : row.warehouse_S}</TableCell>
-                  <TableCell className="text-base">{row.container}</TableCell>
+                  <TableCell className="text-base p-1">
+                    {hasDropdown ? (
+                      <Select
+                        value={String(row.conSeq || "")}
+                        onValueChange={(val) => onContainerChange(row.id, Number(val))}
+                      >
+                        <SelectTrigger className="!h-12 text-base w-full">
+                          <SelectValue placeholder="—" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {containerOptions.map((opt) => (
+                            <SelectItem
+                              key={opt.conSeq}
+                              value={String(opt.conSeq)}
+                              className="text-base min-h-[48px]"
+                            >
+                              {opt.conNumero}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      row.container
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

@@ -23,7 +23,7 @@ import { X, Check } from "lucide-react";
 import { W_QUESTIONNAIRE } from "@/constants/widths";
 import type { Employee } from "@/types/employee";
 import type { FinishedProductRow } from "./components/FinishedProductsSection";
-import type { MaterialRow } from "./components/MaterialOutputSection";
+import type { MaterialRow, ContainerOption } from "./components/MaterialOutputSection";
 import type { SavedDefect } from "./components/DefectQuantitySection";
 
 export function QuestionnairePage() {
@@ -67,6 +67,7 @@ export function QuestionnairePage() {
   const [smnotrans, setSmnotrans] = useState("");
   const [smseq, setSmseq] = useState<number | null>(null);
   const [smMaterials, setSmMaterials] = useState<MaterialRow[]>([]);
+  const [containerOptions, setContainerOptions] = useState<ContainerOption[]>([]);
   const [savedDefects, setSavedDefects] = useState<SavedDefect[]>([]);
   const [smLoading, setSmLoading] = useState(false);
   const [vcutProducedItems, setVcutProducedItems] = useState<ProducedItem[]>([]);
@@ -121,6 +122,7 @@ export function QuestionnairePage() {
         smnotrans: string;
         smseq: number;
         materials: MaterialRow[];
+        containerOptions?: ContainerOption[];
       }>("ajouteSM.cfm", {
         transac: Number(transac),
         copmachine: Number(copmachine),
@@ -134,6 +136,7 @@ export function QuestionnairePage() {
         setSmnotrans(res.data.smnotrans || "");
         setSmseq(res.data.smseq);
         setSmMaterials(res.data.materials || []);
+        setContainerOptions(res.data.containerOptions || []);
         // Accumulate SM sequences for cancel cleanup (Flow E)
         if (res.data.smseq) {
           setVcutListeSmseq(prev => {
@@ -149,6 +152,24 @@ export function QuestionnairePage() {
       setSmLoading(false);
     }
   }, [transac, copmachine, operation, goodQty, smnotrans, vcutListeTjseq]);
+
+  // Write-as-you-go: container dropdown change → updates DET_TRANS, refreshes materials
+  // Exact replica of SortieMateriel.cfc:1467-1512 (CorrigeDetailSM)
+  const handleContainerChange = useCallback(async (dtrseq: number, conSeq: number) => {
+    try {
+      const res = await apiPost<{ materials: MaterialRow[] }>("corrigeDetailSM.cfm", {
+        transac: Number(transac),
+        dtrseq,
+        conSeq,
+        smnotrans,
+      });
+      if (res.success && res.data) {
+        setSmMaterials(res.data.materials || []);
+      }
+    } catch (err) {
+      console.error("[ContainerChange] Error:", err);
+    }
+  }, [transac, smnotrans]);
 
   // Write-as-you-go: add defect → writes to DB, refreshes list, recalcs SM
   // In the old software, after adding a defect, calculeQteSMQS is ALWAYS called
@@ -426,6 +447,8 @@ export function QuestionnairePage() {
                 <MaterialOutputSection
                   materials={smMaterials}
                   smnotrans={smnotrans}
+                  containerOptions={containerOptions}
+                  onContainerChange={handleContainerChange}
                 />
               </>
             ) : (
@@ -486,6 +509,8 @@ export function QuestionnairePage() {
                     <MaterialOutputSection
                       materials={smMaterials}
                       smnotrans={smnotrans}
+                      containerOptions={containerOptions}
+                      onContainerChange={handleContainerChange}
                     />
                   </div>
                 </div>

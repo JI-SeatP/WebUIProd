@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { sql, getPool, getPoolExt, DB_EXT } = require("./db.cjs");
+const { sql, getPool, getPoolExt, DB_PRIMARY, DB_EXT } = require("./db.cjs");
 const { XMLParser } = require("fast-xml-parser");
 
 const app = express();
@@ -3152,7 +3152,7 @@ app.post(
       const matResult = await pool.request()
         .input("smno", sql.VarChar(9), smnotrans)
         .query(`
-          SELECT DT.DTRSEQ, DT.DTRQTE, DT.CONTENANT_CON_NUMERO,
+          SELECT DT.DTRSEQ, DT.DTRQTE, DT.CONTENANT, DT.CONTENANT_CON_NUMERO,
                  DT.ENTREPOT_ENCODE, DT.ENTREPOT_ENDESC_P, DT.ENTREPOT_ENDESC_S,
                  T.INVENTAIRE_INNOINV AS code,
                  T.INVENTAIRE_INDESC1 AS description_P, T.INVENTAIRE_INDESC2 AS description_S,
@@ -3180,16 +3180,152 @@ app.post(
           correctedQty: m.correctedQty || m.DTRQTE,
           warehouse_P: m.ENTREPOT_ENDESC_P, warehouse_S: m.ENTREPOT_ENDESC_S,
           container: m.CONTENANT_CON_NUMERO || "",
+          conSeq: m.CONTENANT || 0,
         });
       }
     }
 
-    console.log(`[ajouteSM] Done: SM=${smnotrans} SMSEQ=${smseq} materials=${materials.length}`);
+    // Step 8: Fetch container options for SKID dropdown (SortieMateriel.cfc:553-605)
+    // VCUT path: VSP_BonTravail_VeneerReserve on EXT datasource
+    // Fallback: DET_TRANS containers for the SM transaction
+    let containerOptions = [];
+    if (smnotrans) {
+      try {
+        const poolExtCont = await getPoolExt();
+        const vcutContResult = await poolExtCont.request()
+          .input("transac", sql.Int, transac)
+          .query(`
+            SELECT DISTINCT v.CONTENANT_CON_NUMERO AS conNumero, c.CON_SEQ AS conSeq
+            FROM VSP_BonTravail_VeneerReserve v
+            LEFT JOIN ${DB_PRIMARY}.dbo.CONTENANT c ON v.CONTENANT_CON_NUMERO = c.CON_NUMERO
+            WHERE v.TRANSAC = @transac
+          `);
+        containerOptions = vcutContResult.recordset
+          .filter(r => r.conSeq)
+          .map(r => ({ conSeq: r.conSeq, conNumero: r.conNumero }));
+      } catch (err) {
+        console.warn("[ajouteSM] Could not fetch VCUT containers:", err.message);
+      }
+
+      // Fallback: DET_TRANS containers if no VCUT options
+      if (!containerOptions.length) {
+        try {
+          const fallbackResult = await pool.request()
+            .input("smno", sql.VarChar(9), smnotrans)
+            .query(`
+              SELECT DISTINCT DT.CONTENANT AS conSeq, DT.CONTENANT_CON_NUMERO AS conNumero
+              FROM DET_TRANS DT WHERE DT.TRANSAC_TRNO = @smno
+              AND DT.CONTENANT IS NOT NULL AND DT.CONTENANT <> 0
+            `);
+          containerOptions = fallbackResult.recordset.map(r => ({
+            conSeq: r.conSeq, conNumero: r.conNumero,
+          }));
+        } catch (err) {
+          console.warn("[ajouteSM] Could not fetch fallback containers:", err.message);
+        }
+      }
+    }
+
+    console.log(`[ajouteSM] Done: SM=${smnotrans} SMSEQ=${smseq} materials=${materials.length} containerOptions=${containerOptions.length}`);
     res.json({
       success: true,
-      data: { smnotrans, smseq, tjseq: prodTjseq, materials },
+      data: { smnotrans, smseq, tjseq: prodTjseq, materials, containerOptions },
       message: smnotrans ? `SM ${smnotrans} updated with ${materials.length} materials` : "No SM created",
     });
+  })
+);
+
+// ─── POST /corrigeDetailSM.cfm ──────────────────────────────────────────────
+// Mirrors legacy CF: SortieMateriel.cfc → CorrigeDetailSM (lines 1467-1512)
+// Updates DET_TRANS container/warehouse when user selects a different SKID dropdown option.
+app.post(
+  "/corrigeDetailSM.cfm",
+  handler(async (req, res) => {
+    const { transac, dtrseq, conSeq, smnotrans } = req.body;
+    if (!dtrseq || !conSeq) {
+      return res.json({ success: false, error: "dtrseq and conSeq required" });
+    }
+
+    const pool = await getPool();
+
+    // Step 1: Find parent DET_TRANS for the selected container (SortieMateriel.cfc:1487-1497)
+    const parentResult = await pool.request()
+      .input("conSeq", sql.Int, conSeq)
+      .input("transac", sql.Int, transac)
+      .query(`
+        SELECT TOP 1 DTRSEQ, ENTREPOT, ENTREPOT_ENCODE,
+               ENTREPOT_ENDESC_P, ENTREPOT_ENDESC_S, CONTENANT_CON_NUMERO
+        FROM DET_TRANS
+        WHERE CONTENANT = @conSeq
+          AND DTRSEQ_PERE IS NULL
+          AND TRANSAC_TRNO_EQUATE = 15
+          AND TRANSAC IN (SELECT TRSEQ FROM TRANSAC WHERE TRANSAC = @transac)
+      `);
+    const parent = parentResult.recordset[0];
+
+    // Step 2: Update target DET_TRANS row (SortieMateriel.cfc:1499-1509)
+    await pool.request()
+      .input("dtrseq", sql.Int, dtrseq)
+      .input("conSeq", sql.Int, conSeq)
+      .input("conNumero", sql.VarChar(30), parent?.CONTENANT_CON_NUMERO || "")
+      .input("dtrseqPere", sql.Int, parent?.DTRSEQ || 0)
+      .input("entrepot", sql.Int, parent?.ENTREPOT || 0)
+      .input("entrepotEncode", sql.VarChar(12), parent?.ENTREPOT_ENCODE || "")
+      .input("entrepotDescP", sql.VarChar(60), parent?.ENTREPOT_ENDESC_P || "")
+      .input("entrepotDescS", sql.VarChar(60), parent?.ENTREPOT_ENDESC_S || "")
+      .query(`
+        UPDATE DET_TRANS
+        SET CONTENANT            = @conSeq,
+            CONTENANT_CON_NUMERO = @conNumero,
+            DTRSEQ_PERE          = @dtrseqPere,
+            ENTREPOT             = @entrepot,
+            ENTREPOT_ENCODE      = @entrepotEncode,
+            ENTREPOT_ENDESC_P    = @entrepotDescP,
+            ENTREPOT_ENDESC_S    = @entrepotDescS
+        WHERE DTRSEQ = @dtrseq
+      `);
+    console.log(`[corrigeDetailSM] Updated DTRSEQ=${dtrseq} → CONTENANT=${conSeq} (parent DTRSEQ=${parent?.DTRSEQ || 'none'})`);
+
+    // Step 3: Re-fetch materials (same query as ajouteSM Step 7)
+    const materials = [];
+    if (smnotrans) {
+      const matResult = await pool.request()
+        .input("smno", sql.VarChar(9), smnotrans)
+        .query(`
+          SELECT DT.DTRSEQ, DT.DTRQTE, DT.CONTENANT, DT.CONTENANT_CON_NUMERO,
+                 DT.ENTREPOT_ENCODE, DT.ENTREPOT_ENDESC_P, DT.ENTREPOT_ENDESC_S,
+                 T.INVENTAIRE_INNOINV AS code,
+                 T.INVENTAIRE_INDESC1 AS description_P, T.INVENTAIRE_INDESC2 AS description_S,
+                 T.UNITE_INV_UNDESC1 AS unit_P, T.UNITE_INV_UNDESC2 AS unit_S,
+                 ABS(DETTRANS.DTRQTE_TRANSACTION) AS correctedQty
+          FROM DET_TRANS DT
+          INNER JOIN TRANSAC T ON DT.TRANSAC = T.TRSEQ
+          OUTER APPLY (
+            SELECT DT.DTRQTE_INV + ISNULL((
+              SELECT SUM(DTCOR.DTRQTE_INV) FROM DET_TRANS DTCOR
+              INNER JOIN TRANSAC TR ON TR.TRSEQ = DTCOR.TRANSAC
+              WHERE DTCOR.DTRSEQ_PERE = DT.DTRSEQ AND DTCOR.TRANSAC_TRNO_EQUATE = 14
+            ), 0) DTRQTE_TRANSACTION
+          ) DETTRANS
+          WHERE DT.TRANSAC_TRNO = @smno
+          ORDER BY T.INVENTAIRE_INNOINV
+        `);
+      for (const m of matResult.recordset) {
+        materials.push({
+          id: m.DTRSEQ,
+          code: m.code,
+          description_P: m.description_P, description_S: m.description_S,
+          unit_P: m.unit_P, unit_S: m.unit_S,
+          originalQty: m.DTRQTE,
+          correctedQty: m.correctedQty || m.DTRQTE,
+          warehouse_P: m.ENTREPOT_ENDESC_P, warehouse_S: m.ENTREPOT_ENDESC_S,
+          container: m.CONTENANT_CON_NUMERO || "",
+          conSeq: m.CONTENANT || 0,
+        });
+      }
+    }
+
+    res.json({ success: true, data: { materials } });
   })
 );
 

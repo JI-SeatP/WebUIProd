@@ -24,6 +24,7 @@ The VCUT questionnaire is a specialized exit form shown when a worker stops or c
 | File index | Complete |
 | Database object index | Complete |
 | Open questions | Complete |
+| SM container dropdown | Complete |
 
 ## Section links
 
@@ -35,6 +36,7 @@ The VCUT questionnaire is a specialized exit form shown when a worker stops or c
 - [05 — Outputs and side effects](05_outputs_and_side_effects.md)
 - [06 — Edge cases and failure modes](06_edge_cases_and_failure_modes.md)
 - [07 — Porting invariants](07_porting_invariants.md)
+- [08 — SM container dropdown](08_sm_container_dropdown.md)
 - [Appendix: File index](appendices/file_index.md)
 - [Appendix: Database object index](appendices/database_object_index.md)
 - [Appendix: Open questions](appendices/open_questions.md)
