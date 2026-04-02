@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AlertTriangle } from "lucide-react";
 
 export interface MaterialRow {
   id: number;
@@ -39,6 +40,8 @@ export interface MaterialRow {
 export interface ContainerOption {
   conSeq: number;
   conNumero: string;
+  /** Remaining qty on this skid from VSP_BonTravail_VeneerReserve */
+  remainingQty: number;
 }
 
 interface MaterialOutputSectionProps {
@@ -49,6 +52,8 @@ interface MaterialOutputSectionProps {
   containerOptions?: ContainerOption[];
   /** Called when user selects a different container from the dropdown */
   onContainerChange?: (dtrseq: number, conSeq: number) => void;
+  /** Warning message when insufficient material across all skids */
+  materialWarning?: string | null;
 }
 
 export function MaterialOutputSection({
@@ -56,6 +61,7 @@ export function MaterialOutputSection({
   smnotrans,
   containerOptions,
   onContainerChange,
+  materialWarning,
 }: MaterialOutputSectionProps) {
   const { t } = useTranslation();
   const { state } = useSession();
@@ -76,6 +82,14 @@ export function MaterialOutputSection({
         )}
       </div>
       <CardContent className="px-3 pt-0.5 pb-2">
+        {/* Warning banner for insufficient material */}
+        {materialWarning && (
+          <div className="flex items-center gap-2 rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-2 mb-2">
+            <AlertTriangle className="size-5 text-yellow-600 flex-shrink-0" />
+            <span className="text-sm font-medium text-yellow-800">{materialWarning}</span>
+          </div>
+        )}
+
         {materials.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">
             {t("questionnaire.materialOutputHint")}
@@ -119,8 +133,9 @@ export function MaterialOutputSection({
                               key={opt.conSeq}
                               value={String(opt.conSeq)}
                               className="text-base min-h-[48px]"
+                              disabled={opt.remainingQty <= 0}
                             >
-                              {opt.conNumero}
+                              {opt.conNumero} ({opt.remainingQty})
                             </SelectItem>
                           ))}
                         </SelectContent>

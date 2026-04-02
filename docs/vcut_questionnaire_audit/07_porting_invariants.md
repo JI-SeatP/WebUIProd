@@ -211,6 +211,14 @@ When the user selects a different container, only `DET_TRANS` is updated (7 colu
 
 ---
 
+### I15 — SM quantity per DET_TRANS row is BOM-ratio-weighted total (not split)
+
+Each DET_TRANS row for the same SM and same material receives the SAME quantity via `calculeQteSMQS`: the BOM-ratio-weighted total `SUM(production_qty * NIQTE)`. There is **no per-container proportional split** — if 2 containers hold the same material, both DET_TRANS rows get the same `NouvelleQte`. Per-container reserved quantities from `VSP_BonTravail_VeneerReserve` are NOT used as caps in the formula. The worker selects the physical skid via the container dropdown; the software does not allocate material across containers.
+
+**Evidence:** `SortieMateriel.cfc:1081-1120` (QTE_CIBLE formula), `SortieMateriel.cfc:1169` (per-row SP call). See [08_sm_container_dropdown.md](08_sm_container_dropdown.md) for full formula.
+
+---
+
 ## Incidental implementation details (NOT invariants)
 
 These are legacy artifacts that should NOT be preserved:

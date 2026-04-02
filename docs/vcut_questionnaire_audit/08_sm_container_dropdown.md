@@ -167,8 +167,76 @@ When the user selects a different container from the dropdown, the system must:
 
 ---
 
+## Per-container quantity distribution (calculeQteSMQS)
+
+### How it works
+
+When `Nba_Sp_Sortie_Materiel` is called, it receives a single scalar `totalQte` — not a per-container breakdown. The SP creates/updates DET_TRANS rows (one per reserved container) using its own internal logic. After the SP returns, the CFC function `calculeQteSMQS` runs as a **follow-up** (called from the frontend after the SM is created/updated) and **overwrites** each DET_TRANS row's quantity with a BOM-ratio-weighted calculation.
+
+### The VCUT ratio formula (`calculeQteSMQS` lines 1081-1120)
+
+For each DET_TRANS row `j`, the formula computes:
+
+```sql
+SELECT SUM(
+    (CASE WHEN TP.TJSEQ = @currentTJSEQ
+          THEN @TotalCourantTJ             -- current session's good+defect
+          ELSE ISNULL(TP.TJQTEPROD,0) + ISNULL(TP.TJQTEDEFECT,0)
+    END)
+    * ISNULL(RATIO.NIQTE, 0)
+) AS QTE_CIBLE
+FROM TEMPSPROD TP
+INNER JOIN cNOMENCOP COP ON COP.TRANSAC = TP.TRANSAC AND COP.INVENTAIRE_P = TP.INVENTAIRE_C
+OUTER APPLY (
+    SELECT MAX(CN.NIQTE) AS NIQTE
+    FROM cNOMENCLATURE CN
+    WHERE CN.NISEQ_PERE = COP.CNOMENCLATURE
+      AND CN.INVENTAIRE_M = @materialInv    -- THIS row's material inventory
+) RATIO
+WHERE TP.TRANSAC = @TRANSAC
+  AND TP.SMNOTRANS = @SMNOTRANS
+  AND TP.TJSEQ IN (<ListeTJSEQ>)
+  AND TP.MODEPROD_MPCODE = 'PROD'
+```
+
+Then: `NouvelleQte = QTE_CIBLE` (line 1120). This value is written to the DET_TRANS row via `Nba_Insert_Det_Trans_Avec_Contenant` (line 1169).
+
+### Key behavior: uniform quantity per row, NOT proportional splitting
+
+**The same `NouvelleQte` is applied to every DET_TRANS row** for the same material. The formula does NOT cap or split based on per-container reserved quantities. If there are 2 containers (A with 111 reserved, B with 80 reserved) and the BOM-ratio yields `QTE_CIBLE = 150`, both rows A and B receive `DTRQTE = 150`.
+
+**Why both rows show the same quantity:** The `qQteMatiereVCUT` query computes the SAME `QTE_CIBLE` for each DET_TRANS row because the formula depends on `TEMPSPROD` production quantities and `cNOMENCLATURE` BOM ratios — not on per-container reservations. The `NIQTE` ratio comes from the BOM structure, and the production totals are the same regardless of which container row is being processed.
+
+**Evidence:** `SortieMateriel.cfc:1081-1120` — the `@materialInv` parameter is the INVENTAIRE from the DET_TRANS row, which is the SAME material for both containers. Since both containers hold the same material, the BOM ratio is identical, producing the same `QTE_CIBLE`.
+
+### What the worker sees
+
+After SM creation and `calculeQteSMQS`:
+- Container A: `QTÉ UTILISÉE = 150 Unité` (same as B)
+- Container B: `QTÉ UTILISÉE = 150 Unité` (same as A)
+
+The worker then uses the **container dropdown** to select which physical skid the material goes to. The quantity shown is the total BOM-computed material consumption, NOT the per-container allocation. The actual per-container split is managed physically by the warehouse, not by the software.
+
+### `VSP_BonTravail_VeneerReserve` reserved quantities are NOT used in distribution
+
+The reserved quantities (`DTRQTE` from the view) appear only in the dropdown rendering (line 553-596) for display. They are never used as cap/clamp values in the `calculeQteSMQS` formula. The BOM ratio is the sole determinant of `NouvelleQte`.
+
+**Evidence:** No reference to `VSP_BonTravail_VeneerReserve` exists in `calculeQteSMQS` (lines 824-1208).
+
+### Porting invariant
+
+**I15 — SM quantity per DET_TRANS row is BOM-ratio-weighted total (not split)**
+
+Each DET_TRANS row for the same SM and same material receives the SAME quantity: the BOM-ratio-weighted total from `calculeQteSMQS`. There is no per-container proportional split. The formula is: `SUM(production_qty_per_TJSEQ * NIQTE_ratio)` where `NIQTE` comes from `cNOMENCLATURE` child rows relating the component to the SM material.
+
+**Evidence:** `SortieMateriel.cfc:1081-1120, 1169`
+
+---
+
 ## Edge cases
 
 1. **No VCUT containers found:** Falls back to non-VCUT container query from `DET_TRANS` directly.
 2. **No parent DET_TRANS for selected container:** The UPDATE at line 1499 still runs with potentially blank/zero values for ENTREPOT fields — no guard clause exists.
 3. **VCUT container query re-executes per row:** The `trouveContenantsVCut` query runs inside the per-row loop (line 553), re-executing the EXT view query for every DET_TRANS row. Performance concern but literal behavior.
+4. **QTE_CIBLE = 0 (ratio not resolved):** If the BOM ratio (`NIQTE`) cannot be found, `NouvelleQte` stays 0 and the update is SKIPPED — the existing quantity is preserved. The code logs a `[VCUT][RATIO][WARN]` message (line 1122-1124).
+5. **Quantity unchanged:** If `NouvelleQte` matches existing `DTRQTE` (within 0.00001 tolerance), the SP call is skipped (line 1141-1145).

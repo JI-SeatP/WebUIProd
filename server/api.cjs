@@ -3034,7 +3034,8 @@ app.post(
         .query(`SELECT TOP 1 SMSEQ FROM SORTIEMATERIEL WHERE LEFT(SMNOTRANS,9) = @smno`);
       smseq = smseqResult.recordset[0]?.SMSEQ || null;
 
-      // Step 6: Recalculate DET_TRANS quantities (calculeQteSMQS logic)
+      // Step 6: Recalculate DET_TRANS quantities with smart container distribution
+      let materialWarning = null;
       // Get all SM material lines
       const detResult = await pool.request()
         .input("smno", sql.VarChar(9), smnotrans)
@@ -3047,12 +3048,12 @@ app.post(
         `);
 
       if (isVcut && listeTjseq) {
-        // ── VCUT recalculation: exact replica of calculeQteSMQS lines 1081-1200
-        // QTE_CIBLE = SUM(qty_per_component * NIQTE_ratio_per_component)
+        // ── VCUT smart distribution: distribute material across containers (skids)
+        // instead of old software's uniform qty per row.
         const tjseqList = String(listeTjseq).split(",").map(s => parseInt(s, 10)).filter(n => !isNaN(n));
 
         for (const dt of detResult.recordset) {
-          // VCUT weighted sum query (old software lines 1081-1115)
+          // 1. Compute total material needed via BOM ratio (calculeQteSMQS lines 1081-1115)
           const qteCibleResult = await pool.request()
             .input("transac", sql.Int, transac)
             .input("materialInv", sql.Int, dt.T_INVENTAIRE)
@@ -3076,35 +3077,74 @@ app.post(
                 AND TP.MODEPROD_MPCODE = 'PROD'
             `);
 
-          const nouvelleQte = qteCibleResult.recordset[0]?.QTE_CIBLE || 0;
-          if (nouvelleQte <= 0) {
+          const qteCible = qteCibleResult.recordset[0]?.QTE_CIBLE || 0;
+          if (qteCible <= 0) {
             console.log(`[ajouteSM] VCUT: skipping SM update for material ${dt.T_INVENTAIRE} (QTE_CIBLE=0, ratio not resolved)`);
             continue;
           }
 
-          // Skip if quantity hasn't changed (old software line 1141)
-          if (Math.abs((dt.DTRQTE || 0) - nouvelleQte) < 0.00001) {
-            console.log(`[ajouteSM] VCUT: SM qty unchanged for material ${dt.T_INVENTAIRE} (${nouvelleQte})`);
-            continue;
+          // 2. Fetch available containers with remaining qty from EXT view
+          let availableSkids = [];
+          try {
+            const poolExtSkids = await getPoolExt();
+            const skidResult = await poolExtSkids.request()
+              .input("transac", sql.Int, transac)
+              .query(`
+                SELECT v.CONTENANT_CON_NUMERO, c.CON_SEQ AS conSeq,
+                       v.DTRQTE AS remainingQty, v.ENTREPOT
+                FROM VSP_BonTravail_VeneerReserve v
+                LEFT JOIN ${DB_PRIMARY}.dbo.CONTENANT c ON v.CONTENANT_CON_NUMERO = c.CON_NUMERO
+                WHERE v.TRANSAC = @transac
+                ORDER BY c.CON_SEQ ASC
+              `);
+            availableSkids = skidResult.recordset.filter(r => r.conSeq && r.remainingQty > 0);
+          } catch (err) {
+            console.warn("[ajouteSM] VCUT: could not fetch skids for distribution:", err.message);
           }
 
-          console.log(`[ajouteSM] VCUT: updating SM material ${dt.T_INVENTAIRE} from ${dt.DTRQTE} to ${nouvelleQte}`);
+          // 3. Distribute across containers (greedy first-fit)
+          let remaining = qteCible;
+          const allocations = [];
+          const totalAvailable = availableSkids.reduce((sum, s) => sum + (s.remainingQty || 0), 0);
 
-          // Update via Nba_Insert_Det_Trans_Avec_Contenant (old software lines 1169-1195)
-          const dtReq = pool.request();
-          dtReq.input("TRSEQ", sql.Int, dt.TRANSAC);
-          dtReq.input("INSEQ", sql.Int, dt.T_INVENTAIRE);
-          dtReq.input("NSNO_SERIE", sql.VarChar(20), "");
-          dtReq.input("ENSEQ", sql.Int, dt.ENTREPOT || 0);
-          dtReq.input("DTRQTEUNINV", sql.Float, nouvelleQte);
-          dtReq.input("TRFACTEURCONV", sql.Float, 1);
-          dtReq.input("CONTENANT", sql.Int, dt.CONTENANT || 0);
-          dtReq.input("UTILISATEUR", sql.VarChar(50), "WebUI New");
-          dtReq.output("SQLERREUR", sql.Int);
-          dtReq.output("ERROR", sql.Int);
-          dtReq.output("DTRSEQ", sql.Int);
-          await dtReq.execute("Nba_Insert_Det_Trans_Avec_Contenant");
-          // NOTE: SMQTEPRODUIT is already set to totalQte at line 2746 — do NOT overwrite per-material
+          for (const skid of availableSkids) {
+            if (remaining <= 0) break;
+            const take = Math.min(remaining, skid.remainingQty);
+            allocations.push({
+              conSeq: skid.conSeq,
+              conNumero: skid.CONTENANT_CON_NUMERO,
+              qty: take,
+              entrepot: skid.ENTREPOT || dt.ENTREPOT || 0,
+              trseq: dt.TRANSAC,
+              inventaire: dt.T_INVENTAIRE,
+            });
+            remaining -= take;
+          }
+
+          if (remaining > 0) {
+            materialWarning = `Not enough material. Only ${totalAvailable} of ${qteCible} needed are available.`;
+            console.log(`[ajouteSM] VCUT: ${materialWarning}`);
+          }
+
+          console.log(`[ajouteSM] VCUT: material ${dt.T_INVENTAIRE} QTE_CIBLE=${qteCible} distributed across ${allocations.length} skids (remaining=${remaining})`);
+
+          // 4. Write DET_TRANS rows — one per consumed skid
+          for (const alloc of allocations) {
+            const dtReq = pool.request();
+            dtReq.input("TRSEQ", sql.Int, alloc.trseq);
+            dtReq.input("INSEQ", sql.Int, alloc.inventaire);
+            dtReq.input("NSNO_SERIE", sql.VarChar(20), "");
+            dtReq.input("ENSEQ", sql.Int, alloc.entrepot);
+            dtReq.input("DTRQTEUNINV", sql.Float, alloc.qty);
+            dtReq.input("TRFACTEURCONV", sql.Float, 1);
+            dtReq.input("CONTENANT", sql.Int, alloc.conSeq);
+            dtReq.input("UTILISATEUR", sql.VarChar(50), "WebUI New");
+            dtReq.output("SQLERREUR", sql.Int);
+            dtReq.output("ERROR", sql.Int);
+            dtReq.output("DTRSEQ", sql.Int);
+            await dtReq.execute("Nba_Insert_Det_Trans_Avec_Contenant");
+            console.log(`[ajouteSM] VCUT: wrote DET_TRANS for container ${alloc.conSeq} (${alloc.conNumero}) qty=${alloc.qty}`);
+          }
         }
       } else {
         // ── Non-VCUT recalculation: simple totalQte * ratio
@@ -3195,14 +3235,16 @@ app.post(
         const vcutContResult = await poolExtCont.request()
           .input("transac", sql.Int, transac)
           .query(`
-            SELECT DISTINCT v.CONTENANT_CON_NUMERO AS conNumero, c.CON_SEQ AS conSeq
+            SELECT DISTINCT v.CONTENANT_CON_NUMERO AS conNumero, c.CON_SEQ AS conSeq,
+                   v.DTRQTE AS remainingQty, v.ENTREPOT
             FROM VSP_BonTravail_VeneerReserve v
             LEFT JOIN ${DB_PRIMARY}.dbo.CONTENANT c ON v.CONTENANT_CON_NUMERO = c.CON_NUMERO
             WHERE v.TRANSAC = @transac
+            ORDER BY c.CON_SEQ ASC
           `);
         containerOptions = vcutContResult.recordset
           .filter(r => r.conSeq)
-          .map(r => ({ conSeq: r.conSeq, conNumero: r.conNumero }));
+          .map(r => ({ conSeq: r.conSeq, conNumero: r.conNumero, remainingQty: r.remainingQty || 0, entrepot: r.ENTREPOT || 0 }));
       } catch (err) {
         console.warn("[ajouteSM] Could not fetch VCUT containers:", err.message);
       }
@@ -3213,12 +3255,13 @@ app.post(
           const fallbackResult = await pool.request()
             .input("smno", sql.VarChar(9), smnotrans)
             .query(`
-              SELECT DISTINCT DT.CONTENANT AS conSeq, DT.CONTENANT_CON_NUMERO AS conNumero
+              SELECT DISTINCT DT.CONTENANT AS conSeq, DT.CONTENANT_CON_NUMERO AS conNumero,
+                     DT.DTRQTE AS remainingQty, DT.ENTREPOT
               FROM DET_TRANS DT WHERE DT.TRANSAC_TRNO = @smno
               AND DT.CONTENANT IS NOT NULL AND DT.CONTENANT <> 0
             `);
           containerOptions = fallbackResult.recordset.map(r => ({
-            conSeq: r.conSeq, conNumero: r.conNumero,
+            conSeq: r.conSeq, conNumero: r.conNumero, remainingQty: r.remainingQty || 0, entrepot: r.ENTREPOT || 0,
           }));
         } catch (err) {
           console.warn("[ajouteSM] Could not fetch fallback containers:", err.message);
@@ -3229,7 +3272,7 @@ app.post(
     console.log(`[ajouteSM] Done: SM=${smnotrans} SMSEQ=${smseq} materials=${materials.length} containerOptions=${containerOptions.length}`);
     res.json({
       success: true,
-      data: { smnotrans, smseq, tjseq: prodTjseq, materials, containerOptions },
+      data: { smnotrans, smseq, tjseq: prodTjseq, materials, containerOptions, materialWarning },
       message: smnotrans ? `SM ${smnotrans} updated with ${materials.length} materials` : "No SM created",
     });
   })

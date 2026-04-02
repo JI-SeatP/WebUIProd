@@ -68,6 +68,7 @@ export function QuestionnairePage() {
   const [smseq, setSmseq] = useState<number | null>(null);
   const [smMaterials, setSmMaterials] = useState<MaterialRow[]>([]);
   const [containerOptions, setContainerOptions] = useState<ContainerOption[]>([]);
+  const [materialWarning, setMaterialWarning] = useState<string | null>(null);
   const [savedDefects, setSavedDefects] = useState<SavedDefect[]>([]);
   const [smLoading, setSmLoading] = useState(false);
   const [vcutProducedItems, setVcutProducedItems] = useState<ProducedItem[]>([]);
@@ -123,6 +124,7 @@ export function QuestionnairePage() {
         smseq: number;
         materials: MaterialRow[];
         containerOptions?: ContainerOption[];
+        materialWarning?: string | null;
       }>("ajouteSM.cfm", {
         transac: Number(transac),
         copmachine: Number(copmachine),
@@ -137,6 +139,7 @@ export function QuestionnairePage() {
         setSmseq(res.data.smseq);
         setSmMaterials(res.data.materials || []);
         setContainerOptions(res.data.containerOptions || []);
+        setMaterialWarning(res.data.materialWarning || null);
         // Accumulate SM sequences for cancel cleanup (Flow E)
         if (res.data.smseq) {
           setVcutListeSmseq(prev => {
@@ -449,6 +452,7 @@ export function QuestionnairePage() {
                   smnotrans={smnotrans}
                   containerOptions={containerOptions}
                   onContainerChange={handleContainerChange}
+                  materialWarning={materialWarning}
                 />
               </>
             ) : (
@@ -511,6 +515,7 @@ export function QuestionnairePage() {
                       smnotrans={smnotrans}
                       containerOptions={containerOptions}
                       onContainerChange={handleContainerChange}
+                      materialWarning={materialWarning}
                     />
                   </div>
                 </div>
