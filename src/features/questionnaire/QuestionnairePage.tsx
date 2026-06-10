@@ -1,10 +1,12 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { useSession } from "@/context/SessionContext";
 import { apiGet, apiPost } from "@/api/client";
 import { useOperation } from "@/features/operation/hooks/useOperation";
 import { useQuestionnaireSubmit } from "./hooks/useQuestionnaireSubmit";
+import { consumePqttHandoff, type PqttHandoff } from "@/features/operation/utils/pqttHandoff";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { OrderInfoBlock } from "./components/OrderInfoBlock";
@@ -46,20 +48,38 @@ export function QuestionnairePage() {
 
   const isStop = type === "stop";
   const isComp = type === "comp";
+  const isOnHold = type === "onhold";
   const isSetup = type === "setup";
-  const targetStatus = isStop ? "STOP" : isComp ? "COMP" : isSetup ? "SETUP" : undefined;
+  // ON_HOLD reuses the STOP form layout but writes a different target status.
+  const useStopLayout = isStop || isOnHold;
+  const targetStatus = isStop ? "STOP" : isComp ? "COMP" : isOnHold ? "ON_HOLD" : isSetup ? "SETUP" : undefined;
 
-  // Form state
-  const [employeeCode, setEmployeeCode] = useState(
-    state.employee?.EMNOIDENT?.toString() ?? ""
-  );
+  // PQTT handoff — read once on mount. If present, totals and the operator
+  // from the production-quantity toolbar are carried into this questionnaire.
+  // The record self-deletes on read so a page reload doesn't double-apply.
+  const pqttHandoffRef = useRef<PqttHandoff | null>(null);
+  if (pqttHandoffRef.current === null && transac) {
+    pqttHandoffRef.current = consumePqttHandoff(transac, copmachine);
+    if (pqttHandoffRef.current) {
+      console.log("[PQTT] questionnaire consumed handoff:", pqttHandoffRef.current);
+    }
+  }
+  const pqttHandoff = pqttHandoffRef.current;
+
+  // Form state — seed from PQTT handoff if present, else from session defaults.
+  const initialEmployeeCode = pqttHandoff?.empNum
+    ?? state.employee?.EMNOIDENT?.toString()
+    ?? "";
+  const initialGoodQty = pqttHandoff ? String(pqttHandoff.totalGood) : "";
+
+  const [employeeCode, setEmployeeCode] = useState(initialEmployeeCode);
   const [employeeName, setEmployeeName] = useState(state.employee?.EMNOM ?? "");
   const [employeeSeq, setEmployeeSeq] = useState<number>(state.employee?.EMSEQ ?? 0);
   const [moldAction, setMoldAction] = useState("keep");
   const [primaryCause, setPrimaryCause] = useState("8");       // Production
   const [secondaryCause, setSecondaryCause] = useState("40");  // Fin de quart de travail
   const [notes, setNotes] = useState("");
-  const [goodQty, setGoodQty] = useState("");
+  const [goodQty, setGoodQty] = useState(initialGoodQty);
   const [finishedProducts, setFinishedProducts] = useState<FinishedProductRow[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -237,6 +257,23 @@ export function QuestionnairePage() {
       return;
     }
 
+    // PQTT-handoff defect reconciliation: if the user came in with a PQTT
+    // count, the sum of categorized defects MUST equal that count. The PQTT
+    // recorded N defective pieces; the user must categorize all N.
+    if (pqttHandoff && pqttHandoff.totalDef > 0) {
+      const sum = savedDefects.reduce((s, d) => s + (Number(d.qty) || 0), 0);
+      if (sum !== pqttHandoff.totalDef) {
+        toast.error(
+          t("questionnaire.pqttDefectMismatch", {
+            recorded: pqttHandoff.totalDef,
+            entered: sum,
+          }),
+          { duration: 5000 },
+        );
+        return;
+      }
+    }
+
     const nopseq = (operation as unknown as Record<string, unknown>).NOPSEQ ?? 0;
     // For VCUT: fetch fresh lists at submit time to ensure they're up to date
     const fmc = operation?.FMCODE ?? "";
@@ -258,14 +295,17 @@ export function QuestionnairePage() {
         }
       } catch { /* use existing state */ }
     }
+    // ON_HOLD reuses STOP's server-side handling. The actual status was
+    // already written to ON_HOLD by the upstream changeStatus.cfm call.
+    const submitType = useStopLayout ? "stop" : "comp";
     const validationErrors = submit({
       transac: Number(transac),
       copmachine: Number(copmachine),
-      type: isStop ? "stop" : "comp",
+      type: submitType,
       employeeCode,
-      primaryCause: isStop ? primaryCause : undefined,
-      secondaryCause: isStop ? secondaryCause : undefined,
-      notes: isStop ? notes : undefined,
+      primaryCause: useStopLayout ? primaryCause : undefined,
+      secondaryCause: useStopLayout ? secondaryCause : undefined,
+      notes: useStopLayout ? notes : undefined,
       moldAction: showMoldAction ? moldAction : undefined,
       goodQty: effectiveGoodQty,
       isVcut: vcutOp,
@@ -292,8 +332,9 @@ export function QuestionnairePage() {
     submit,
     transac,
     copmachine,
-    isStop,
     isSetup,
+    useStopLayout,
+    pqttHandoff,
     employeeCode,
     primaryCause,
     secondaryCause,
@@ -359,7 +400,12 @@ export function QuestionnairePage() {
         <OrderInfoBlock
           operation={operation}
           language={state.language}
-          label={isStop ? t("questionnaire.stopSurvey") : isSetup ? t("questionnaire.setupSurvey") : t("questionnaire.completionSurvey")}
+          label={
+            isStop ? t("questionnaire.stopSurvey")
+            : isOnHold ? t("questionnaire.onHoldSurvey")
+            : isSetup ? t("questionnaire.setupSurvey")
+            : t("questionnaire.completionSurvey")
+          }
           targetStatus={targetStatus}
           fromStatus={fromStatus}
         />
@@ -391,7 +437,7 @@ export function QuestionnairePage() {
             {isVcut ? (
               /* ── VCUT LAYOUT: stacked single-column matching old software ── */
               <>
-                {/* Row 1: Employee (left) | Stop Cause (right, if STOP) */}
+                {/* Row 1: Employee (left) | Stop Cause (right, if STOP/ON_HOLD) */}
                 <div className="flex gap-4 items-start">
                   <div className="shrink-0">
                     <EmployeeEntry
@@ -402,7 +448,7 @@ export function QuestionnairePage() {
                       error={errors.employeeCode}
                     />
                   </div>
-                  {isStop && (
+                  {useStopLayout && (
                     <div className="flex-1">
                       <StopCauseSection
                         language={state.language}
@@ -496,14 +542,16 @@ export function QuestionnairePage() {
                         onRemoveDefect={handleRemoveDefect}
                         savedDefects={savedDefects}
                         loading={smLoading}
+                        defaultQty={pqttHandoff ? String(pqttHandoff.totalDef) : undefined}
+                        expectedTotal={pqttHandoff?.totalDef}
                       />
                     </div>
                   )}
                 </div>
 
-                {/* Row 2: Stop Cause (isStop, 1/3) | Material Output (2/3) */}
+                {/* Row 2: Stop Cause (STOP / ON_HOLD, 1/3) | Material Output (2/3) */}
                 <div className="flex gap-4 items-start">
-                  {isStop && (
+                  {useStopLayout && (
                     <div className="flex-1">
                       <StopCauseSection
                         language={state.language}

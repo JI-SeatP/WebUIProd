@@ -150,7 +150,10 @@
     "exitSurvey": "Exit Survey",
     "setupSurvey": "Setup Survey",
     "stopSurvey": "Stop Survey",
+    "onHoldSurvey": "On-Hold Survey",
     "completionSurvey": "Completion Survey",
+    "defectRemaining": "Remaining: {{count}}",
+    "pqttDefectMismatch": "Categorized defects ({{entered}}) do not match the {{recorded}} recorded by the toolbar.",
     "stopCause": "Stop Cause",
     "primaryCause": "Primary Cause",
     "secondaryCause": "Secondary Cause",
@@ -328,5 +331,47 @@
     "labelPrint": "Print Label",
     "skidScan": "Scan SKID",
     "language": "Language"
+  },
+  "pqtt": {
+    "good": "Good",
+    "def": "Defective",
+    "totalGood": "GOOD",
+    "totalDef": "DEF",
+    "finishPiece": "FINISH PIECE",
+    "minutesPerPiece": "MINUTES / PIECE",
+    "piecesPerHour": "PIECES / HOUR",
+    "current": "CURRENT",
+    "target": "TARGET",
+    "empModal": {
+      "title": "Select operator",
+      "searchPlaceholder": "ID or name",
+      "noResults": "No operator found",
+      "confirm": "Select"
+    },
+    "empMismatch": {
+      "title": "Employee mismatch",
+      "body": "Employee number is different from the user logged in. Do you want to start production with this employee number?",
+      "yes": "Yes, start with this employee",
+      "no": "No, cancel",
+      "pickedLabel": "Picked:",
+      "loggedInLabel": "Logged in:"
+    },
+    "addPieceBeforeClose": {
+      "title": "Add finished piece before closing?",
+      "addGood": "+1 Good",
+      "addDef": "+1 Defective",
+      "no": "No, don't add"
+    },
+    "errors": {
+      "startFailed": "Database error, do not start. Please contact supervisor.",
+      "finishFailed": "Failed to log piece. Please retry."
+    },
+    "resumedToast": "Resumed run — Good: {{good}} · Def: {{def}} · in progress: {{elapsed}}",
+    "idle": {
+      "title": "Still working?",
+      "body": "This piece has been running for {{elapsed}} — more than twice the target of {{target}}. Are you still working on it?",
+      "continue": "Yes, keep going",
+      "stop": "No, close run"
+    }
   }
 }

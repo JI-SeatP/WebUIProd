@@ -5,12 +5,24 @@ import { useSession } from "@/context/SessionContext";
 
 export type StatusAction = "SETUP" | "PROD" | "PAUSE" | "STOP" | "COMP" | "ON_HOLD" | "RESET_READY";
 
+export interface UseStatusChangeOptions {
+  /**
+   * Optional gate run *after* the user accepts the existing confirm dialog
+   * but *before* the changeStatus.cfm POST. Return false (or throw) to abort
+   * the transition entirely — no API call happens and the status stays
+   * where it was. Used by PQTT for the OPConfirm / EmployeeMismatch /
+   * AddFinishedPieceBeforeClose modal sequence.
+   */
+  beforeCommit?: (action: StatusAction) => Promise<boolean> | boolean;
+}
+
 export function useStatusChange(
   transac: number,
   copmachine: number | null,
   nopseq: number | null,
   currentStatus: string,
-  onStatusChanged?: (newStatus: string) => void
+  onStatusChanged?: (newStatus: string) => void,
+  options?: UseStatusChangeOptions,
 ) {
   const navigate = useNavigate();
   const { state } = useSession();
@@ -29,6 +41,21 @@ export function useStatusChange(
 
   const executeChange = useCallback(async () => {
     if (!confirmAction) return;
+
+    // PQTT/PROD gate: run an optional pre-commit hook. If it returns false,
+    // abort without contacting the API and clear the confirm state.
+    if (options?.beforeCommit) {
+      try {
+        const proceed = await options.beforeCommit(confirmAction);
+        if (!proceed) {
+          setConfirmAction(null);
+          return;
+        }
+      } catch {
+        setConfirmAction(null);
+        return;
+      }
+    }
 
     setLoading(true);
     try {
@@ -49,9 +76,12 @@ export function useStatusChange(
       // Update local status immediately
       onStatusChanged?.(confirmAction);
 
-      // STOP and COMP navigate to questionnaire
-      if (confirmAction === "STOP" || confirmAction === "COMP") {
-        const type = confirmAction === "STOP" ? "stop" : "comp";
+      // STOP / COMP / ON_HOLD navigate to questionnaire.
+      // ON_HOLD reuses the STOP layout but writes the ON_HOLD target status.
+      if (confirmAction === "STOP" || confirmAction === "COMP" || confirmAction === "ON_HOLD") {
+        const type =
+          confirmAction === "STOP" ? "stop" :
+          confirmAction === "COMP" ? "comp" : "onhold";
         const copValue = copmachine ?? 0;
         navigate(`/orders/${transac}/questionnaire/${type}?copmachine=${copValue}&nopseq=${nopseq ?? 0}&fromStatus=${encodeURIComponent(currentStatus)}`);
       }
@@ -66,7 +96,7 @@ export function useStatusChange(
       setLoading(false);
       setConfirmAction(null);
     }
-  }, [confirmAction, transac, copmachine, nopseq, currentStatus, state.employee, navigate, onStatusChanged]);
+  }, [confirmAction, transac, copmachine, nopseq, currentStatus, state.employee, navigate, onStatusChanged, options]);
 
   const acceptSetupQuestionnaire = useCallback(() => {
     setShowSetupPrompt(false);

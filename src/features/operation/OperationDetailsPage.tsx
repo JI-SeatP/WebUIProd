@@ -16,7 +16,7 @@ import { PpapAlert } from "./components/PpapAlert";
 import { DoNotPressAlert } from "./components/DoNotPressAlert";
 import { useOperation } from "./hooks/useOperation";
 import { useVcutData } from "./hooks/useVcutData";
-import { apiGet } from "@/api/client";
+import { apiGet, apiPost } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useTranslation } from "react-i18next";
@@ -24,6 +24,16 @@ import { cn } from "@/lib/utils";
 import { W_DRAWING_PANEL, W_PRESS_SECTION } from "@/constants/widths";
 import type { OperationStep } from "@/types/workOrder";
 import { useRegisterRefresh } from "@/context/RefreshContext";
+import {
+  PQTTToolbar,
+  type PQTTImperativeApi,
+  type PQTTOperationKey,
+} from "./components/pqtt/PQTTToolbar";
+import { OPConfirmModal } from "./components/pqtt/OPConfirmModal";
+import { EmployeeMismatchModal } from "./components/pqtt/EmployeeMismatchModal";
+import { AddFinishedPieceBeforeCloseModal } from "./components/pqtt/AddFinishedPieceBeforeCloseModal";
+import type { StatusAction } from "./hooks/useStatusChange";
+import { stashPqttHandoff } from "./utils/pqttHandoff";
 
 export function OperationDetailsPage() {
   const { transac, copmachine, nopseq } = useParams<{ transac: string; copmachine: string; nopseq: string }>();
@@ -62,9 +72,108 @@ export function OperationDetailsPage() {
   const [activeStep, setActiveStep] = useState<OperationStep | null>(null);
   const [activeStepNumber, setActiveStepNumber] = useState<number>(0);
 
-  const handleStatusChanged = useCallback((newStatus: string) => {
-    setLocalStatus(newStatus);
+  // ── PQTT state ─────────────────────────────────────────────────────────
+  const [pqttEmpNum, setPqttEmpNum] = useState<string | null>(null);
+  const pqttImperativeRef = useRef<PQTTImperativeApi | null>(null);
+
+  // Modal-promise resolvers (one at a time).
+  const [opConfirmOpen, setOpConfirmOpen] = useState(false);
+  const opConfirmResolverRef = useRef<((v: { empNum: string; empNom: string } | null) => void) | null>(null);
+
+  const [empMismatch, setEmpMismatch] = useState<{ pickedNum: string; pickedNom: string } | null>(null);
+  const empMismatchResolverRef = useRef<((v: boolean) => void) | null>(null);
+
+  const [addPieceOpen, setAddPieceOpen] = useState(false);
+  const addPieceResolverRef = useRef<((v: "GOOD" | "DEF" | "skip" | "cancel") => void) | null>(null);
+
+  const openOPConfirm = useCallback(() => {
+    return new Promise<{ empNum: string; empNom: string } | null>((resolve) => {
+      opConfirmResolverRef.current = resolve;
+      setOpConfirmOpen(true);
+    });
   }, []);
+  const openEmpMismatch = useCallback((pickedNum: string, pickedNom: string) => {
+    return new Promise<boolean>((resolve) => {
+      empMismatchResolverRef.current = resolve;
+      setEmpMismatch({ pickedNum, pickedNom });
+    });
+  }, []);
+  const openAddPiece = useCallback(() => {
+    return new Promise<"GOOD" | "DEF" | "skip" | "cancel">((resolve) => {
+      addPieceResolverRef.current = resolve;
+      setAddPieceOpen(true);
+    });
+  }, []);
+
+  const handleStatusChanged = useCallback((newStatus: string) => {
+    console.log("[PQTT] onStatusChanged →", newStatus);
+    setLocalStatus(newStatus);
+    if (newStatus !== "PROD") {
+      // Status moved away from PROD — clear empNum so PQTT unmounts.
+      console.log("[PQTT] Status no longer PROD — clearing pqttEmpNum so toolbar unmounts");
+      setPqttEmpNum(null);
+    }
+  }, []);
+
+  const sessionEmpNum = state.employee?.EMNOIDENT != null
+    ? String(state.employee.EMNOIDENT)
+    : "";
+
+  const beforeCommit = useCallback(
+    async (action: StatusAction): Promise<boolean> => {
+      const isInProd = (localStatus ?? operation?.STATUT_CODE) === "PROD";
+      console.log("[PQTT] beforeCommit fired — action:", action, "currentStatus:", localStatus ?? operation?.STATUT_CODE, "isInProd:", isInProd);
+
+      // Leaving PROD → ask if they want to log a final piece.
+      if (isInProd && action !== "PROD" && pqttImperativeRef.current?.hasOpenPiece()) {
+        console.log("[PQTT] Leaving PROD with open piece — opening AddFinishedPieceBeforeClose modal");
+        const choice = await openAddPiece();
+        console.log("[PQTT] AddFinishedPieceBeforeClose → choice:", choice);
+        if (choice === "cancel") return false;
+        if (choice === "GOOD" || choice === "DEF") {
+          await pqttImperativeRef.current.closeRun(choice);
+        } else {
+          await pqttImperativeRef.current.closeRun();
+        }
+        // Capture the post-close snapshot for the questionnaire handoff.
+        stashPqttHandoff(action, transac ?? 0, copmachine ?? 0, pqttImperativeRef.current?.getSnapshot());
+        return true;
+      }
+
+      // Leaving PROD with no open piece (still in PROD, no in-flight unit). Also
+      // capture the snapshot so the questionnaire gets totals + employee.
+      if (isInProd && action !== "PROD" && pqttImperativeRef.current) {
+        const snap = pqttImperativeRef.current.getSnapshot();
+        if (snap) {
+          console.log("[PQTT] Leaving PROD (no open piece) — capturing snapshot:", snap);
+          await pqttImperativeRef.current.closeRun();
+          stashPqttHandoff(action, transac ?? 0, copmachine ?? 0, snap);
+        }
+      }
+
+      // Entering PROD → OPConfirm → (EmployeeMismatch).
+      if (action === "PROD" && !isInProd) {
+        console.log("[PQTT] Entering PROD — opening OPConfirmModal");
+        const picked = await openOPConfirm();
+        console.log("[PQTT] OPConfirmModal → picked:", picked);
+        if (!picked) {
+          console.log("[PQTT] OPConfirm cancelled — aborting status change");
+          return false;
+        }
+        if (sessionEmpNum && picked.empNum !== sessionEmpNum) {
+          console.log("[PQTT] Employee mismatch (picked", picked.empNum, "vs session", sessionEmpNum, ") — opening EmployeeMismatchModal");
+          const ok = await openEmpMismatch(picked.empNum, picked.empNom);
+          console.log("[PQTT] EmployeeMismatchModal → ok:", ok);
+          if (!ok) return false;
+        }
+        setPqttEmpNum(picked.empNum);
+        console.log("[PQTT] pqttEmpNum set to", picked.empNum, "— will mount toolbar after status changes to PROD");
+        return true;
+      }
+      return true;
+    },
+    [localStatus, operation, openOPConfirm, openEmpMismatch, openAddPiece, sessionEmpNum],
+  );
 
   // Fetch panel data when operation loads
   useEffect(() => {
@@ -432,6 +541,117 @@ export function OperationDetailsPage() {
         operationLabel={locOp(operation.OPERATION_P, operation.OPERATION_S)}
         machineLabel={locOp(operation.MACHINE_P, operation.MACHINE_S)}
         onStatusChanged={handleStatusChanged}
+        beforeCommit={beforeCommit}
+      />
+
+      {/* PQTT — Production Quantity Target Toolbar (PROD only, non-VCUT) */}
+      {(() => {
+        const effectiveStatus = localStatus ?? operation.STATUT_CODE;
+        const op = operation as unknown as Record<string, unknown>;
+        const opCode = (op.OPERATION as string | undefined) ?? "";
+        const opSeq = Number(op.OPERATION_SEQ ?? 0);
+        const isVcutPqtt = opCode === "VENPR" && opSeq === 1;
+        if (effectiveStatus !== "PROD" || !pqttEmpNum || isVcutPqtt) return null;
+
+        const opKey: PQTTOperationKey = {
+          TRANSAC: Number(operation.TRANSAC),
+          OPSEQ: opSeq,
+          OPCODE: opCode,
+          NOPSEQ: Number(op.NOPSEQ ?? 0),
+          MASEQ: Number(op.MACHINE ?? op.MASEQ ?? 0),
+          MACODE: String(op.MACODE ?? ""),
+          FMCODE: String(operation.FMCODE ?? op.FMCODE ?? ""),
+          TJSEQ: op.TJSEQ != null ? Number(op.TJSEQ) : null,
+          INSEQ: op.INVENTAIRE_SEQ != null ? Number(op.INVENTAIRE_SEQ) : null,
+          NISEQ: op.Panel_NiSeq != null ? Number(op.Panel_NiSeq) : null,
+        };
+        const shiftStart = state.employee?.EQDEBUTQUART ?? "";
+        const shiftEnd = state.employee?.EQFINQUART ?? "";
+
+        return (
+          <PQTTToolbar
+            opKey={opKey}
+            empNum={pqttEmpNum}
+            shiftStartHms={shiftStart}
+            shiftEndHms={shiftEnd}
+            onStartFailed={() => {
+              // StartRun failed: roll back status. We do this by setting local
+              // status back to whatever the server has, and unmounting PQTT.
+              setLocalStatus(String(operation.STATUT_CODE ?? ""));
+              setPqttEmpNum(null);
+            }}
+            onIdleStop={async () => {
+              // Operator said "No, close run" in the idle-check modal.
+              // Flip the operation status to PAUSE so PQTT unmounts cleanly
+              // and the operator can decide what to do next from the
+              // dropdown (STOP, COMP, resume PROD, etc.).
+              console.log("[PQTT] onIdleStop — flipping status to PAUSE");
+              try {
+                await apiPost("changeStatus.cfm", {
+                  transac: operation.TRANSAC,
+                  copmachine: operation.COPMACHINE ?? Number(copmachine),
+                  newStatus: "PAUSE",
+                  employeeCode: state.employee?.EMSEQ ?? 0,
+                });
+              } catch (e) {
+                console.warn("[PQTT] onIdleStop changeStatus failed:", e);
+              }
+              setLocalStatus("PAUSE");
+              setPqttEmpNum(null);
+            }}
+            imperativeRef={pqttImperativeRef}
+          />
+        );
+      })()}
+
+      {/* PQTT modals */}
+      <OPConfirmModal
+        open={opConfirmOpen}
+        onCancel={() => {
+          setOpConfirmOpen(false);
+          opConfirmResolverRef.current?.(null);
+          opConfirmResolverRef.current = null;
+        }}
+        onConfirm={(empNum, empNom) => {
+          setOpConfirmOpen(false);
+          opConfirmResolverRef.current?.({ empNum, empNom });
+          opConfirmResolverRef.current = null;
+        }}
+      />
+      <EmployeeMismatchModal
+        open={empMismatch !== null}
+        pickedEmpNum={empMismatch?.pickedNum ?? ""}
+        pickedEmpNom={empMismatch?.pickedNom ?? ""}
+        sessionEmpNum={sessionEmpNum}
+        sessionEmpNom={state.employee?.EMNOM ?? ""}
+        onConfirm={() => {
+          setEmpMismatch(null);
+          empMismatchResolverRef.current?.(true);
+          empMismatchResolverRef.current = null;
+        }}
+        onCancel={() => {
+          setEmpMismatch(null);
+          empMismatchResolverRef.current?.(false);
+          empMismatchResolverRef.current = null;
+        }}
+      />
+      <AddFinishedPieceBeforeCloseModal
+        open={addPieceOpen}
+        onAddGood={() => {
+          setAddPieceOpen(false);
+          addPieceResolverRef.current?.("GOOD");
+          addPieceResolverRef.current = null;
+        }}
+        onAddDef={() => {
+          setAddPieceOpen(false);
+          addPieceResolverRef.current?.("DEF");
+          addPieceResolverRef.current = null;
+        }}
+        onSkip={() => {
+          setAddPieceOpen(false);
+          addPieceResolverRef.current?.("skip");
+          addPieceResolverRef.current = null;
+        }}
       />
     </div>
   );

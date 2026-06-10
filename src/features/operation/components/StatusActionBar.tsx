@@ -33,6 +33,12 @@ interface StatusActionBarProps {
   /** Localized machine label (matches header) */
   machineLabel: string;
   onStatusChanged?: (newStatus: string) => void;
+  /**
+   * Optional gate run after the confirm dialog and before the API call.
+   * Used by PQTT to inject the OPConfirm / EmployeeMismatch / AddPieceBeforeClose
+   * modal sequence. Return false to abort the transition.
+   */
+  beforeCommit?: (action: StatusAction) => Promise<boolean> | boolean;
 }
 
 interface ActionItem {
@@ -118,6 +124,7 @@ export function StatusActionBar({
   operationLabel,
   machineLabel,
   onStatusChanged,
+  beforeCommit,
 }: StatusActionBarProps) {
   const { t } = useTranslation();
   const status = statusCodeToEnum(statusCode);
@@ -130,7 +137,7 @@ export function StatusActionBar({
     executeChange,
     acceptSetupQuestionnaire,
     declineSetupQuestionnaire,
-  } = useStatusChange(transac, copmachine, nopseq, status, onStatusChanged);
+  } = useStatusChange(transac, copmachine, nopseq, status, onStatusChanged, { beforeCommit });
 
   const actions = getAllActions(status, t);
 

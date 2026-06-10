@@ -46,6 +46,14 @@ interface DefectQuantitySectionProps {
   savedDefects?: SavedDefect[];
   loading?: boolean;
   theme?: "modern" | "minimal" | "dense";
+  /** Initial value for the qty input row. Used by PQTT handoff to pre-fill
+   *  the field with the count recorded by the production toolbar. Only the
+   *  first value is read; subsequent prop changes are ignored. */
+  defaultQty?: string;
+  /** Expected total defect count (from PQTT). When set, a "Remaining: N"
+   *  badge appears beside the title showing how many defects still need to
+   *  be categorized — i.e. `expectedTotal - sum(savedDefects.qty)`. */
+  expectedTotal?: number;
 }
 
 export function DefectQuantitySection({
@@ -56,6 +64,8 @@ export function DefectQuantitySection({
   savedDefects = [],
   loading = false,
   theme = "modern",
+  defaultQty,
+  expectedTotal,
 }: DefectQuantitySectionProps) {
   const { t } = useTranslation();
   const isFr = language === "fr";
@@ -63,11 +73,17 @@ export function DefectQuantitySection({
   const [defectTypes, setDefectTypes] = useState<DefectType[]>([]);
   const [numpadOpen, setNumpadOpen] = useState(false);
 
-  // New defect input row state
-  const [newQty, setNewQty] = useState("");
+  // New defect input row state. The qty input is seeded from `defaultQty` on
+  // first render so a PQTT-recorded count can be confirmed with a single tap.
+  const [newQty, setNewQty] = useState(defaultQty ?? "");
   const [newTypeId, setNewTypeId] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const [adding, setAdding] = useState(false);
+
+  // Remaining-to-categorize badge.
+  const savedSum = savedDefects.reduce((s, d) => s + (Number(d.qty) || 0), 0);
+  const remaining = (expectedTotal ?? 0) - savedSum;
+  const showRemaining = (expectedTotal ?? 0) > 0 && remaining > 0;
 
   useEffect(() => {
     apiGet<DefectType[]>(`getDefectTypes.cfm?fmcode=${encodeURIComponent(fmcode)}`).then((res) => {
@@ -118,7 +134,17 @@ export function DefectQuantitySection({
   return (
     <Card className={`min-h-[250px] bg-white ${theme === "dense" ? "border border-gray-200" : ""}`}>
       <div className={headerClasses}>
-        <div className={headerTextClasses}>{t("questionnaire.defectQuantity")}</div>
+        <div className="flex items-center gap-3">
+          <div className={headerTextClasses}>{t("questionnaire.defectQuantity")}</div>
+          {showRemaining && (
+            <div
+              className="rounded-md border border-amber-500 bg-amber-50 px-2 py-0.5 text-sm font-semibold text-amber-900"
+              data-testid="pqtt-defect-remaining"
+            >
+              {t("questionnaire.defectRemaining", { count: remaining })}
+            </div>
+          )}
+        </div>
       </div>
       <CardContent className={contentClasses}>
         {/* New defect input row */}
