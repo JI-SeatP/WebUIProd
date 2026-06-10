@@ -9,6 +9,16 @@
 	<cfoutput>{}</cfoutput><cfabort>
 </cfif>
 
+<!---
+	EXACT replica of legacy QuestionnaireSortie.cfc -> ModifieTEMPSPROD (lines 599-1293).
+	Kept in lockstep with server/api.cjs /submitQuestionnaire.cfm.
+
+	IMPORTANT: submit does NOT close/insert TEMPSPROD rows and does NOT create SMs.
+	The status mutation happened at questionnaire open (changeStatus.cfm = old
+	ajouteModifieStatut); SM creation happens interactively via ajouteSM.cfm.
+	Submit only: updates qtys/employee/costs, upserts stop causes, posts SM/EPF via
+	AutoFab EXECUTE_TRANSACTION REPORT, EnCours/cariste/cNOMENCOP bookkeeping.
+--->
 <cftry>
 	<cfset response = StructNew()>
 
@@ -34,7 +44,7 @@
 	<cfset qtype = requestBody["type"]>
 	<cfset employeeCode = requestBody["employeeCode"]>
 	<cfset goodQty = Val(requestBody["goodQty"])>
-	<cfset nopseq = Val(requestBody["nopseq"])>
+	<cfset nopseqArg = Val(requestBody["nopseq"])>
 
 	<!--- Optional fields --->
 	<cfset primaryCause = "">
@@ -45,6 +55,16 @@
 	<cfif StructKeyExists(requestBody, "notes")><cfset notes = requestBody["notes"]></cfif>
 	<cfset moldAction = "">
 	<cfif StructKeyExists(requestBody, "moldAction")><cfset moldAction = requestBody["moldAction"]></cfif>
+	<cfset defectsArr = []>
+	<cfif StructKeyExists(requestBody, "defects")><cfset defectsArr = requestBody["defects"]></cfif>
+	<!--- Session login name for SP/SOAP user params (old session.InfoClient.NOMEMPLOYE) --->
+	<cfset userName = "WebUI New">
+	<cfif StructKeyExists(requestBody, "employeeName") AND Len(Trim(requestBody["employeeName"])) GT 0>
+		<cfset userName = Left(Trim(requestBody["employeeName"]), 50)>
+	</cfif>
+	<!--- The STOP/COMP/ON_HOLD row created by changeStatus (old arguments.TJSEQ) --->
+	<cfset stopTjseqArg = 0>
+	<cfif StructKeyExists(requestBody, "stopTjseq")><cfset stopTjseqArg = Val(requestBody["stopTjseq"])></cfif>
 
 	<!--- VCUT-specific fields --->
 	<cfset isVcut = false>
@@ -58,9 +78,8 @@
 	<cfset listeSmseq = "">
 	<cfif StructKeyExists(requestBody, "listeSmseq")><cfset listeSmseq = Trim(requestBody["listeSmseq"])></cfif>
 
-	<!--- Map type to MPCODE --->
-	<cfset mpcode = "STOP">
-	<cfif qtype EQ "comp"><cfset mpcode = "COMP"></cfif>
+	<cfset isStop = (qtype EQ "stop")>
+	<cfset isComp = (qtype EQ "comp")>
 
 	<!--- Server time --->
 	<cfquery name="qTime" datasource="#datasourcePrimary#">
@@ -69,206 +88,672 @@
 	<cfset dateStr = qTime.d>
 	<cfset timeStr = qTime.t>
 
-	<!--- Load operation --->
-	<cfquery name="qOperation" datasource="#datasourceExt#">
-		SELECT TOP 1 v.OPERATION_SEQ, v.MACHINE, v.INVENTAIRE_SEQ, v.CNOMENCLATURE,
-			v.NOPSEQ, v.COPMACHINE, v.NO_INVENTAIRE, v.PRODUIT_CODE, v.QTE_FORCEE
-		FROM vEcransProduction v
-		WHERE v.TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+	<!--- Find the last PROD TEMPSPROD record (old :657-668) --->
+	<cfquery name="qPrevRow" datasource="#datasourcePrimary#">
+		SELECT TOP 1 TP.TJSEQ, TP.CNOMENCOP, TP.SMNOTRANS,
+			TP.ENTRERPRODFINI_PFNOTRANS, TP.CNOMENCLATURE,
+			TP.TJQTEPROD, TP.TJQTEDEFECT, TP.MODEPROD_MPCODE,
+			TP.EMPLOYE, TP.OPERATION, TP.MACHINE, TP.INVENTAIRE_C,
+			TP.TJDEBUTDATE, TP.TJFINDATE, TP.cNomencOp_Machine,
+			CNOP.NOPSEQ
+		FROM TEMPSPROD TP
+		INNER JOIN cNOMENCOP CNOP ON CNOP.NOPSEQ = TP.CNOMENCOP
+		WHERE TP.TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+		AND TP.MODEPROD_MPCODE = 'PROD'
+		AND TP.TJNOTE LIKE 'Ecran de production pour Temps prod%'
 		<cfif copmachine NEQ 0>
-			AND v.COPMACHINE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#copmachine#">
+			AND TP.cNOMENCOP_MACHINE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#copmachine#">
 		</cfif>
-		AND v.OPERATION <> 'FINSH'
+		ORDER BY TP.TJSEQ DESC
 	</cfquery>
 
-	<!--- Resolve employee EMSEQ, EMNO, EMNOM --->
+	<cfif qPrevRow.RecordCount EQ 0>
+		<cfset response["success"] = false>
+		<cfset response["error"] = "No active PROD record found for this operation">
+		<cfoutput>#SerializeJSON(response)#</cfoutput>
+		<cfabort>
+	</cfif>
+
+	<cfset mainTjseq = Val(qPrevRow.TJSEQ)>
+	<cfset nopseq = nopseqArg>
+	<cfif nopseq EQ 0><cfset nopseq = Val(qPrevRow.NOPSEQ)></cfif>
+	<!--- Defect total comes from the DB (write-as-you-go via addDefect.cfm) --->
+	<cfset qteDefect = Val(qPrevRow.TJQTEDEFECT)>
+	<cfset totalQte = goodQty + qteDefect>
+
+	<!--- Resolve the STOP/COMP row for causes/employee. Prefer the explicit TJSEQ
+	      from changeStatus (covers ON_HOLD); fallback MODEPROD=8 lookup (old :734-744). --->
+	<cfset stopTjseq = stopTjseqArg>
+	<cfif stopTjseq EQ 0 AND isStop>
+		<cfquery name="qStopRow" datasource="#datasourcePrimary#">
+			SELECT TOP 1 TJSEQ FROM TEMPSPROD
+			WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+			AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+			<cfif copmachine NEQ 0>
+				AND cNOMENCOP_MACHINE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#copmachine#">
+			</cfif>
+			AND MODEPROD = 8
+			ORDER BY TJSEQ DESC
+		</cfquery>
+		<cfif qStopRow.RecordCount GT 0>
+			<cfset stopTjseq = Val(qStopRow.TJSEQ)>
+		</cfif>
+	</cfif>
+
+	<!--- ============================================================ --->
+	<!--- STEP 1: Reset TJPROD_TERMINE flag (old :686-692) --->
+	<!--- ============================================================ --->
+	<cfquery datasource="#datasourcePrimary#">
+		UPDATE TEMPSPROD
+		SET TJPROD_TERMINE = 0
+		WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+		AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+		AND TJPROD_TERMINE = 1
+	</cfquery>
+
+	<!--- ============================================================ --->
+	<!--- STEP 2: Update employee on the STOP/COMP row AND the PROD row --->
+	<!--- (old :700-706 + ChangeTEMPSPROD :1670-1678) --->
+	<!--- ============================================================ --->
 	<cfquery name="qEmployee" datasource="#datasourcePrimary#">
-		SELECT TOP 1 EMSEQ, EMNOIDENT, EMNOM FROM EMPLOYE
+		SELECT TOP 1 EMSEQ, EMNOIDENT AS EMNO, EMNOM FROM EMPLOYE
 		WHERE EMNOIDENT = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(employeeCode)#">
 	</cfquery>
 	<cfset employeeSeq = 0>
-	<cfset employeeEmno = "">
-	<cfset employeeName = "">
 	<cfif qEmployee.RecordCount GT 0>
 		<cfset employeeSeq = Val(qEmployee.EMSEQ)>
-		<cfset employeeEmno = qEmployee.EMNOIDENT>
-		<cfset employeeName = qEmployee.EMNOM>
-	</cfif>
-
-	<!--- Find the current PROD TEMPSPROD row (main) --->
-	<cfquery name="qPrevRow" datasource="#datasourcePrimary#">
-		SELECT TOP 1 TJSEQ, EMPLOYE, OPERATION, MACHINE, cNOMENCLATURE, INVENTAIRE_C,
-			CNOMENCOP, cNomencOp_Machine, MODEPROD_MPCODE,
-			TJDEBUTDATE, TJQTEPROD, TJQTEDEFECT, SMNOTRANS
-		FROM TEMPSPROD
-		WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
-		AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
-		AND MODEPROD_MPCODE = 'PROD'
-		AND TJNOTE LIKE 'Ecran de production pour Temps prod%'
-		<cfif copmachine NEQ 0>
-			AND cNomencOp_Machine = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#copmachine#">
+		<cfif stopTjseq GT 0>
+			<cfquery datasource="#datasourcePrimary#">
+				UPDATE TEMPSPROD
+				SET EMPLOYE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#employeeSeq#">,
+					EMPLOYE_EMNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" value="#qEmployee.EMNO#">,
+					EMPLOYE_EMNOM = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" value="#qEmployee.EMNOM#">
+				WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#stopTjseq#">
+			</cfquery>
 		</cfif>
-		ORDER BY TJSEQ DESC
-	</cfquery>
-
-	<cfset mainTjseq = 0>
-	<cfif qPrevRow.RecordCount GT 0>
-		<cfset mainTjseq = Val(qPrevRow.TJSEQ)>
-	</cfif>
-
-	<!--- ============================================================ --->
-	<!--- Step 1: Update employee on main TEMPSPROD (QuestionnaireSortie.cfc:700) --->
-	<!--- ============================================================ --->
-	<cfif mainTjseq GT 0>
 		<cfquery datasource="#datasourcePrimary#">
 			UPDATE TEMPSPROD
 			SET EMPLOYE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#employeeSeq#">,
-				EMPLOYE_EMNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" value="#employeeEmno#">,
-				EMPLOYE_EMNOM = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" value="#employeeName#">
+				EMPLOYE_EMNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" value="#qEmployee.EMNO#">,
+				EMPLOYE_EMNOM = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" value="#qEmployee.EMNOM#">
 			WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
 		</cfquery>
 	</cfif>
 
 	<!--- ============================================================ --->
-	<!--- Step 2: SKIP changeTEMPSPROD for VCUT (I10) --->
-	<!--- For non-VCUT: update TJQTEPROD, TJQTEDEFECT on main row --->
+	<!--- STEP 3: Stop causes on the STOP row — NOT the PROD row --->
+	<!--- (old ModifieTEMPSPROD :734-769: TOP 1 MODEPROD = 8, upsert TEMPSPRODEX) --->
 	<!--- ============================================================ --->
-	<cfif NOT isVcut AND mainTjseq GT 0>
-		<cfquery datasource="#datasourcePrimary#">
-			UPDATE TEMPSPROD
-			SET TJQTEPROD = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#goodQty#">
-			WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
-		</cfquery>
-	</cfif>
-
-	<!--- ============================================================ --->
-	<!--- Step 3: Save stop causes to TEMPSPRODEX (QuestionnaireSortie.cfc:752) --->
-	<!--- ============================================================ --->
-	<cfif qtype EQ "stop" AND Len(primaryCause) GT 0 AND mainTjseq GT 0>
-		<!--- Check if TEMPSPRODEX already exists --->
+	<cfif isStop AND Len(primaryCause) GT 0 AND Val(primaryCause) NEQ 0 AND stopTjseq GT 0>
 		<cfquery name="qExistTpex" datasource="#datasourcePrimary#">
-			SELECT COUNT(*) AS cnt FROM TEMPSPRODEX WHERE TEMPSPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
+			SELECT QA_CAUSEP, QA_CAUSES FROM TEMPSPRODEX
+			WHERE TEMPSPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#stopTjseq#">
 		</cfquery>
-
-		<cfif Val(qExistTpex.cnt) GT 0>
+		<cfif qExistTpex.RecordCount GT 0>
 			<cfquery datasource="#datasourcePrimary#">
 				UPDATE TEMPSPRODEX
 				SET QA_CAUSEP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(primaryCause)#">,
 					QA_CAUSES = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(secondaryCause)#">,
-					EXTPRD_NOTE = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" value="#notes#">
-				WHERE TEMPSPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
+					EXTPRD_NOTE = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="500" value="#Left(notes, 500)#">
+				WHERE TEMPSPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#stopTjseq#">
 			</cfquery>
 		<cfelse>
 			<cfquery datasource="#datasourcePrimary#">
 				INSERT INTO TEMPSPRODEX (TEMPSPROD, QA_CAUSEP, QA_CAUSES, EXTPRD_NOTE)
 				VALUES (
-					<cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">,
+					<cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#stopTjseq#">,
 					<cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(primaryCause)#">,
 					<cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(secondaryCause)#">,
-					<cfqueryparam cfsqltype="CF_SQL_VARCHAR" value="#notes#">
+					<cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="500" value="#Left(notes, 500)#">
 				)
 			</cfquery>
 		</cfif>
 	</cfif>
 
 	<!--- ============================================================ --->
-	<!--- Step 4: Post EPFs via AutoFab EPF/REPORT (QuestionnaireSortie.cfc:918) --->
-	<!--- VCUT: NO TJPROD_TERMINE (I3) --->
+	<!--- STEP 4 (non-VCUT): qty update on PROD row + TJPROD_TERMINE pre-check --->
+	<!--- (old ChangeTEMPSPROD :1670-1699 + :708-716; VCUT skips — old :708) --->
 	<!--- ============================================================ --->
-	<cfif Len(listeEpfSeq) GT 0>
-		<cfloop list="#listeEpfSeq#" index="pfseq">
-			<!--- Get PFNOTRANS --->
-			<cfquery name="qPfno" datasource="#datasourcePrimary#">
-				SELECT PFNOTRANS FROM ENTRERPRODFINI
-				WHERE PFSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(pfseq)#">
+	<cfif NOT isVcut>
+		<cfquery datasource="#datasourcePrimary#">
+			UPDATE TEMPSPROD
+			SET TJQTEPROD = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#goodQty#">,
+				TJQTEDEFECT = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#qteDefect#">,
+				CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">,
+				INVENTAIRE_C = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(qPrevRow.INVENTAIRE_C)#">
+			WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
+		</cfquery>
+
+		<!--- TJPROD_TERMINE pre-check (old :708-716) --->
+		<cftry>
+			<cfquery name="qQteCheck" datasource="#datasourcePrimary#">
+				SELECT ISNULL(COP.NOPQTEAFAIRE, 0) AS NiQte_A_Fab,
+					ISNULL((SELECT SUM(TJQTEPROD) FROM TEMPSPROD WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#"> AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">), 0) AS Qte_Termine
+				FROM CNOMENCOP COP
+				WHERE COP.NOPSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
 			</cfquery>
-
-			<cfif qPfno.RecordCount GT 0>
-				<!--- Post EPF via AutoFab SOAP (QuestionnaireSortie.cfc:2115-2143) --->
-				<cfset epfReportParams = "'#Trim(qPfno.PFNOTRANS)#';'#employeeName#'">
-				<cfset epfReportResult = autofabExecuteTransaction(datasourcePrimary, "EPF", "REPORT", epfReportParams)>
-
-				<!--- VCUT: do NOT set TJPROD_TERMINE = 1 (I3, guarded at line 918) --->
-				<!--- Non-VCUT would set TJPROD_TERMINE here --->
-				<cfif NOT isVcut>
-					<!--- Non-VCUT: set TJPROD_TERMINE on linked TEMPSPROD --->
-					<cfquery datasource="#datasourcePrimary#">
-						UPDATE TEMPSPROD SET TJPROD_TERMINE = 1
-						WHERE ENTRERPRODFINI_PFNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" value="#Left(Trim(qPfno.PFNOTRANS), 9)#">
-					</cfquery>
-				</cfif>
+			<cfif qQteCheck.RecordCount GT 0 AND (Val(qQteCheck.NiQte_A_Fab) - Val(qQteCheck.Qte_Termine)) LTE 0>
+				<cfquery datasource="#datasourcePrimary#">
+					UPDATE TEMPSPROD SET TJPROD_TERMINE = 1
+					WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
+				</cfquery>
 			</cfif>
+			<cfcatch type="any"></cfcatch>
+		</cftry>
+
+		<!--- ChangeTEMPSPROD diff-status row (old :1682-1741): update qty + costs on
+		      the most recent row whose MPCODE differs from the submit status --->
+		<cftry>
+			<cfset statusForQuery = "PROD">
+			<cfif isStop><cfset statusForQuery = "STOP"></cfif>
+			<cfif isComp><cfset statusForQuery = "COMP"></cfif>
+			<cfquery name="qDiffStatus" datasource="#datasourcePrimary#">
+				SELECT TOP 1 TJSEQ, MODEPROD_MPCODE FROM TEMPSPROD
+				WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+				AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+				<cfif copmachine NEQ 0>
+					AND cNOMENCOP_MACHINE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#copmachine#">
+				</cfif>
+				AND MODEPROD_MPCODE <> <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="5" value="#statusForQuery#">
+				AND TJNOTE LIKE 'Ecran de production pour Temps prod%'
+				ORDER BY TJSEQ DESC
+			</cfquery>
+			<cfif qDiffStatus.RecordCount GT 0>
+				<cfset diffTjseq = Val(qDiffStatus.TJSEQ)>
+				<cfquery datasource="#datasourcePrimary#">
+					UPDATE TEMPSPROD
+					SET TJQTEPROD = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#goodQty#">,
+						TJQTEDEFECT = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#qteDefect#">
+					WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#diffTjseq#">
+				</cfquery>
+				<cfquery datasource="#datasourcePrimary#">
+					UPDATE TEMPSPROD SET
+						TJSYSTEMPSHOMME = ISNULL(C.CALCSYSTEMPSHOMME, 0),
+						TJTEMPSHOMME = ISNULL(C.CALCTEMPSHOMME, 0),
+						TJEMCOUT = ISNULL(C.CALCEMCOUT, 0),
+						TJOPCOUT = ISNULL(C.CALCOPCOUT, 0),
+						TJMACOUT = ISNULL(C.CALCMACOUT, 0)
+					FROM TEMPSPROD
+					INNER JOIN dbo.FctCalculTempsDeProduction(<cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#diffTjseq#">) C ON C.TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#diffTjseq#">
+					WHERE TEMPSPROD.TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#diffTjseq#">
+				</cfquery>
+			</cfif>
+			<cfcatch type="any"></cfcatch>
+		</cftry>
+	</cfif>
+
+	<!--- ============================================================ --->
+	<!--- STEP 5: DET_DEFECT fallback insert — only when write-as-you-go --->
+	<!--- didn't already persist them (QteDefect.cfc add columns) --->
+	<!--- ============================================================ --->
+	<cfquery name="qExistingDefects" datasource="#datasourcePrimary#">
+		SELECT COUNT(*) AS cnt FROM DET_DEFECT
+		WHERE TEMPSPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
+	</cfquery>
+	<cfif Val(qExistingDefects.cnt) EQ 0 AND ArrayLen(defectsArr) GT 0>
+		<cfquery name="qInv" datasource="#datasourcePrimary#">
+			SELECT INVENTAIRE FROM TRANSAC
+			WHERE TRSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+		</cfquery>
+		<cfquery name="qDefCosts" datasource="#datasourcePrimary#">
+			SELECT ISNULL(TP.TJEMCOUT, 0) + ISNULL(TP.TJOPCOUT, 0) + ISNULL(TP.TJMACOUT, 0) AS CoutOperation,
+				ISNULL(TP.TJQTEPROD, 0) AS TJQTEPROD,
+				ISNULL((SELECT SUM(0 - TRCOUTTRANS) FROM TRANSAC WHERE TRSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">), 0) AS CoutMatiere
+			FROM TEMPSPROD TP
+			WHERE TP.TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
+		</cfquery>
+		<cfset LaValeurEstimeeTotale = Val(qDefCosts.CoutOperation) + Val(qDefCosts.CoutMatiere)>
+		<cfif Val(qDefCosts.TJQTEPROD) NEQ 0>
+			<cfset LaValeurEstimeeUnitaire = LaValeurEstimeeTotale / qDefCosts.TJQTEPROD>
+		<cfelse>
+			<cfset LaValeurEstimeeUnitaire = 0>
+		</cfif>
+
+		<cfloop array="#defectsArr#" index="d">
+			<cfset dQty = Val(d["qty"])>
+			<cfif dQty LTE 0><cfcontinue></cfif>
+			<cfquery datasource="#datasourcePrimary#">
+				INSERT INTO DET_DEFECT
+					(TEMPSPROD, TRANSAC, INVENTAIRE, MACHINE, EMPLOYE,
+					DDQTEUNINV, DDDATE, RAISON, DDNOTE,
+					DDVALEUR_ESTIME_UNITAIRE, DDVALEUR_ESTIME_TOTALE, TRANSAC_PERE)
+				VALUES (
+					<cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">,
+					<cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">,
+					<cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(qInv.INVENTAIRE)#">,
+					<cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(qPrevRow.MACHINE)#">,
+					<cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#employeeSeq#">,
+					<cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#dQty#">,
+					GETDATE(),
+					<cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(d['typeId'])#">,
+					<cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="500" value="#Left(d['notes'], 500)#">,
+					<cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#Val(LaValeurEstimeeUnitaire)#">,
+					<cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#Val(LaValeurEstimeeTotale)#">,
+					<cfqueryparam cfsqltype="CF_SQL_INTEGER" value="0">
+				)
+			</cfquery>
 		</cfloop>
 	</cfif>
 
 	<!--- ============================================================ --->
-	<!--- Step 5: Post SM via AutoFab SM/REPORT (QuestionnaireSortie.cfc:1743-1785) --->
+	<!--- Zero-qty rollback (old verifieStatutSortie :2430-2462): total 0 + --->
+	<!--- PROD row has an SM -> AutoFab SM/DEL + clear the row --->
 	<!--- ============================================================ --->
-	<cfif Len(smnotrans) GT 0>
-		<cfset smReportParams = "'#Left(smnotrans, 9)#';'#employeeName#'">
-		<cfset smReportResult = autofabExecuteTransaction(datasourcePrimary, "SM", "REPORT", smReportParams)>
+	<cfif totalQte EQ 0 AND NOT isVcut AND Len(Trim(qPrevRow.SMNOTRANS)) GT 0>
+		<cftry>
+			<cfquery name="qDelSmSeq" datasource="#datasourcePrimary#">
+				SELECT SMSEQ FROM SORTIEMATERIEL
+				WHERE SMNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(Trim(qPrevRow.SMNOTRANS), 9)#">
+			</cfquery>
+			<cfif qDelSmSeq.RecordCount GT 0>
+				<cfset smDelParams = "#Val(qDelSmSeq.SMSEQ)#;'';'';'''';'';'';'';'''';'''';'';'';'';''">
+				<cfset smDelResult = autofabExecuteTransaction(datasourcePrimary, "SM", "DEL", smDelParams)>
+			</cfif>
+			<cfquery datasource="#datasourcePrimary#">
+				UPDATE TEMPSPROD
+				SET SMNOTRANS = '', TJQTEPROD = 0, TJQTEDEFECT = 0
+				WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
+			</cfquery>
+			<cfcatch type="any"></cfcatch>
+		</cftry>
 	</cfif>
 
 	<!--- ============================================================ --->
-	<!--- Step 6-9: VCUT completion check (QuestionnaireSortie.cfc:1124-1290) --->
+	<!--- SM posting — REPORT only (old ModifieTEMPSPROD :776-828 + --->
+	<!--- ReportSortieMateriel :1743-1786). Submit NEVER creates an SM. --->
+	<!--- Params: SMSEQ;LaDateClarion;LaHeureClarion;'NOMEMPLOYE';'';'';'';'''';'''';'';'';'';'' --->
+	<!--- Clarion: days since 1800-12-28 / seconds-since-midnight*100 (support.cfc:872-873) --->
 	<!--- ============================================================ --->
-	<cfif isVcut AND Len(listeTjseq) GT 0 AND qtype EQ "comp">
-		<!--- Completion threshold: QTE_FORCEE (I2), NOT DCQTE_A_FAB --->
-		<cfset LaQteTotale = Val(qOperation.QTE_FORCEE)>
-
-		<!--- Current total produced — match old SW exactly (QuestionnaireSortie.cfc:1088-1096):
-		     SUM over all PROD rows for (TRANSAC, NOPSEQ), NOT MAX over the TJSEQ list.
-		     The TJSEQ-list + PROD filter form returned 0 once those rows had been flipped
-		     to COMP earlier in the same request, falsely tripping the threshold gate and
-		     setting TRSTATUTITEM=1 — making the order vanish from vEcransProduction. --->
-		<cfquery name="qTotalProd" datasource="#datasourcePrimary#">
-			SELECT ISNULL(SUM(TJQTEPROD), 0) AS LeTJQTEPROD
-			FROM TEMPSPROD
-			WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
-			AND cNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
-			AND MODEPROD_MPCODE = 'PROD'
-		</cfquery>
-		<cfset LeTJQTEPROD = Val(qTotalProd.LeTJQTEPROD)>
-
-		<!--- No auto-STOP to COMP for VCUT (I5) — only check completion --->
-
-		<cfif LaQteTotale GT 0 AND (LaQteTotale - LeTJQTEPROD) LE 0>
-			<!--- ============================================================ --->
-			<!--- VCUT-COMPLETE block (QuestionnaireSortie.cfc:1186-1290) --->
-			<!--- ============================================================ --->
-
-			<!--- Resolve the COMP MODEPROD FK once — used by Steps 9c (TEMPSPROD bulk
-			     update) and 9d (INVENTAIRE_C=10525 hardcode scoping). --->
-			<cfquery name="qCompMp" datasource="#datasourcePrimary#">
-				SELECT TOP 1 MPSEQ, MPDESC_P, MPDESC_S FROM MODEPROD WHERE MPCODE = 'COMP'
-			</cfquery>
-			<cfset compMpseq = Val(qCompMp.MPSEQ)>
-			<cfset compDescP = "">
-			<cfset compDescS = "">
-			<cfif qCompMp.RecordCount GT 0>
-				<cfset compDescP = qCompMp.MPDESC_P>
-				<cfset compDescS = qCompMp.MPDESC_S>
+	<cfif totalQte GT 0 OR isVcut>
+		<cftry>
+			<!--- Collect SMNOTRANS values to report --->
+			<cfset smnoList = "">
+			<cfif isVcut>
+				<!--- VCUT: every distinct SM linked to PROD rows of this TRANSAC --->
+				<cfquery name="qVcutSms" datasource="#datasourcePrimary#">
+					SELECT DISTINCT LTRIM(RTRIM(SMNOTRANS)) AS SMNOTRANS
+					FROM TEMPSPROD
+					WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+					AND MODEPROD_MPCODE = 'PROD'
+					AND ISNULL(NULLIF(LTRIM(RTRIM(SMNOTRANS)),''),'') <> ''
+				</cfquery>
+				<cfloop query="qVcutSms">
+					<cfset smnoList = ListAppend(smnoList, Left(Trim(qVcutSms.SMNOTRANS), 9))>
+				</cfloop>
+			<cfelse>
+				<!--- Non-VCUT: PROD row's SM + payload smnotrans --->
+				<cfquery name="qProdSm" datasource="#datasourcePrimary#">
+					SELECT SMNOTRANS FROM TEMPSPROD
+					WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
+					AND ISNULL(NULLIF(LTRIM(RTRIM(SMNOTRANS)),''),'') <> ''
+				</cfquery>
+				<cfif qProdSm.RecordCount GT 0>
+					<cfset smnoList = ListAppend(smnoList, Left(Trim(qProdSm.SMNOTRANS), 9))>
+				</cfif>
+				<cfif Len(smnotrans) GT 0>
+					<cfset smnoList = ListAppend(smnoList, Left(smnotrans, 9))>
+				</cfif>
 			</cfif>
+			<cfset smnoList = ListRemoveDuplicates(smnoList)>
 
-			<!--- Step 9a: Per-EPF — update cNOMENCOP with quantities (I9 step 1) --->
-			<cfif Len(listeEpfSeq) GT 0>
+			<cfloop list="#smnoList#" index="ceSmno">
+				<cfquery name="qSmSeqReport" datasource="#datasourcePrimary#">
+					SELECT SMSEQ FROM SORTIEMATERIEL
+					WHERE SMNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#ceSmno#">
+				</cfquery>
+				<cfif qSmSeqReport.RecordCount GT 0>
+					<cfquery name="qClarionSm" datasource="#datasourcePrimary#">
+						SELECT DATEDIFF(DAY, '1800-12-28', GETDATE()) AS LaDateClarion,
+							DATEDIFF(SECOND, CAST(CAST(GETDATE() AS DATE) AS DATETIME), GETDATE()) * 100 AS LaHeureClarion
+					</cfquery>
+					<cfset smReportParams = "#Val(qSmSeqReport.SMSEQ)#;#qClarionSm.LaDateClarion#;#qClarionSm.LaHeureClarion#;'#userName#';'';'';'';'''';'''';'';'';'';''">
+					<cfset smReportResult = autofabExecuteTransaction(datasourcePrimary, "SM", "REPORT", smReportParams)>
+				</cfif>
+			</cfloop>
+			<cfcatch type="any"></cfcatch>
+		</cftry>
+	</cfif>
+
+	<!--- ============================================================ --->
+	<!--- EPF posting (old :829-933 + ReportEntreeProduitFini :2115-2143) --->
+	<!--- DET_TRANS cost UPDATE with dbo.FctNbaRound precedes each REPORT --->
+	<!--- ============================================================ --->
+	<cftry>
+		<cfif isVcut AND Len(listeEpfSeq) GT 0>
+			<!--- VCUT: iterate ListeEPFSEQ with index-matched ListeTJSEQ (old :833-834) --->
+			<cfset tjArr = ListToArray(listeTjseq)>
+			<cfset epfArr = ListToArray(listeEpfSeq)>
+			<cfloop from="1" to="#ArrayLen(epfArr)#" index="iEpf">
+				<cfset leEpfSeq = Val(epfArr[iEpf])>
+				<cfset leTj = 0>
+				<cfif iEpf LTE ArrayLen(tjArr)><cfset leTj = Val(tjArr[iEpf])></cfif>
+				<cfif leTj EQ 0>
+					<cfquery name="qTjFallback" datasource="#datasourcePrimary#">
+						SELECT TOP 1 TJSEQ FROM TEMPSPROD
+						WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+						AND cNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+						AND MODEPROD_MPCODE = 'PROD'
+						AND TJNOTE LIKE 'Ecran de production pour Temps prod%'
+						ORDER BY TJSEQ DESC
+					</cfquery>
+					<cfif qTjFallback.RecordCount GT 0><cfset leTj = Val(qTjFallback.TJSEQ)></cfif>
+				</cfif>
+
+				<!--- Component NOPSEQ from TEMPSPROD (old :851-855) --->
+				<cfset compNopseq = nopseq>
+				<cfquery name="qTjComp" datasource="#datasourcePrimary#">
+					SELECT TJSEQ, CNOMENCOP FROM TEMPSPROD
+					WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#leTj#">
+				</cfquery>
+				<cfif qTjComp.RecordCount GT 0 AND Val(qTjComp.CNOMENCOP) GT 0>
+					<cfset compNopseq = Val(qTjComp.CNOMENCOP)>
+				</cfif>
+
+				<!--- EPF DET_TRANS info (old :856-862) --->
+				<cfquery name="qEpfInfo" datasource="#datasourcePrimary#">
+					SELECT dt.DTRSEQ, epf.PFNOTRANS, dt.DTRQTE, t.TRSEQ AS EPF_TRSEQ
+					FROM DET_TRANS dt
+					INNER JOIN TRANSAC t ON dt.TRANSAC = t.TRSEQ
+					INNER JOIN ENTRERPRODFINI epf ON t.TRNO = epf.PFNOTRANS
+					WHERE epf.PFSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#leEpfSeq#">
+				</cfquery>
+
+				<cfif qEpfInfo.RecordCount GT 0>
+					<!--- DET_TRANS cost update (old :865-876) --->
+					<cfquery name="qValUnit" datasource="#datasourcePrimary#">
+						SELECT NOPValeurEstime_Unitaire FROM CNOMENCOP
+						WHERE NOPSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#compNopseq#">
+					</cfquery>
+					<cfif Val(qValUnit.NOPValeurEstime_Unitaire) GT 0 AND Val(qEpfInfo.DTRSEQ) GT 0>
+						<cfquery datasource="#datasourcePrimary#">
+							UPDATE DET_TRANS SET
+								DTRCOUT_UNIT = dbo.FctNbaRound(<cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#Val(qValUnit.NOPValeurEstime_Unitaire)#">, 'PANB_DECIMAL_PRIX'),
+								DTRCOUT_TRANS = dbo.FctNbaRound(<cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#Val(qValUnit.NOPValeurEstime_Unitaire)#"> * DTRQTE, 'PANB_DECIMAL_PRIX')
+							WHERE DTRSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(qEpfInfo.DTRSEQ)#">
+						</cfquery>
+					</cfif>
+
+					<!--- EPF/REPORT (old :2129) — EPFSEQ;LaDateClarion;LaHeureClarion;'NOMEMPLOYE';... --->
+					<cfquery name="qClarionEpf" datasource="#datasourcePrimary#">
+						SELECT DATEDIFF(DAY, '1800-12-28', GETDATE()) AS LaDateClarion,
+							DATEDIFF(SECOND, CAST(CAST(GETDATE() AS DATE) AS DATETIME), GETDATE()) * 100 AS LaHeureClarion
+					</cfquery>
+					<cfset epfReportParams = "#leEpfSeq#;#qClarionEpf.LaDateClarion#;#qClarionEpf.LaHeureClarion#;'#userName#';'';'';'';'''';'''';'';'';'';''">
+					<cfset epfReportResult = autofabExecuteTransaction(datasourcePrimary, "EPF", "REPORT", epfReportParams)>
+				</cfif>
+				<!--- VCUT: do NOT set TJPROD_TERMINE (old :918 skips for VCUT) --->
+			</cfloop>
+		<cfelseif NOT isVcut>
+			<!--- Non-VCUT: every unposted EPF child of this TRANSAC --->
+			<cfquery name="qEpfList" datasource="#datasourcePrimary#">
+				SELECT EPF.PFSEQ, EPF.PFNOTRANS, DT.DTRSEQ, DT.DTRQTE, T.TRSEQ AS EPF_TRSEQ
+				FROM ENTRERPRODFINI EPF
+				INNER JOIN TRANSAC T ON T.TRNO = EPF.PFNOTRANS
+				INNER JOIN DET_TRANS DT ON DT.TRANSAC = T.TRSEQ
+				WHERE EPF.PFSEQ IN (
+					SELECT DISTINCT EPF2.PFSEQ FROM ENTRERPRODFINI EPF2
+					INNER JOIN TRANSAC T2 ON T2.TRNO = EPF2.PFNOTRANS
+					WHERE T2.TRANSAC_PERE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+				)
+				AND ISNULL(EPF.PFPOSTER, 0) = 0
+			</cfquery>
+			<cfloop query="qEpfList">
+				<cfquery name="qValUnit2" datasource="#datasourcePrimary#">
+					SELECT NOPValeurEstime_Unitaire FROM CNOMENCOP
+					WHERE NOPSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+				</cfquery>
+				<cfif Val(qValUnit2.NOPValeurEstime_Unitaire) GT 0 AND Val(qEpfList.DTRSEQ) GT 0>
+					<cfquery datasource="#datasourcePrimary#">
+						UPDATE DET_TRANS SET
+							DTRCOUT_UNIT = dbo.FctNbaRound(<cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#Val(qValUnit2.NOPValeurEstime_Unitaire)#">, 'PANB_DECIMAL_PRIX'),
+							DTRCOUT_TRANS = dbo.FctNbaRound(<cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#Val(qValUnit2.NOPValeurEstime_Unitaire)#"> * DTRQTE, 'PANB_DECIMAL_PRIX')
+						WHERE DTRSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(qEpfList.DTRSEQ)#">
+					</cfquery>
+				</cfif>
+				<cfquery name="qClarionEpf2" datasource="#datasourcePrimary#">
+					SELECT DATEDIFF(DAY, '1800-12-28', GETDATE()) AS LaDateClarion,
+						DATEDIFF(SECOND, CAST(CAST(GETDATE() AS DATE) AS DATETIME), GETDATE()) * 100 AS LaHeureClarion
+				</cfquery>
+				<cfset epfReportParams2 = "#Val(qEpfList.PFSEQ)#;#qClarionEpf2.LaDateClarion#;#qClarionEpf2.LaHeureClarion#;'#userName#';'';'';'';'''';'''';'';'';'';''">
+				<cfset epfReportResult2 = autofabExecuteTransaction(datasourcePrimary, "EPF", "REPORT", epfReportParams2)>
+			</cfloop>
+		</cfif>
+		<cfcatch type="any"></cfcatch>
+	</cftry>
+
+	<!--- ============================================================ --->
+	<!--- InsertTacheCariste — warehouse transfers for forklift (old :1932-2113) --->
+	<!--- Only when the next operation uses a different warehouse --->
+	<!--- ============================================================ --->
+	<cftry>
+		<cfquery name="qNextOp" datasource="#datasourceExt#">
+			SELECT TOP 1 ENTREPOT, INVENTAIRE_SEQ, MACHINE, COPMACHINE, NOPSEQ
+			FROM vEcransProduction
+			WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+			AND NOPSEQ <> <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+			ORDER BY DATE_DEBUT_PREVU
+		</cfquery>
+		<cfif qNextOp.RecordCount GT 0>
+			<cfquery name="qCurOp" datasource="#datasourceExt#">
+				SELECT TOP 1 ENTREPOT, MACHINE, DECODE
+				FROM vEcransProduction
+				WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+				AND NOPSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+			</cfquery>
+			<cfif qCurOp.RecordCount GT 0 AND Val(qNextOp.ENTREPOT) NEQ Val(qCurOp.ENTREPOT)>
+				<cfset srcWarehouse = Val(qCurOp.ENTREPOT)>
+				<cfif srcWarehouse EQ 0><cfset srcWarehouse = 1></cfif>
+				<cfset dstWarehouse = Val(qNextOp.ENTREPOT)>
+				<cfif dstWarehouse EQ 0><cfset dstWarehouse = 1></cfif>
+
+				<cfquery name="qFork" datasource="#datasourcePrimary#">
+					SELECT DESEQ FROM DEPARTEMENT WHERE DECODE = 'ForkLift'
+				</cfquery>
+				<cfquery name="qForkWha" datasource="#datasourcePrimary#">
+					SELECT DESEQ FROM DEPARTEMENT WHERE DECODE = 'ForkLift WHA'
+				</cfquery>
+				<cfset forkDeptDefault = Val(qFork.DESEQ)>
+				<cfset forkDept = forkDeptDefault>
+				<cfif qCurOp.DECODE EQ "WHA" AND qForkWha.RecordCount GT 0>
+					<cfset forkDept = Val(qForkWha.DESEQ)>
+				</cfif>
+
+				<cfquery name="qContainers" datasource="#datasourcePrimary#">
+					SELECT DISTINCT DT.CONTENANT, DT.CONTENANT_CON_NUMERO, DT.NO_SERIE,
+						T.INVENTAIRE, N.INVENTAIRE_INNOINV AS ITEM
+					FROM DET_TRANS DT
+					LEFT JOIN NO_SERIE N ON DT.NO_SERIE = N.NSSEQ
+					INNER JOIN TRANSAC T ON DT.TRANSAC = T.TRSEQ
+					WHERE T.TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+				</cfquery>
+
+				<cfquery name="qStm" datasource="#datasourcePrimary#">
+					SELECT STM_SEQ FROM STATUT_MATERIEL WHERE STM_DEFAUT_PROD = 1
+				</cfquery>
+				<cfset stmSeq = Val(qStm.STM_SEQ)>
+
+				<cfloop query="qContainers">
+					<cfset ceForkDept = forkDept>
+					<cfif Len(qContainers.ITEM) AND (FindNoCase("HPL", qContainers.ITEM) GT 0 OR FindNoCase("RECON", qContainers.ITEM) GT 0)>
+						<cfset ceForkDept = forkDeptDefault>
+					</cfif>
+					<cfif Val(qContainers.CONTENANT) GT 0>
+						<cfstoredproc procedure="Nba_Insert_Transfer_Entrepot_Contenant" datasource="#datasourcePrimary#">
+							<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qContainers.CONTENANT)#">
+							<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qContainers.CONTENANT)#">
+							<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#srcWarehouse#">
+							<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#dstWarehouse#">
+							<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#stmSeq#">
+							<cfprocparam type="in" cfsqltype="CF_SQL_VARCHAR" value="#userName#">
+							<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="0">
+							<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="0">
+							<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="trSqlErreur">
+							<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="trErreur">
+							<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="trTreseq">
+						</cfstoredproc>
+						<cfif Val(trTreseq) GT 0>
+							<cfquery datasource="#datasourcePrimary#">
+								UPDATE TRANSFENTREP
+								SET TREPOSTER = 0,
+									COPMACHINE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#copmachine#">,
+									CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">,
+									DEPARTEMENT = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#ceForkDept#">,
+									TRENOTE = 'Ecran de production'
+								WHERE TRESEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(trTreseq)#">
+							</cfquery>
+						</cfif>
+					<cfelseif Val(qContainers.INVENTAIRE) GT 0 AND Val(qContainers.NO_SERIE) GT 0>
+						<cfstoredproc procedure="Nba_Insert_Transfer_Entrepot_Sans_Contenant" datasource="#datasourcePrimary#">
+							<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qContainers.INVENTAIRE)#">
+							<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qContainers.NO_SERIE)#">
+							<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="1">
+							<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#srcWarehouse#">
+							<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#dstWarehouse#">
+							<cfprocparam type="in" cfsqltype="CF_SQL_VARCHAR" value="#userName#">
+							<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="0">
+							<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="trSqlErreur2">
+							<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="trErreur2">
+							<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="trTreseq2">
+						</cfstoredproc>
+						<cfif Val(trTreseq2) GT 0>
+							<cfquery datasource="#datasourcePrimary#">
+								UPDATE TRANSFENTREP
+								SET COPMACHINE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#copmachine#">,
+									CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">,
+									DEPARTEMENT = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#ceForkDept#">
+								WHERE TRESEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(trTreseq2)#">
+							</cfquery>
+						</cfif>
+					</cfif>
+				</cfloop>
+			</cfif>
+		</cfif>
+		<cfcatch type="any"></cfcatch>
+	</cftry>
+
+	<!--- NOTE: NO Nba_Sp_Update_Production / Nba_Sp_Insert_Production here — the
+	      status mutation already happened at questionnaire open (changeStatus.cfm).
+	      Old ModifieTEMPSPROD never closes/creates TEMPSPROD rows. --->
+
+	<!--- ============================================================ --->
+	<!--- Cost recalc on PROD row + STOP/COMP row (old ChangeTEMPSPROD --->
+	<!--- :1694-1713 and :1719-1729) --->
+	<!--- ============================================================ --->
+	<cftry>
+		<cfquery datasource="#datasourcePrimary#">
+			UPDATE TEMPSPROD SET
+				TJSYSTEMPSHOMME = ISNULL(C.CALCSYSTEMPSHOMME, 0),
+				TJTEMPSHOMME = ISNULL(C.CALCTEMPSHOMME, 0),
+				TJEMCOUT = ISNULL(C.CALCEMCOUT, 0),
+				TJOPCOUT = ISNULL(C.CALCOPCOUT, 0),
+				TJMACOUT = ISNULL(C.CALCMACOUT, 0)
+			FROM TEMPSPROD
+			INNER JOIN dbo.FctCalculTempsDeProduction(<cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">) C ON C.TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
+			WHERE TEMPSPROD.TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
+		</cfquery>
+		<cfcatch type="any"></cfcatch>
+	</cftry>
+	<cfif stopTjseq GT 0>
+		<cftry>
+			<cfquery datasource="#datasourcePrimary#">
+				UPDATE TEMPSPROD SET
+					TJSYSTEMPSHOMME = ISNULL(C.CALCSYSTEMPSHOMME, 0),
+					TJTEMPSHOMME = ISNULL(C.CALCTEMPSHOMME, 0),
+					TJEMCOUT = ISNULL(C.CALCEMCOUT, 0),
+					TJOPCOUT = ISNULL(C.CALCOPCOUT, 0),
+					TJMACOUT = ISNULL(C.CALCMACOUT, 0)
+				FROM TEMPSPROD
+				INNER JOIN dbo.FctCalculTempsDeProduction(<cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#stopTjseq#">) C ON C.TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#stopTjseq#">
+				WHERE TEMPSPROD.TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#stopTjseq#">
+			</cfquery>
+			<cfcatch type="any"></cfcatch>
+		</cftry>
+	</cfif>
+
+	<!--- TJVALEUR_MATIERE (InsertEnCours mirror) --->
+	<cftry>
+		<cfquery datasource="#datasourcePrimary#">
+			UPDATE TEMPSPROD SET
+				TJVALEUR_MATIERE = ISNULL((SELECT SUM(0 - TRCOUTTRANS) FROM TRANSAC WHERE TRSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">), 0)
+			WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
+		</cfquery>
+		<cfcatch type="any"></cfcatch>
+	</cftry>
+
+	<!--- ============================================================ --->
+	<!--- Nba_Update_ProduitEnCours (old :982-1085) --->
+	<!--- ============================================================ --->
+	<cftry>
+		<cfquery name="qCosts" datasource="#datasourcePrimary#">
+			SELECT ISNULL(TP.TJEMCOUT, 0) + ISNULL(TP.TJOPCOUT, 0) + ISNULL(TP.TJMACOUT, 0) AS CoutOperation,
+				ISNULL((SELECT SUM(0 - TRCOUTTRANS) FROM TRANSAC WHERE TRSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">), 0) AS CoutMatiere
+			FROM TEMPSPROD TP
+			WHERE TP.TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
+		</cfquery>
+		<cfstoredproc procedure="Nba_Update_ProduitEnCours" datasource="#datasourcePrimary#">
+			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#transac#">
+			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+			<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="#goodQty#">
+			<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="#qteDefect#">
+			<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="#Val(qCosts.CoutMatiere)#">
+			<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="#Val(qCosts.CoutOperation)#">
+			<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="pecSqlErreur">
+			<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="pecErreur">
+		</cfstoredproc>
+		<cfcatch type="any"></cfcatch>
+	</cftry>
+
+	<!--- ============================================================ --->
+	<!--- cNOMENCOP quantity totals + completion logic --->
+	<!--- ============================================================ --->
+	<cfif isVcut AND Len(listeEpfSeq) GT 0 AND Len(listeTjseq) GT 0 AND isComp>
+		<!--- VCUT completion check (QuestionnaireSortie.cfc:1124-1290) --->
+		<cftry>
+			<cfquery name="qQteForce" datasource="#datasourceExt#">
+				SELECT TOP 1 QTE_FORCEE FROM vEcransProduction
+				WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+				AND OPERATION <> 'FINSH'
+				AND (NO_INVENTAIRE = 'VCUT' OR PRODUIT_CODE = 'VCUT')
+			</cfquery>
+			<cfset LaQteTotale = Val(qQteForce.QTE_FORCEE)>
+
+			<!--- SUM over all PROD rows for (TRANSAC, NOPSEQ) — old :1088-1096 --->
+			<cfquery name="qTotalProd" datasource="#datasourcePrimary#">
+				SELECT ISNULL(SUM(TJQTEPROD), 0) AS LeTJQTEPROD
+				FROM TEMPSPROD
+				WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+				AND cNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+				AND MODEPROD_MPCODE = 'PROD'
+			</cfquery>
+			<cfset LeTJQTEPROD = Val(qTotalProd.LeTJQTEPROD)>
+
+			<cfif LaQteTotale GT 0 AND (LaQteTotale - LeTJQTEPROD) LE 0>
+				<!--- VCUT-COMPLETE block (old :1186-1290) --->
+				<cfquery name="qCompMp" datasource="#datasourcePrimary#">
+					SELECT TOP 1 MPSEQ, MPDESC_P, MPDESC_S FROM MODEPROD WHERE MPCODE = 'COMP'
+				</cfquery>
+				<cfset compMpseq = Val(qCompMp.MPSEQ)>
+				<cfset compDescP = "">
+				<cfset compDescS = "">
+				<cfif qCompMp.RecordCount GT 0>
+					<cfset compDescP = qCompMp.MPDESC_P>
+					<cfset compDescS = qCompMp.MPDESC_S>
+				</cfif>
+
+				<!--- Step 9a: Per-EPF — update cNOMENCOP with quantities --->
 				<cfloop list="#listeEpfSeq#" index="pfseq2">
 					<cfquery name="qPfno2" datasource="#datasourcePrimary#">
 						SELECT PFNOTRANS FROM ENTRERPRODFINI
 						WHERE PFSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(pfseq2)#">
 					</cfquery>
-
-					<cfif qPfno2.RecordCount GT 0>
-						<!--- Find TEMPSPROD linked to this EPF to get INVENTAIRE_C --->
+					<cfif qPfno2.RecordCount GT 0 AND Len(Trim(qPfno2.PFNOTRANS)) GT 0>
 						<cfquery name="qTpForEpf" datasource="#datasourcePrimary#">
 							SELECT INVENTAIRE_C, SUM(TJQTEPROD) AS totalGood, SUM(TJQTEDEFECT) AS totalDefect
 							FROM TEMPSPROD
-							WHERE ENTRERPRODFINI_PFNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" value="#Left(Trim(qPfno2.PFNOTRANS), 9)#">
+							WHERE ENTRERPRODFINI_PFNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(Trim(qPfno2.PFNOTRANS), 9)#">
 							GROUP BY INVENTAIRE_C
 						</cfquery>
-
 						<cfif qTpForEpf.RecordCount GT 0>
-							<!--- Update cNOMENCOP --->
 							<cfquery datasource="#datasourcePrimary#">
 								UPDATE cNOMENCOP
 								SET NOPQTETERMINE = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#Val(qTpForEpf.totalGood)#">,
@@ -276,12 +761,7 @@
 								WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
 								AND INVENTAIRE_P = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(qTpForEpf.INVENTAIRE_C)#">
 							</cfquery>
-
-							<!--- Step 9b: Update PL_RESULTAT PR_TERMINE for the current NOPSEQ only.
-							     Old SW (QuestionnaireSortie.cfc:1245-1248) writes a single-NOPSEQ
-							     filter, not a subquery across all cNOMENCOPs sharing INVENTAIRE_P
-							     — that broader form would mark sibling/downstream operations as
-							     terminated prematurely. --->
+							<!--- Step 9b: PL_RESULTAT PR_TERMINE for the current NOPSEQ only --->
 							<cfquery datasource="#datasourcePrimary#">
 								UPDATE PL_RESULTAT SET PR_TERMINE = 1
 								WHERE cNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
@@ -289,171 +769,103 @@
 						</cfif>
 					</cfif>
 				</cfloop>
-			</cfif>
 
-			<!--- Step 9c: All ListeTJSEQ — set COMP + denormalized cols + TJPROD_TERMINE.
-			     Old SW (QuestionnaireSortie.cfc:1250-1264) updates MODEPROD (FK), MODEPROD_MPCODE,
-			     MODEPROD_MPDESC_P/S, TJFINDATE, TJPROD_TERMINE. The new SW was missing the FK and
-			     description columns. --->
-			<cfquery datasource="#datasourcePrimary#">
-				UPDATE TEMPSPROD
-				SET MODEPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#compMpseq#">,
-					MODEPROD_MPCODE = 'COMP',
-					MODEPROD_MPDESC_P = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="60" value="#compDescP#">,
-					MODEPROD_MPDESC_S = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="60" value="#compDescS#">,
-					TJFINDATE = GETDATE(),
-					TJPROD_TERMINE = 1
-				WHERE TJSEQ IN (<cfqueryparam cfsqltype="CF_SQL_INTEGER" list="true" value="#listeTjseq#">)
-			</cfquery>
+				<!--- Step 9c: All ListeTJSEQ — set COMP + denormalized cols + TJPROD_TERMINE --->
+				<cfquery datasource="#datasourcePrimary#">
+					UPDATE TEMPSPROD
+					SET MODEPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#compMpseq#">,
+						MODEPROD_MPCODE = 'COMP',
+						MODEPROD_MPDESC_P = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="60" value="#compDescP#">,
+						MODEPROD_MPDESC_S = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="60" value="#compDescS#">,
+						TJFINDATE = GETDATE(),
+						TJPROD_TERMINE = 1
+					WHERE TJSEQ IN (<cfqueryparam cfsqltype="CF_SQL_INTEGER" list="true" value="#listeTjseq#">)
+				</cfquery>
 
-			<!--- Step 9d: Hardcode — INVENTAIRE_C = 10525 (legacy VCUT parent material).
-			     Old SW (QuestionnaireSortie.cfc:1267-1274) constrains this to the current
-			     (TRANSAC, NOPSEQ) and the COMP MODEPROD only — the new SW was missing those
-			     two filters, so it touched rows belonging to sibling operations as well. --->
-			<cfquery datasource="#datasourcePrimary#">
-				UPDATE TEMPSPROD SET TJQTEPROD = 1
-				WHERE INVENTAIRE_C = 10525
-				AND TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
-				AND cNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
-				AND MODEPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#compMpseq#">
-			</cfquery>
+				<!--- Step 9d: INVENTAIRE_C = 10525 hardcode (old :1267-1274) --->
+				<cfquery datasource="#datasourcePrimary#">
+					UPDATE TEMPSPROD SET TJQTEPROD = 1
+					WHERE INVENTAIRE_C = 10525
+					AND TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+					AND cNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+					AND MODEPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#compMpseq#">
+				</cfquery>
 
-			<!--- Step 9e: Close transaction (I9 step 5) --->
-			<cfquery datasource="#datasourcePrimary#">
-				UPDATE TRANSAC SET TRSTATUTITEM = 1
-				WHERE TRSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
-			</cfquery>
-
-		<cfelse>
-			<!--- VCUT-INCOMPLETE: reset cNOMENCOP quantities to 0 (QuestionnaireSortie.cfc:1282) --->
-			<cfif Len(listeEpfSeq) GT 0>
+				<!--- Step 9e: Close transaction --->
+				<cfquery datasource="#datasourcePrimary#">
+					UPDATE TRANSAC SET TRSTATUTITEM = 1
+					WHERE TRSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+				</cfquery>
+			<cfelse>
+				<!--- VCUT-INCOMPLETE: reset cNOMENCOP quantities to 0 (old :1282) --->
 				<cfloop list="#listeEpfSeq#" index="pfseq3">
 					<cfquery name="qPfno3" datasource="#datasourcePrimary#">
 						SELECT PFNOTRANS FROM ENTRERPRODFINI
 						WHERE PFSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(pfseq3)#">
 					</cfquery>
-					<cfif qPfno3.RecordCount GT 0>
+					<cfif qPfno3.RecordCount GT 0 AND Len(Trim(qPfno3.PFNOTRANS)) GT 0>
 						<cfquery name="qTpForEpf3" datasource="#datasourcePrimary#">
 							SELECT DISTINCT INVENTAIRE_C FROM TEMPSPROD
-							WHERE ENTRERPRODFINI_PFNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" value="#Left(Trim(qPfno3.PFNOTRANS), 9)#">
+							WHERE ENTRERPRODFINI_PFNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(Trim(qPfno3.PFNOTRANS), 9)#">
 						</cfquery>
-						<cfif qTpForEpf3.RecordCount GT 0>
+						<cfloop query="qTpForEpf3">
 							<cfquery datasource="#datasourcePrimary#">
 								UPDATE cNOMENCOP
 								SET NOPQTETERMINE = 0, NOPQTESCRAP = 0, NOPQTERESTE = 0
 								WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
 								AND INVENTAIRE_P = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(qTpForEpf3.INVENTAIRE_C)#">
 							</cfquery>
-						</cfif>
+						</cfloop>
 					</cfif>
 				</cfloop>
 			</cfif>
-		</cfif>
-	</cfif>
+			<cfcatch type="any"></cfcatch>
+		</cftry>
+	<cfelse>
+		<!--- Non-VCUT: aggregate cNOMENCOP totals --->
+		<cftry>
+			<cfquery datasource="#datasourcePrimary#">
+				UPDATE CNOMENCOP SET
+					NOPQTETERMINE = (SELECT ISNULL(SUM(TJQTEPROD), 0) FROM TEMPSPROD WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#"> AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#"> AND MODEPROD_MPCODE = 'Prod'),
+					NOPQTESCRAP = (SELECT ISNULL(SUM(TJQTEDEFECT), 0) FROM TEMPSPROD WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#"> AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#"> AND MODEPROD_MPCODE = 'Prod'),
+					NOPQTERESTE = NOPQTEAFAIRE - (SELECT ISNULL(SUM(TJQTEPROD), 0) + ISNULL(SUM(TJQTEDEFECT), 0) FROM TEMPSPROD WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#"> AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#"> AND MODEPROD_MPCODE = 'Prod')
+				WHERE NOPSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+			</cfquery>
+			<cfcatch type="any"></cfcatch>
+		</cftry>
 
-	<!--- ============================================================ --->
-	<!--- Step 10-14: Status change (reuses changeStatus.cfm pattern) --->
-	<!--- ============================================================ --->
-	<cfif mainTjseq GT 0>
-		<!--- Get MODEPROD for target status --->
-		<cfquery name="qModeProd" datasource="#datasourcePrimary#">
-			SELECT MPSEQ FROM MODEPROD WHERE MPCODE = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" value="#mpcode#">
-		</cfquery>
-
-		<!--- Step 10: Close PROD via Nba_Sp_Update_Production --->
-		<cfset prevDateStr = DateFormat(qPrevRow.TJDEBUTDATE, 'yyyy-mm-dd')>
-		<cfset prevTimeStr = TimeFormat(qPrevRow.TJDEBUTDATE, 'HH:nn:ss')>
-
-		<cfstoredproc procedure="Nba_Sp_Update_Production" datasource="#datasourcePrimary#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qPrevRow.EMPLOYE)#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qOperation.OPERATION_SEQ)#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qOperation.MACHINE)#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#transac#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_VARCHAR" value="">
-			<cfprocparam type="in" cfsqltype="CF_SQL_VARCHAR" value="">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qPrevRow.cNOMENCLATURE)#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qOperation.INVENTAIRE_SEQ)#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_BIT" value="1">
-			<cfprocparam type="in" cfsqltype="CF_SQL_BIT" value="0">
-			<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="#Val(qPrevRow.TJQTEPROD)#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="#Val(qPrevRow.TJQTEDEFECT)#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_CHAR" value="#prevDateStr#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_CHAR" value="#prevTimeStr#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_CHAR" value="#dateStr#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_CHAR" value="#timeStr#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_VARCHAR" value="#Left(Trim(qPrevRow.MODEPROD_MPCODE), 5)#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_VARCHAR" value="Ecran de production pour Temps prod New">
-			<cfprocparam type="in" cfsqltype="CF_SQL_CHAR" value="#Left(qPrevRow.SMNOTRANS, 9)#">
-			<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="updateErreur">
-		</cfstoredproc>
-
-		<!--- Step 11: Create new STOP/COMP row via Nba_Sp_Insert_Production --->
-		<cfif mpcode EQ "COMP">
-			<cfset insertDateF = dateStr>
-			<cfset insertTimeF = timeStr>
-		<cfelse>
-			<cfset insertDateF = "">
-			<cfset insertTimeF = "">
+		<!--- Mark operation as complete in PL_RESULTAT if COMP --->
+		<cfif isComp>
+			<cfquery datasource="#datasourcePrimary#">
+				UPDATE PL_RESULTAT SET PR_TERMINE = 1
+				WHERE cNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+			</cfquery>
 		</cfif>
 
-		<cfstoredproc procedure="Nba_Sp_Insert_Production" datasource="#datasourcePrimary#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#employeeSeq#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="0">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qOperation.OPERATION_SEQ)#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="0">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qOperation.MACHINE)#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="0">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#transac#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="0">
-			<cfprocparam type="in" cfsqltype="CF_SQL_VARCHAR" value="">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qOperation.CNOMENCLATURE)#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qOperation.INVENTAIRE_SEQ)#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="0">
-			<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="0">
-			<cfprocparam type="in" cfsqltype="CF_SQL_BIT" value="1">
-			<cfprocparam type="in" cfsqltype="CF_SQL_BIT" value="0">
-			<cfprocparam type="in" cfsqltype="CF_SQL_CHAR" value="#dateStr#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_CHAR" value="#timeStr#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_CHAR" value="#insertDateF#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_CHAR" value="#insertTimeF#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qModeProd.MPSEQ)#">
-			<cfprocparam type="in" cfsqltype="CF_SQL_VARCHAR" value="Ecran de production pour Temps prod New">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="0">
-			<cfprocparam type="in" cfsqltype="CF_SQL_CHAR" value="">
-			<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#copmachine#">
-			<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="LeTJSEQ">
-			<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="insertErreur">
-		</cfstoredproc>
-
-		<!--- Step 12: Update CNOMENCOP and INVENTAIRE_C on new row --->
-		<cfif Val(LeTJSEQ) GT 0>
-			<cfquery datasource="#datasourcePrimary#">
-				UPDATE TEMPSPROD
-				SET CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">,
-					INVENTAIRE_C = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(qOperation.INVENTAIRE_SEQ)#">
-				WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(LeTJSEQ)#">
+		<!--- Auto-complete if STOP but total qty meets target (old :1130) --->
+		<cfif isStop>
+			<cfquery name="qTotalAll" datasource="#datasourcePrimary#">
+				SELECT ISNULL(SUM(TJQTEPROD), 0) AS TotalPROD
+				FROM TEMPSPROD
+				WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+				AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+				AND MODEPROD_MPCODE IN ('Prod','STOP','COMP')
 			</cfquery>
-
-			<!--- Step 13: Update PL_RESULTAT --->
-			<cfquery datasource="#datasourcePrimary#">
-				UPDATE PL_RESULTAT
-				SET PR_DEBUTE = 1,
-					MODEPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(qModeProd.MPSEQ)#">
-				WHERE CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+			<cfquery name="qTarget" datasource="#datasourceExt#">
+				SELECT TOP 1 v.QTE_A_FAB FROM vEcransProduction v
+				WHERE v.TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+				AND v.NOPSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
 			</cfquery>
-
-			<!--- Step 14: Zero cost fields --->
-			<cfquery datasource="#datasourcePrimary#">
-				UPDATE TEMPSPROD SET
-					TJEMTAUXHOR = 0, TJOPTAUXHOR = 0, TJMATAUXHOR = 0,
-					TJSYSTEMPSHOMME = 0, TJTEMPSHOMME = 0,
-					TJEMCOUT = 0, TJOPCOUT = 0, TJMACOUT = 0
-				WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(LeTJSEQ)#">
-			</cfquery>
-
-			<!--- Step 15: SKIP cost recalculation for VCUT (I4) --->
-			<!--- Non-VCUT cost recalc handled by changeStatus.cfm --->
+			<cfif Val(qTarget.QTE_A_FAB) GT 0 AND Val(qTotalAll.TotalPROD) GTE Val(qTarget.QTE_A_FAB)>
+				<cfquery datasource="#datasourcePrimary#">
+					UPDATE TEMPSPROD SET TJPROD_TERMINE = 1
+					WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
+				</cfquery>
+				<cfquery datasource="#datasourcePrimary#">
+					UPDATE PL_RESULTAT SET PR_TERMINE = 1
+					WHERE cNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+				</cfquery>
+			</cfif>
 		</cfif>
 	</cfif>
 
@@ -461,7 +873,8 @@
 	<cfset data = StructNew("ordered")>
 	<cfset data["transac"] = transac>
 	<cfset data["type"] = qtype>
-	<cfset data["tjseq"] = Val(LeTJSEQ)>
+	<cfset data["tjseq"] = mainTjseq>
+	<cfset data["nopseq"] = nopseq>
 
 	<cfset response["success"] = true>
 	<cfset response["data"] = data>

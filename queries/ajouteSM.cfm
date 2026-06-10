@@ -54,6 +54,11 @@
 	<cfif StructKeyExists(requestBody, "listeSmseq")>
 		<cfset listeSmseq = Trim(requestBody["listeSmseq"])>
 	</cfif>
+	<!--- Old software passes session.InfoClient.NOMEMPLOYE (left 50) to all SPs --->
+	<cfset employeeName = "">
+	<cfif StructKeyExists(requestBody, "employeeName")>
+		<cfset employeeName = Trim(requestBody["employeeName"])>
+	</cfif>
 
 	<cfif transac EQ 0>
 		<cfset response["success"] = false>
@@ -88,26 +93,37 @@
 		AND v.NOPSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
 	</cfquery>
 
-	<!--- Get TRANSAC info for TRITEM, CONOTRANS, TRNORELACHE --->
+	<!--- Get TRANSAC info — TRITEM/CONOTRANS/TRNORELACHE via COMMANDE join.
+	      EXACT replica of old trouveLesInfosTransac (operation.cfc:4466-4473):
+	      COMMANDE INNER JOIN TRANSAC ON CONOTRANS = TRNO AND TRITEM > 0 --->
 	<cfquery name="qTransacInfo" datasource="#datasourcePrimary#">
-		SELECT TRSEQ, TRNO, TRITEM, INVENTAIRE, ENTREPOT, TRNOORIGINE, TRNORELACHE
-		FROM TRANSAC
-		WHERE TRSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+		SELECT T.TRITEM, T.TRNORELACHE, C.CONOTRANS
+		FROM TRANSAC T
+		INNER JOIN COMMANDE C ON C.CONOTRANS = T.TRNO AND T.TRITEM > 0
+		WHERE T.TRSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
 	</cfquery>
 	<cfset TRITEM = Val(qTransacInfo.TRITEM)>
 	<cfset TRNORELACHE = Val(qTransacInfo.TRNORELACHE)>
+	<cfset CONOTRANS = qTransacInfo.CONOTRANS>
 
-	<!--- CONOTRANS: from TRNOORIGINE matching TRITEM --->
-	<cfset CONOTRANS = qTransacInfo.TRNOORIGINE>
-	<cfquery name="qTransacOrigine" datasource="#datasourcePrimary#">
-		SELECT TRNO, TRITEM, TRNORELACHE
-		FROM TRANSAC
-		WHERE TRNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(qTransacInfo.TRNOORIGINE, 9)#">
-		AND TRITEM = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#TRITEM#">
-	</cfquery>
-	<cfif qTransacOrigine.RecordCount GT 0>
-		<cfset CONOTRANS = qTransacOrigine.TRNO>
-		<cfset TRNORELACHE = Val(qTransacOrigine.TRNORELACHE)>
+	<!--- Gate — old QteBonne.cfc:107-158: the endpoint is never invoked when the
+	      operation doesn't use inventory (and old SortieMateriel skips when the
+	      COMMANDE join finds no row). VCUT always creates SM. --->
+	<cfset utiliseSM = 0>
+	<cfif qOpTransac.RecordCount GT 0>
+		<cfset utiliseSM = Val(qOpTransac.UtiliseInventaire)>
+	</cfif>
+	<cfif qTransacInfo.RecordCount EQ 0 OR (utiliseSM NEQ 1 AND NOT isVcut)>
+		<cfset data = StructNew("ordered")>
+		<cfset data["smnotrans"] = "">
+		<cfset data["smseq"] = 0>
+		<cfset data["materials"] = []>
+		<cfset data["containerOptions"] = []>
+		<cfset data["materialWarning"] = "">
+		<cfset response["success"] = true>
+		<cfset response["data"] = data>
+		<cfset response["message"] = "No SM needed for this operation">
+		<cfoutput>#SerializeJSON(response)#</cfoutput><cfabort>
 	</cfif>
 
 	<!--- VCUT overrides (support.cfc:922-925) --->
@@ -121,8 +137,11 @@
 		<cfset nistrNiveau = "00101">
 	</cfif>
 
-	<!--- Get employee name --->
-	<cfset empName = "WebUI">
+	<!--- Employee name for SP user params (old session.InfoClient.NOMEMPLOYE, left 50) --->
+	<cfset empName = "WebUI New">
+	<cfif Len(employeeName) GT 0>
+		<cfset empName = Left(employeeName, 50)>
+	</cfif>
 
 	<cfset SmNoTransCible = "">
 	<cfset smseqResult = 0>
@@ -344,7 +363,7 @@
 						<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="#alloc.qty#">
 						<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="1">
 						<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#alloc.conSeq#">
-						<cfprocparam type="in" cfsqltype="CF_SQL_VARCHAR" value="WebUI New">
+						<cfprocparam type="in" cfsqltype="CF_SQL_VARCHAR" value="#Left(empName, 50)#">
 						<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="spSqlErreur">
 						<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="spError">
 						<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="spDtrseq">
@@ -355,11 +374,12 @@
 
 	<cfelse>
 		<!--- ============================================================ --->
-		<!--- NON-VCUT SM PATH (standard) --->
+		<!--- NON-VCUT SM PATH — EXACT replica of SortieMateriel.cfc AjouteSM --->
+		<!--- (:1838-1973) + InsertSortieMateriel (:2259-2405) + calculeQteSMQS --->
+		<!--- Mode='Mod' recalc (:1262-1350) --->
 		<!--- ============================================================ --->
-		<!--- Update TEMPSPROD with good qty --->
 		<cfquery name="qProdRow" datasource="#datasourcePrimary#">
-			SELECT TOP 1 TJSEQ, SMNOTRANS
+			SELECT TOP 1 TJSEQ, SMNOTRANS, TJQTEDEFECT, INVENTAIRE_C
 			FROM TEMPSPROD
 			WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
 			AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
@@ -369,41 +389,120 @@
 		</cfquery>
 
 		<cfif qProdRow.RecordCount GT 0>
-			<cfquery datasource="#datasourcePrimary#">
-				UPDATE TEMPSPROD
-				SET TJQTEPROD = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#qteBonne#">
-				WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(qProdRow.TJSEQ)#">
-			</cfquery>
+			<cfset LeTJSEQ = Val(qProdRow.TJSEQ)>
+			<cfset QteDefectueux = Val(qProdRow.TJQTEDEFECT)>
+			<cfset InventaireC = Val(qProdRow.INVENTAIRE_C)>
+			<!--- TotalQte = good + defect (old :1645, :2283) --->
+			<cfset TotalQte = qteBonne + QteDefectueux>
 
-			<cfset SmNoTransCible = Trim(qProdRow.SMNOTRANS)>
-
-			<!--- Create or update SM --->
-			<cfif Len(SmNoTransCible) EQ 0 AND Len(smnotransInput) GT 0>
-				<cfset SmNoTransCible = smnotransInput>
+			<!--- Step 1: write BOTH TJQTEPROD and TJQTEDEFECT (old :1841-1854) ---
+			      with the SMNOTRANS-match WHERE variant when an SM was passed --->
+			<cfif Len(smnotransInput) GT 0>
+				<cfquery datasource="#datasourcePrimary#">
+					UPDATE TEMPSPROD
+					SET TJQTEPROD = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#qteBonne#">,
+						TJQTEDEFECT = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#QteDefectueux#">
+					WHERE LEFT(SMNOTRANS, 9) = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(smnotransInput, 9)#">
+					AND TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+					AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+					AND MODEPROD_MPCODE = 'PROD'
+				</cfquery>
+			<cfelse>
+				<cfquery datasource="#datasourcePrimary#">
+					UPDATE TEMPSPROD
+					SET TJQTEPROD = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#qteBonne#">,
+						TJQTEDEFECT = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#QteDefectueux#">
+					WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#LeTJSEQ#">
+					AND MODEPROD_MPCODE = 'PROD'
+				</cfquery>
 			</cfif>
 
+			<!--- Step 2: SM lookup — payload first, then ALL PROD rows of
+			      TRANSAC+CNOMENCOP preferring SMNOTRANS<>'' (old :1615-1632, :1857-1876) --->
+			<cfset SmNoTransCible = Left(smnotransInput, 9)>
 			<cfif Len(SmNoTransCible) EQ 0>
-				<!--- Create new SM --->
-				<cfset insertSmParams = "#TRITEM#,'#Left(CONOTRANS, 9)#','#dateStr#','#timeStr#',#qteBonne#,'#Left(empName, 50)#','','Ecran de production pour SM',0,'0'">
+				<cfquery name="qSMAnyProd" datasource="#datasourcePrimary#">
+					SELECT TOP 1 SMNOTRANS
+					FROM TEMPSPROD
+					WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+					AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+					AND MODEPROD_MPCODE = 'PROD'
+					AND ISNULL(NULLIF(LTRIM(RTRIM(SMNOTRANS)),''),'') <> ''
+					ORDER BY TJSEQ DESC
+				</cfquery>
+				<cfif qSMAnyProd.RecordCount GT 0>
+					<cfset SmNoTransCible = Trim(qSMAnyProd.SMNOTRANS)>
+				</cfif>
+			</cfif>
+
+			<!--- Orphan check: SMNOTRANS with no TRANSAC header → clear link, force creation
+			      (old :1881-1905) --->
+			<cfif Len(SmNoTransCible) GT 0>
+				<cfquery name="qHeaderCheck" datasource="#datasourcePrimary#">
+					SELECT TOP 1 TRSEQ FROM TRANSAC
+					WHERE TRNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(SmNoTransCible, 9)#">
+				</cfquery>
+				<cfif qHeaderCheck.RecordCount EQ 0>
+					<cfquery datasource="#datasourcePrimary#">
+						UPDATE TEMPSPROD SET SMNOTRANS = ''
+						WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+						AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+						AND MODEPROD_MPCODE = 'PROD'
+						AND LEFT(SMNOTRANS, 9) = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(SmNoTransCible, 9)#">
+					</cfquery>
+					<cfset SmNoTransCible = "">
+				</cfif>
+			</cfif>
+
+			<cfset smCreatedNow = false>
+			<cfif Len(SmNoTransCible) EQ 0>
+				<!--- Create new SM — InsertSortieMateriel (old :2284) with TotalQte --->
+				<cfset insertSmParams = "#TRITEM#,'#Left(CONOTRANS, 9)#','#dateStr#','#Left(timeStr, 5)#',#TotalQte#,'#Left(empName, 50)#','','Ecran de production pour SM',0,'0'">
 				<cfset insertSmResult = autofabExecuteStoredProc(datasourcePrimary, "Nba_Sp_Insert_Sortie_Materiel", insertSmParams, "0")>
 				<cfif StructKeyExists(insertSmResult, "outputs") AND StructKeyExists(insertSmResult.outputs, "NEWSMNOTRANS")>
 					<cfset SmNoTransCible = Trim(insertSmResult.outputs.NEWSMNOTRANS)>
 				</cfif>
 
 				<cfif Len(SmNoTransCible) GT 0>
-					<cfset sortieSmParams = "'#Left(SmNoTransCible, 9)#',#TRITEM#,'#Left(CONOTRANS, 9)#',#qteBonne#,#operationSeq#,'#Left(empName, 50)#','#Left(nistrNiveau, 500)#','',#TRNORELACHE#">
+					<cfset smCreatedNow = true>
+
+					<!--- Create-path NIQTE gate (old :2318-2328): component with NIQTE=0
+					      (or missing BOM row) → detail SP gets TotalQte=0 --->
+					<cfset spTotalQte = TotalQte>
+					<cfif InventaireC NEQ 0>
+						<cfquery name="qNiqteGate" datasource="#datasourcePrimary#">
+							SELECT NIQTE
+							FROM cNOMENCLATURE
+							WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+							AND INVENTAIRE_P = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#InventaireC#">
+						</cfquery>
+						<cfif Val(qNiqteGate.NIQTE) EQ 0>
+							<cfset spTotalQte = 0>
+						</cfif>
+					</cfif>
+
+					<cfset sortieSmParams = "'#Left(SmNoTransCible, 9)#',#TRITEM#,'#Left(CONOTRANS, 9)#',#spTotalQte#,#operationSeq#,'#Left(empName, 50)#','#Left(nistrNiveau, 500)#','',#TRNORELACHE#">
 					<cfset sortieSmResult = autofabExecuteStoredProc(datasourcePrimary, "Nba_Sp_Sortie_Materiel", sortieSmParams, "0")>
 
-					<!--- Link SMNOTRANS to TEMPSPROD --->
+					<!--- Robust post-create update (old :2387-2399): qtys re-written +
+					      SMNOTRANS set only when currently empty --->
 					<cfquery datasource="#datasourcePrimary#">
 						UPDATE TEMPSPROD
-						SET SMNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(SmNoTransCible, 9)#">
-						WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(qProdRow.TJSEQ)#">
+						SET
+							TJQTEPROD = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#qteBonne#">,
+							TJQTEDEFECT = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#QteDefectueux#">,
+							SMNOTRANS = CASE
+								WHEN ISNULL(NULLIF(LTRIM(RTRIM(SMNOTRANS)),''),'') = ''
+								THEN <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(SmNoTransCible, 9)#">
+								ELSE SMNOTRANS
+							END
+						WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#LeTJSEQ#">
+						AND MODEPROD_MPCODE = 'PROD'
 					</cfquery>
 				</cfif>
 			<cfelse>
-				<!--- Update existing SM --->
-				<cfset updateSmParams = "'#Left(SmNoTransCible, 9)#',#TRITEM#,'#Left(CONOTRANS, 9)#',#qteBonne#,#operationSeq#,'#Left(empName, 50)#','#Left(nistrNiveau, 500)#','',#TRNORELACHE#">
+				<!--- Update existing SM — Nba_Sp_Sortie_Materiel ONLY (old :1948-1971) --->
+				<cfset updateSmParams = "'#Left(SmNoTransCible, 9)#',#TRITEM#,'#Left(CONOTRANS, 9)#',#TotalQte#,#operationSeq#,'#Left(empName, 50)#','#Left(nistrNiveau, 500)#','',#TRNORELACHE#">
 				<cfset updateSmResult = autofabExecuteStoredProc(datasourcePrimary, "Nba_Sp_Sortie_Materiel", updateSmParams, "0")>
 			</cfif>
 
@@ -416,6 +515,75 @@
 				<cfif qSMSEQ2.RecordCount GT 0>
 					<cfset smseqResult = Val(qSMSEQ2.SMSEQ)>
 				</cfif>
+			</cfif>
+
+			<!--- DET_TRANS recalc — ONLY when the SM pre-existed (old Mode='Mod',
+			      calculeQteSMQS :1262-1350). On fresh creation the SP output is
+			      authoritative and the loop is skipped (old Mode='Ajoute', sp_js:1752).
+			      NO direct SORTIEMATERIEL/TRANSAC header writes — that block is masked
+			      out in the old software (:1974-2250). --->
+			<cfif Len(SmNoTransCible) GT 0 AND NOT smCreatedNow>
+				<cfquery name="qDetLinesStd" datasource="#datasourcePrimary#">
+					SELECT DT.DTRSEQ, DT.TRANSAC, DT.ENTREPOT, DT.CONTENANT, DT.DTRQTE,
+						T.INVENTAIRE AS T_INVENTAIRE, DT.TRANSAC_TRNO
+					FROM DET_TRANS DT
+					INNER JOIN TRANSAC T ON DT.TRANSAC = T.TRSEQ
+					WHERE DT.TRANSAC_TRNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(SmNoTransCible, 9)#">
+				</cfquery>
+
+				<cfloop query="qDetLinesStd">
+					<cfset matInvStd = Val(qDetLinesStd.T_INVENTAIRE)>
+					<cfset detTrseqStd = Val(qDetLinesStd.TRANSAC)>
+
+					<!--- NIQTE via cNOMENCOP(INVENTAIRE_P = INVENTAIRE_C) → cNOMENCLATURE
+					      (old :1262-1286) --->
+					<cfquery name="qRatioStd" datasource="#datasourcePrimary#">
+						SELECT MAX(CN.NIQTE) AS NIQTE
+						FROM cNOMENCOP COP
+						INNER JOIN cNOMENCLATURE CN ON CN.NISEQ_PERE = COP.CNOMENCLATURE
+						WHERE COP.TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+						AND COP.INVENTAIRE_P = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#InventaireC#">
+						AND CN.INVENTAIRE_M = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#matInvStd#">
+					</cfquery>
+					<cfset niqteStd = Val(qRatioStd.NIQTE)>
+
+					<cfif niqteStd LTE 0>
+						<!--- Missing BOM row → zero the 4 TRANSAC qty columns (old :1237-1244) --->
+						<cfquery datasource="#datasourcePrimary#">
+							UPDATE TRANSAC
+							SET TRQTETRANSAC = 0, TRQTEUNINV = 0, TRQTECMD = 0, TRQTEINV_ESTIME = 0
+							WHERE TRSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#detTrseqStd#">
+						</cfquery>
+						<cfcontinue>
+					</cfif>
+
+					<!--- NouvelleQte = Abs(TotalQte * NIQTE) (old :1291) --->
+					<cfset nouvelleQteStd = Abs(TotalQte * niqteStd)>
+
+					<cfstoredproc procedure="Nba_Insert_Det_Trans_Avec_Contenant" datasource="#datasourcePrimary#">
+						<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#detTrseqStd#">
+						<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#matInvStd#">
+						<cfprocparam type="in" cfsqltype="CF_SQL_VARCHAR" value="">
+						<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qDetLinesStd.ENTREPOT)#">
+						<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="#nouvelleQteStd#">
+						<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="1">
+						<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#Val(qDetLinesStd.CONTENANT)#">
+						<cfprocparam type="in" cfsqltype="CF_SQL_VARCHAR" value="#Left(empName, 50)#">
+						<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="spSqlErreurStd">
+						<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="spErrorStd">
+						<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="spDtrseqStd">
+					</cfstoredproc>
+
+					<!--- UPDATE TRANSAC 4 qty cols (old :1343-1350) --->
+					<cfquery datasource="#datasourcePrimary#">
+						UPDATE TRANSAC
+						SET TRQTETRANSAC = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#nouvelleQteStd#">,
+							TRQTEUNINV = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#nouvelleQteStd#">,
+							TRQTECMD = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#nouvelleQteStd#">,
+							TRQTEINV_ESTIME = <cfqueryparam cfsqltype="CF_SQL_FLOAT" value="#nouvelleQteStd#">
+						WHERE TRSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#detTrseqStd#">
+					</cfquery>
+				</cfloop>
 			</cfif>
 		</cfif>
 	</cfif>

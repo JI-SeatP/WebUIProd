@@ -44,6 +44,10 @@ export function QuestionnairePage() {
     searchParams.get("nopseq") ??
     state.activeOperation?.NOPSEQ?.toString() ??
     "0";
+  // TJSEQ of the STOP/COMP/ON_HOLD row created by changeStatus before this page
+  // opened. Cancel must delete that exact row (old retireQuestionnaireSortie
+  // received it as arguments.TJSEQ) and stop causes attach to it.
+  const stopTjseq = Number(searchParams.get("tjseq")) || 0;
   const { operation, loading: opLoading } = useOperation(transac!, copmachine, nopseqParam);
 
   const isStop = type === "stop";
@@ -136,11 +140,15 @@ export function QuestionnairePage() {
   // overrideListeTjseq lets a caller (e.g. onItemAdded) pass the freshly-fetched
   // list directly, bypassing stale closure state from React's async setState.
   const handleGoodQtyOk = useCallback(async (overrideListeTjseq?: string) => {
+    const fmc = operation?.FMCODE ?? "";
+    const vcutOp = operation?.NO_INVENTAIRE === "VCUT" || operation?.PRODUIT_CODE === "VCUT" || fmc === "TableSaw";
+    // Old QteBonne.cfc:107-158 — when the operation doesn't use inventory the OK
+    // button never calls ajouteSM; quantities are written at submit only.
+    const utiliseInv = Number((operation as unknown as Record<string, unknown>)?.UTILISEINVENTAIRE ?? 1);
+    if (!vcutOp && utiliseInv !== 1) return;
     setSmLoading(true);
     try {
       const nopseq = (operation as unknown as Record<string, unknown>)?.NOPSEQ ?? 0;
-      const fmc = operation?.FMCODE ?? "";
-      const vcutOp = operation?.NO_INVENTAIRE === "VCUT" || operation?.PRODUIT_CODE === "VCUT" || fmc === "TableSaw";
       const effectiveListeTjseq = overrideListeTjseq ?? vcutListeTjseq;
       const res = await apiPost<{
         smnotrans: string;
@@ -154,6 +162,8 @@ export function QuestionnairePage() {
         nopseq: Number(nopseq),
         qteBonne: Number(goodQty) || 0,
         smnotrans,
+        // Old software passes session.InfoClient.NOMEMPLOYE (left 50) to the SPs
+        employeeName: state.employee?.EMNOM ?? "",
         // VCUT-specific params for SM batch calculation
         ...(vcutOp ? { isVcut: true, listeTjseq: effectiveListeTjseq } : {}),
       });
@@ -177,7 +187,7 @@ export function QuestionnairePage() {
     } finally {
       setSmLoading(false);
     }
-  }, [transac, copmachine, operation, goodQty, smnotrans, vcutListeTjseq]);
+  }, [transac, copmachine, operation, goodQty, smnotrans, vcutListeTjseq, state.employee]);
 
   // Write-as-you-go: container dropdown change → updates DET_TRANS, refreshes materials
   // Exact replica of SortieMateriel.cfc:1467-1512 (CorrigeDetailSM)
@@ -295,6 +305,16 @@ export function QuestionnairePage() {
         }
       } catch { /* use existing state */ }
     }
+    // Old verifieStatutSortie button gating: when the op uses inventory and a
+    // quantity was produced, an SM must already exist (Good-qty OK pressed).
+    // Submit no longer creates SMs (exact legacy parity) so block here instead.
+    const utiliseInvSubmit = Number((operation as unknown as Record<string, unknown>)?.UTILISEINVENTAIRE ?? 1);
+    const defectsTotal = savedDefects.reduce((s, d) => s + (Number(d.qty) || 0), 0);
+    if (!vcutOp && utiliseInvSubmit === 1 && (Number(effectiveGoodQty) || 0) + defectsTotal > 0 && !smnotrans) {
+      toast.error(t("questionnaire.smRequired"), { duration: 5000 });
+      return;
+    }
+
     // ON_HOLD reuses STOP's server-side handling. The actual status was
     // already written to ON_HOLD by the upstream changeStatus.cfm call.
     const submitType = useStopLayout ? "stop" : "comp";
@@ -303,14 +323,17 @@ export function QuestionnairePage() {
       copmachine: Number(copmachine),
       type: submitType,
       employeeCode,
+      employeeName: state.employee?.EMNOM ?? "",
+      stopTjseq,
       primaryCause: useStopLayout ? primaryCause : undefined,
       secondaryCause: useStopLayout ? secondaryCause : undefined,
       notes: useStopLayout ? notes : undefined,
       moldAction: showMoldAction ? moldAction : undefined,
       goodQty: effectiveGoodQty,
       isVcut: vcutOp,
-      // VCUT: pass ListeTJSEQ, ListeEPFSEQ, SMNOTRANS for SM/EPF posting (old software lines 773-933)
-      ...(vcutOp ? { listeTjseq: submitListeTjseq, listeEpfSeq: submitListeEpfSeq, smnotrans: submitSmnotrans, listeSmseq: vcutListeSmseq } : {}),
+      smnotrans: vcutOp ? submitSmnotrans : smnotrans,
+      // VCUT: pass ListeTJSEQ, ListeEPFSEQ for SM/EPF posting (old software lines 773-933)
+      ...(vcutOp ? { listeTjseq: submitListeTjseq, listeEpfSeq: submitListeEpfSeq, listeSmseq: vcutListeSmseq } : {}),
       defects: savedDefects.map((d) => ({ qty: String(d.qty), typeId: String(d.typeId), notes: d.notes })),
       finishedProducts:
         showFinishedProducts
@@ -341,11 +364,17 @@ export function QuestionnairePage() {
     notes,
     moldAction,
     goodQty,
+    smnotrans,
+    stopTjseq,
     savedDefects,
     finishedProducts,
     navigate,
     t,
     operation,
+    state.employee,
+    vcutListeTjseq,
+    vcutListeEpfSeq,
+    vcutListeSmseq,
   ]);
 
   const handleCancel = useCallback(async () => {
@@ -356,6 +385,9 @@ export function QuestionnairePage() {
       transac: Number(transac),
       copmachine: Number(copmachine),
       nopseq: Number(nopseq),
+      // The STOP/COMP row changeStatus created — old cancel deletes exactly this
+      // row (arguments.TJSEQ) then reopens the PROD row.
+      stopTjseq,
       smnotrans,
       smseq,
       isVcut: vcutOp,
@@ -365,7 +397,7 @@ export function QuestionnairePage() {
     });
     const nopseqNav = (operation as unknown as Record<string, unknown>)?.NOPSEQ ?? 0;
     navigate(`/orders/${transac}/operation/${copmachine}/${nopseqNav}`);
-  }, [transac, copmachine, smnotrans, smseq, vcutListeTjseq, vcutListeEpfSeq, vcutListeSmseq, navigate, operation]);
+  }, [transac, copmachine, stopTjseq, smnotrans, smseq, vcutListeTjseq, vcutListeEpfSeq, vcutListeSmseq, navigate, operation]);
 
   if (opLoading) {
     return <LoadingSpinner className="flex-1" />;

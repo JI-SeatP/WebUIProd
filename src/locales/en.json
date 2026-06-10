@@ -182,6 +182,7 @@
     "submitError": "Failed to submit questionnaire",
     "employeeRequired": "Employee code is required",
     "causeRequired": "Stop cause is required",
+    "smRequired": "Press OK on the good quantity first to create the material output before confirming",
     "addProduct": "Add Product",
     "confirmQuantities": "Confirm Quantities",
     "materialOutputHint": "Enter a quantity and press OK to see material output",

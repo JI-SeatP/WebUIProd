@@ -173,6 +173,25 @@
 		<cfset row[col] = trouveOperation[col][1]>
 	</cfloop>
 
+	<!--- UtiliseInventaire — drives the Good-qty OK gate (old QteBonne.cfc:107-158):
+	      when 0 (and not VCUT) the OK button must not create/recalc an SM. --->
+	<cftry>
+		<cfquery name="trouveUtilise" datasource="#datasourcePrimary#">
+			SELECT UtiliseInventaire
+			FROM VOperationParTransac
+			WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(url.transac)#">
+			AND NOPSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(theNOPSEQ)#">
+		</cfquery>
+		<cfif trouveUtilise.RecordCount GT 0>
+			<cfset row["UTILISEINVENTAIRE"] = Val(trouveUtilise.UtiliseInventaire)>
+		<cfelse>
+			<cfset row["UTILISEINVENTAIRE"] = 0>
+		</cfif>
+		<cfcatch type="any">
+			<cfset row["UTILISEINVENTAIRE"] = 1>
+		</cfcatch>
+	</cftry>
+
 	<cfset response["success"] = true>
 	<cfset response["data"] = row>
 	<cfset response["message"] = "Operation retrieved">

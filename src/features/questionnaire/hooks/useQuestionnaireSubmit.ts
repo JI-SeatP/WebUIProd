@@ -9,6 +9,10 @@ interface QuestionnairePayload {
   copmachine: number | null;
   type: "stop" | "comp";
   employeeCode: string;
+  /** Session login name — old software's session.InfoClient.NOMEMPLOYE, used in SP/SOAP user params */
+  employeeName?: string;
+  /** TJSEQ of the STOP/COMP/ON_HOLD row created by changeStatus (old arguments.TJSEQ) */
+  stopTjseq?: number;
   primaryCause?: string;
   secondaryCause?: string;
   notes?: string;

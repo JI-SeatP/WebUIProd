@@ -59,7 +59,7 @@ export function useStatusChange(
 
     setLoading(true);
     try {
-      const res = await apiPost("changeStatus.cfm", {
+      const res = await apiPost<{ tjseq?: number }>("changeStatus.cfm", {
         transac,
         copmachine,
         nopseq,
@@ -83,7 +83,11 @@ export function useStatusChange(
           confirmAction === "STOP" ? "stop" :
           confirmAction === "COMP" ? "comp" : "onhold";
         const copValue = copmachine ?? 0;
-        navigate(`/orders/${transac}/questionnaire/${type}?copmachine=${copValue}&nopseq=${nopseq ?? 0}&fromStatus=${encodeURIComponent(currentStatus)}`);
+        // tjseq = the STOP/COMP/ON_HOLD row changeStatus just created. The
+        // questionnaire needs it for cancel (delete that row) and stop causes
+        // (TEMPSPRODEX target) — old software passed TJSEQ explicitly too.
+        const stopTjseq = res.data?.tjseq ?? 0;
+        navigate(`/orders/${transac}/questionnaire/${type}?copmachine=${copValue}&nopseq=${nopseq ?? 0}&tjseq=${stopTjseq}&fromStatus=${encodeURIComponent(currentStatus)}`);
       }
       // PROD from SETUP: ask if worker wants to fill Setup Questionnaire
       else if (confirmAction === "PROD" && currentStatus === "SETUP") {

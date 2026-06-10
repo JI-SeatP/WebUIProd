@@ -9,6 +9,21 @@
 	<cfoutput>{}</cfoutput><cfabort>
 </cfif>
 
+<!---
+	EXACT replica of legacy QuestionnaireSortie.cfc -> retireQuestionnaireSortie (lines 314-597).
+	The status change (close PROD + insert STOP/COMP) happened BEFORE the questionnaire opened
+	(changeStatus.cfm = old ajouteModifieStatut). Cancel reverts it:
+	  1. KeepTJSEQ resolution (VCUT only - old [FIX][VCUT], pool = stopTjseq + listeTjseq)
+	  2. (VCUT only) delete listeTjseq rows <> KeepTJSEQ (TEMPSPRODEX+TEMPSPROD+DET_DEFECT)
+	  3. Delete the STOP/COMP row (stopTjseq) - TEMPSPRODEX + TEMPSPROD only (old :430-446)
+	  4. Re-find latest PROD row (LeTJSEQ, old :448-456); VCUT: override to KeepTJSEQ
+	  5. Append the PROD row's own SM to the delete list (old :470-477)
+	  6. Per SMSEQ (UNCONDITIONAL): DELETE SORTIEMATERIEL / TRANSAC / DET_TRANS +
+	     clear TEMPSPROD.SMNOTRANS (old :478-524)
+	  7. EPF cleanup from listeEpfSeq (old :526-577)
+	  8. RESET LeTJSEQ (TJFINDATE=NULL, qtys=0, SMNOTRANS='', PFNOTRANS='') +
+	     DELETE its DET_DEFECT (old :580-595) -> PROD row reopened
+--->
 <cftry>
 	<cfset response = StructNew()>
 
@@ -29,6 +44,8 @@
 	<cfset nopseq = Val(requestBody["nopseq"])>
 
 	<!--- Optional fields --->
+	<cfset stopTjseq = 0>
+	<cfif StructKeyExists(requestBody, "stopTjseq")><cfset stopTjseq = Val(requestBody["stopTjseq"])></cfif>
 	<cfset isVcut = false>
 	<cfif StructKeyExists(requestBody, "isVcut")><cfset isVcut = requestBody["isVcut"]></cfif>
 	<cfset listeTjseq = "">
@@ -37,45 +54,43 @@
 	<cfif StructKeyExists(requestBody, "listeEpfSeq")><cfset listeEpfSeq = Trim(requestBody["listeEpfSeq"])></cfif>
 	<cfset listeSmseq = "">
 	<cfif StructKeyExists(requestBody, "listeSmseq")><cfset listeSmseq = Trim(requestBody["listeSmseq"])></cfif>
-	<cfset smnotrans = "">
-	<cfif StructKeyExists(requestBody, "smnotrans")><cfset smnotrans = Trim(requestBody["smnotrans"])></cfif>
 
-	<!--- Find the main TJSEQ (current PROD row) --->
-	<cfquery name="qMainTj" datasource="#datasourcePrimary#">
-		SELECT TOP 1 TJSEQ
-		FROM TEMPSPROD
-		WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
-		AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
-		AND MODEPROD_MPCODE = 'PROD'
-		AND TJNOTE LIKE 'Ecran de production pour Temps prod%'
-		<cfif copmachine NEQ 0>
-			AND cNomencOp_Machine = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#copmachine#">
+	<!--- Resolve the STOP/COMP row (old arguments.TJSEQ). Fallback when the
+	      frontend didn't pass it (e.g. page reload lost the URL param). --->
+	<cfset TheTJSEQ = stopTjseq>
+	<cfif TheTJSEQ EQ 0>
+		<cfquery name="qStopFallback" datasource="#datasourcePrimary#">
+			SELECT TOP 1 TJSEQ
+			FROM TEMPSPROD
+			WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+			AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+			AND MODEPROD_MPCODE IN ('STOP', 'COMP', 'HOLD')
+			AND TJNOTE LIKE 'Ecran de production pour Temps prod%'
+			ORDER BY TJSEQ DESC
+		</cfquery>
+		<cfif qStopFallback.RecordCount GT 0>
+			<cfset TheTJSEQ = Val(qStopFallback.TJSEQ)>
 		</cfif>
-		ORDER BY TJSEQ DESC
-	</cfquery>
-	<cfset mainTjseq = 0>
-	<cfif qMainTj.RecordCount GT 0>
-		<cfset mainTjseq = Val(qMainTj.TJSEQ)>
 	</cfif>
 
 	<!--- ============================================================ --->
-	<!--- Step 1: Find KeepTJSEQ (VCUT only) (QuestionnaireSortie.cfc:348-374) --->
-	<!--- Highest TJSEQ with MODEPROD_MPCODE='PROD'; fallback: highest of any mode (I7) --->
+	<!--- Step 1: KeepTJSEQ (VCUT only) - old pool is stopTjseq + listeTjseq --->
+	<!--- (QuestionnaireSortie.cfc:336-374, [FIX][VCUT]) --->
 	<!--- ============================================================ --->
-	<cfset KeepTJSEQ = 0>
+	<cfset KeepTJSEQ = TheTJSEQ>
 	<cfif isVcut>
-		<!--- Build combined list of all candidate TJSEQ values --->
-		<cfset allTjseqs = listeTjseq>
-		<cfif mainTjseq GT 0>
-			<cfif Len(allTjseqs) GT 0>
-				<cfset allTjseqs = allTjseqs & "," & mainTjseq>
-			<cfelse>
-				<cfset allTjseqs = mainTjseq>
-			</cfif>
+		<cfset allTjseqs = "">
+		<cfif TheTJSEQ GT 0>
+			<cfset allTjseqs = ListAppend(allTjseqs, TheTJSEQ)>
 		</cfif>
+		<cfif Len(listeTjseq) GT 0>
+			<cfset allTjseqs = ListAppend(allTjseqs, listeTjseq)>
+		</cfif>
+		<cfset allTjseqs = ListRemoveDuplicates(allTjseqs)>
 
-		<cfif Len(allTjseqs) GT 0>
-			<!--- Prefer highest PROD row --->
+		<cfif ListLen(allTjseqs) GT 0>
+			<cfset KeepTJSEQ = 0>
+			<!--- Prefer highest PROD row among candidates --->
 			<cfquery name="qKeepProd" datasource="#datasourcePrimary#">
 				SELECT TOP 1 TJSEQ FROM TEMPSPROD
 				WHERE TJSEQ IN (<cfqueryparam cfsqltype="CF_SQL_INTEGER" list="true" value="#allTjseqs#">)
@@ -98,93 +113,128 @@
 		</cfif>
 	</cfif>
 
+	<!--- Old: empty ListeTJSEQ defaults to [arguments.TJSEQ] --->
+	<cfif ListLen(listeTjseq) EQ 0 AND TheTJSEQ GT 0>
+		<cfset listeTjseq = TheTJSEQ>
+	</cfif>
+
 	<!--- ============================================================ --->
-	<!--- Step 2: Delete ListeTJSEQ rows (skip KeepTJSEQ) --->
-	<!--- (QuestionnaireSortie.cfc:394-423) --->
+	<!--- Step 2: (VCUT only) delete listeTjseq rows <> KeepTJSEQ --->
+	<!--- (QuestionnaireSortie.cfc:394-423 - the loop body is VCUT-gated) --->
 	<!--- ============================================================ --->
 	<cfif Len(listeTjseq) GT 0>
 		<cfloop list="#listeTjseq#" index="CeTJSEQ">
-			<cfif isVcut AND Val(CeTJSEQ) EQ KeepTJSEQ>
-				<cfcontinue>
-			</cfif>
-
-			<cfquery datasource="#datasourcePrimary#">
-				DELETE FROM TEMPSPRODEX WHERE TEMPSPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(CeTJSEQ)#">
-			</cfquery>
-			<cfquery datasource="#datasourcePrimary#">
-				DELETE FROM TEMPSPROD WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(CeTJSEQ)#">
-			</cfquery>
-			<cfquery datasource="#datasourcePrimary#">
-				DELETE FROM DET_DEFECT WHERE TEMPSPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(CeTJSEQ)#">
-			</cfquery>
-		</cfloop>
-	</cfif>
-
-	<!--- Step 3: Delete primary TJSEQ (skip if = KeepTJSEQ) --->
-	<!--- (QuestionnaireSortie.cfc:430-446) --->
-	<cfif mainTjseq GT 0 AND (NOT isVcut OR mainTjseq NEQ KeepTJSEQ)>
-		<cfquery datasource="#datasourcePrimary#">
-			DELETE FROM TEMPSPRODEX WHERE TEMPSPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
-		</cfquery>
-		<cfquery datasource="#datasourcePrimary#">
-			DELETE FROM TEMPSPROD WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
-		</cfquery>
-		<cfquery datasource="#datasourcePrimary#">
-			DELETE FROM DET_DEFECT WHERE TEMPSPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
-		</cfquery>
-	</cfif>
-
-	<!--- ============================================================ --->
-	<!--- Step 4: Delete SM records (QuestionnaireSortie.cfc:478-523) --->
-	<!--- ============================================================ --->
-	<!--- Build SM list from listeSmseq OR from smnotrans --->
-	<cfset smTrnosToDelete = "">
-
-	<cfif Len(listeSmseq) GT 0>
-		<cfloop list="#listeSmseq#" index="CeSmseq">
-			<!--- Lookup SMNOTRANS from SORTIEMATERIEL --->
-			<cfquery name="qSmTrno" datasource="#datasourcePrimary#">
-				SELECT LEFT(SMNOTRANS, 9) AS SMNOTRANS FROM SORTIEMATERIEL
-				WHERE SMSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(CeSmseq)#">
-			</cfquery>
-			<cfif qSmTrno.RecordCount GT 0 AND Len(Trim(qSmTrno.SMNOTRANS)) GT 0>
-				<cfset ceSmnotrans = Left(Trim(qSmTrno.SMNOTRANS), 9)>
-
+			<cfif isVcut AND Val(CeTJSEQ) NEQ KeepTJSEQ>
 				<cfquery datasource="#datasourcePrimary#">
-					DELETE FROM SORTIEMATERIEL WHERE SMNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#ceSmnotrans#">
+					DELETE FROM TEMPSPRODEX WHERE TEMPSPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(CeTJSEQ)#">
 				</cfquery>
 				<cfquery datasource="#datasourcePrimary#">
-					DELETE FROM TRANSAC WHERE TRNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#ceSmnotrans#">
+					DELETE FROM TEMPSPROD WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(CeTJSEQ)#">
 				</cfquery>
 				<cfquery datasource="#datasourcePrimary#">
-					DELETE FROM DET_TRANS WHERE TRANSAC_TRNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#ceSmnotrans#">
-				</cfquery>
-				<cfquery datasource="#datasourcePrimary#">
-					UPDATE TEMPSPROD SET SMNOTRANS = ''
-					WHERE SMNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#ceSmnotrans#">
+					DELETE FROM DET_DEFECT WHERE TEMPSPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(CeTJSEQ)#">
 				</cfquery>
 			</cfif>
 		</cfloop>
-	<cfelseif Len(smnotrans) GT 0>
-		<!--- Single SMNOTRANS from frontend state --->
-		<cfset ceSmnotrans = Left(smnotrans, 9)>
+	</cfif>
+
+	<!--- ============================================================ --->
+	<!--- Step 3: Delete the STOP/COMP row (old :430-446 - no DET_DEFECT here) --->
+	<!--- ============================================================ --->
+	<cfif TheTJSEQ GT 0 AND (NOT isVcut OR TheTJSEQ NEQ KeepTJSEQ)>
 		<cfquery datasource="#datasourcePrimary#">
-			DELETE FROM SORTIEMATERIEL WHERE SMNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#ceSmnotrans#">
+			DELETE FROM TEMPSPRODEX WHERE TEMPSPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#TheTJSEQ#">
 		</cfquery>
 		<cfquery datasource="#datasourcePrimary#">
-			DELETE FROM TRANSAC WHERE TRNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#ceSmnotrans#">
-		</cfquery>
-		<cfquery datasource="#datasourcePrimary#">
-			DELETE FROM DET_TRANS WHERE TRANSAC_TRNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#ceSmnotrans#">
-		</cfquery>
-		<cfquery datasource="#datasourcePrimary#">
-			UPDATE TEMPSPROD SET SMNOTRANS = ''
-			WHERE SMNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#ceSmnotrans#">
+			DELETE FROM TEMPSPROD WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#TheTJSEQ#">
 		</cfquery>
 	</cfif>
 
 	<!--- ============================================================ --->
-	<!--- Step 5: Delete EPF records (QuestionnaireSortie.cfc:526-577) --->
+	<!--- Step 4: Re-find the latest PROD row (old :448-456 - no copmachine filter) --->
+	<!--- ============================================================ --->
+	<cfquery name="trouveDernierStatut" datasource="#datasourcePrimary#">
+		SELECT TOP 1 TJSEQ, MODEPROD_MPCODE, TJQTEPROD, TJQTEDEFECT, TJDEBUTDATE, SMNOTRANS, cNOMENCOP, CNOMENCLATURE
+		FROM TEMPSPROD
+		WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+		AND cNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+		AND MODEPROD_MPCODE = 'PROD'
+		AND TJNOTE LIKE 'Ecran de production pour Temps prod%'
+		ORDER BY TJSEQ DESC
+	</cfquery>
+	<cfset LeTJSEQ = Val(trouveDernierStatut.TJSEQ)>
+
+	<!--- VCUT: force the reset target to KeepTJSEQ if it still exists (old :459-468) --->
+	<cfif isVcut AND KeepTJSEQ GT 0>
+		<cfquery name="qKeepExists" datasource="#datasourcePrimary#">
+			SELECT COUNT(1) AS CNT
+			FROM TEMPSPROD
+			WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#KeepTJSEQ#">
+		</cfquery>
+		<cfif qKeepExists.CNT GT 0>
+			<cfset LeTJSEQ = KeepTJSEQ>
+		</cfif>
+	</cfif>
+
+	<!--- ============================================================ --->
+	<!--- Step 5: Append the PROD row's own SM to the delete list (old :470-477) --->
+	<!--- ============================================================ --->
+	<cfif Len(Trim(trouveDernierStatut.SMNOTRANS)) GT 0>
+		<cfquery name="trouveSMSEQ" datasource="#datasourcePrimary#">
+			SELECT SMSEQ
+			FROM SORTIEMATERIEL
+			WHERE SMNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(trouveDernierStatut.SMNOTRANS, 9)#">
+		</cfquery>
+		<cfif trouveSMSEQ.RecordCount GT 0>
+			<cfset listeSmseq = ListAppend(listeSmseq, trouveSMSEQ.SMSEQ)>
+		</cfif>
+	</cfif>
+	<cfset listeSmseq = ListRemoveDuplicates(listeSmseq)>
+
+	<!--- ============================================================ --->
+	<!--- Step 6: SM cleanup - UNCONDITIONAL per SMSEQ (old :478-524) --->
+	<!--- ============================================================ --->
+	<cfif ListLen(listeSmseq) GT 0>
+		<cfloop list="#listeSmseq#" index="LeSMSEQ">
+			<!--- Primary lookup: SORTIEMATERIEL by SMSEQ --->
+			<cfquery name="trouveSMNOTRANS" datasource="#datasourcePrimary#">
+				SELECT TOP 1 LEFT(SMNOTRANS, 9) AS SMNOTRANS
+				FROM SORTIEMATERIEL
+				WHERE SMSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(LeSMSEQ)#">
+				AND ISNULL(NULLIF(LTRIM(RTRIM(SMNOTRANS)), ''), '') <> ''
+			</cfquery>
+			<cfif trouveSMNOTRANS.RecordCount EQ 0>
+				<!--- Fallback (compat): legacy lists sometimes carried TRSEQ values --->
+				<cfquery name="trouveSMNOTRANS" datasource="#datasourcePrimary#">
+					SELECT TRNO AS SMNOTRANS
+					FROM TRANSAC
+					WHERE TRSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(LeSMSEQ)#">
+				</cfquery>
+			</cfif>
+			<cfif trouveSMNOTRANS.RecordCount GT 0 AND Len(Trim(trouveSMNOTRANS.SMNOTRANS)) GT 0>
+				<cfquery datasource="#datasourcePrimary#">
+					DELETE FROM SORTIEMATERIEL
+					WHERE SMNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(Trim(trouveSMNOTRANS.SMNOTRANS), 9)#">
+				</cfquery>
+				<cfquery datasource="#datasourcePrimary#">
+					DELETE FROM TRANSAC
+					WHERE TRNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(Trim(trouveSMNOTRANS.SMNOTRANS), 9)#">
+				</cfquery>
+				<cfquery datasource="#datasourcePrimary#">
+					DELETE FROM DET_TRANS
+					WHERE TRANSAC_TRNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(Trim(trouveSMNOTRANS.SMNOTRANS), 9)#">
+				</cfquery>
+				<cfquery datasource="#datasourcePrimary#">
+					UPDATE TEMPSPROD
+					SET SMNOTRANS = ''
+					WHERE SMNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(Trim(trouveSMNOTRANS.SMNOTRANS), 9)#">
+				</cfquery>
+			</cfif>
+		</cfloop>
+	</cfif>
+
+	<!--- ============================================================ --->
+	<!--- Step 7: Delete EPF records (old :526-577) --->
 	<!--- ============================================================ --->
 	<cfif Len(listeEpfSeq) GT 0>
 		<cfloop list="#listeEpfSeq#" index="CePfseq">
@@ -241,22 +291,9 @@
 	</cfif>
 
 	<!--- ============================================================ --->
-	<!--- Step 6: Reset surviving PROD row (QuestionnaireSortie.cfc:580-595) --->
+	<!--- Step 8: RESET the PROD row -> reopened (old :580-595) --->
 	<!--- ============================================================ --->
-	<cfset resetTjseq = 0>
-	<cfif isVcut AND KeepTJSEQ GT 0>
-		<cfset resetTjseq = KeepTJSEQ>
-	<cfelseif mainTjseq GT 0>
-		<!--- For non-VCUT, check if mainTjseq still exists --->
-		<cfquery name="qStillExists" datasource="#datasourcePrimary#">
-			SELECT TJSEQ FROM TEMPSPROD WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#mainTjseq#">
-		</cfquery>
-		<cfif qStillExists.RecordCount GT 0>
-			<cfset resetTjseq = mainTjseq>
-		</cfif>
-	</cfif>
-
-	<cfif resetTjseq GT 0>
+	<cfif LeTJSEQ GT 0>
 		<cfquery datasource="#datasourcePrimary#">
 			UPDATE TEMPSPROD
 			SET TJFINDATE = NULL,
@@ -264,17 +301,17 @@
 				TJQTEDEFECT = 0,
 				SMNOTRANS = '',
 				ENTRERPRODFINI_PFNOTRANS = ''
-			WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#resetTjseq#">
+			WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#LeTJSEQ#">
 		</cfquery>
 		<cfquery datasource="#datasourcePrimary#">
-			DELETE FROM DET_DEFECT WHERE TEMPSPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#resetTjseq#">
+			DELETE FROM DET_DEFECT WHERE TEMPSPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#LeTJSEQ#">
 		</cfquery>
 	</cfif>
 
 	<!--- Return response --->
 	<cfset response["success"] = true>
 	<cfset response["data"] = StructNew()>
-	<cfset response["message"] = "Questionnaire cancelled — write-as-you-go artifacts cleaned up">
+	<cfset response["message"] = "Questionnaire cancelled — status change reverted">
 
 	<cfcatch type="any">
 		<cfset response = StructNew()>

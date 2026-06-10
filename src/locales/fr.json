@@ -182,6 +182,7 @@
     "submitError": "Erreur lors de la soumission du questionnaire",
     "employeeRequired": "Le code employé est requis",
     "causeRequired": "La cause d'arrêt est requise",
+    "smRequired": "Appuyez d'abord sur OK pour la quantité bonne afin de créer la sortie de matériel avant de confirmer",
     "addProduct": "Ajouter produit",
     "confirmQuantities": "Confirmer les quantités",
     "materialOutputHint": "Entrez une quantité et appuyez OK pour voir la sortie matériel",
