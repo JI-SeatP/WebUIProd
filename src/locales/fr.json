@@ -137,7 +137,10 @@
     "exitSurvey": "Questionnaire de sortie",
     "setupSurvey": "Questionnaire de mise en course",
     "stopSurvey": "Questionnaire d'arrêt",
+    "onHoldSurvey": "Questionnaire de mise en attente",
     "completionSurvey": "Questionnaire de complétion",
+    "defectRemaining": "Restant: {{count}}",
+    "pqttDefectMismatch": "Les défauts catégorisés ({{entered}}) ne correspondent pas aux {{recorded}} enregistrés par la barre.",
     "stopCause": "Cause d'arrêt",
     "primaryCause": "Cause principale",
     "secondaryCause": "Cause secondaire",
@@ -300,5 +303,47 @@
     "labelPrint": "Impression étiquette",
     "skidScan": "Scanner SKID",
     "language": "Langue"
+  },
+  "pqtt": {
+    "good": "Bon",
+    "def": "Défectueuse",
+    "totalGood": "BON",
+    "totalDef": "DEF",
+    "finishPiece": "TERMINER PIÈCE",
+    "minutesPerPiece": "MINUTES / PIÈCE",
+    "piecesPerHour": "PIÈCES / HEURE",
+    "current": "ACTUEL",
+    "target": "CIBLE",
+    "empModal": {
+      "title": "Sélectionner opérateur",
+      "searchPlaceholder": "ID ou nom",
+      "noResults": "Aucun opérateur trouvé",
+      "confirm": "Sélectionner"
+    },
+    "empMismatch": {
+      "title": "Employé différent",
+      "body": "Le numéro d'employé est différent de l'utilisateur connecté. Voulez-vous démarrer la production avec ce numéro d'employé?",
+      "yes": "Oui, démarrer avec cet employé",
+      "no": "Non, annuler",
+      "pickedLabel": "Sélectionné :",
+      "loggedInLabel": "Connecté :"
+    },
+    "addPieceBeforeClose": {
+      "title": "Ajouter une pièce terminée avant de fermer?",
+      "addGood": "+1 Bonne",
+      "addDef": "+1 Défectueuse",
+      "no": "Non, ne pas ajouter"
+    },
+    "errors": {
+      "startFailed": "Erreur de base de données, ne pas démarrer. Veuillez contacter le superviseur.",
+      "finishFailed": "Échec de l'enregistrement de la pièce. Veuillez réessayer."
+    },
+    "resumedToast": "Production reprise — Bon : {{good}} · Déf : {{def}} · en cours : {{elapsed}}",
+    "idle": {
+      "title": "Toujours en train de produire?",
+      "body": "Cette pièce dure depuis {{elapsed}} — plus du double de la cible de {{target}}. Êtes-vous toujours en train de travailler dessus?",
+      "continue": "Oui, continuer",
+      "stop": "Non, fermer la production"
+    }
   }
 }

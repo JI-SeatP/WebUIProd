@@ -82,6 +82,36 @@ export const W_STATUS_ACTION_BAR = {
 } as const;
 
 // ───────────────────────────────────────
+// WIDTH - PQTT_TOOLBAR (S003 floating, PROD only)
+// Two dark-glass containers side-by-side, centered between Status
+// (bottom-left) and Inspection (bottom-right). Heights per spec table.
+// ───────────────────────────────────────
+export const W_PQTT_TOOLBAR = {
+  /** total bar height (style spec line "0 - PQQT Bar width" → 92 px) */
+  heightPx: 92,
+  /** inner row height for the buttons inside PieceCounter */
+  rowHeightPx: 71,
+  pieceCounter: {
+    /** TotalGood and TotalDef columns */
+    totalCol: "w-[67px]",
+    /** Yellow piece timer */
+    timer: "w-[127px]",
+    /** Orange Finish Piece button */
+    finishBtn: "w-[211px]",
+  },
+  pieceStats: {
+    /** Each stats container (Minutes/Piece, Pieces/Hour) */
+    container: "w-[199px]",
+    /** Each value box (CURRENT / TARGET) */
+    valueBox: "w-[96px]",
+    titleHeightPx: 21,
+    valueHeightPx: 52,
+  },
+  /** Min width the toolbar wants before it wraps PieceStats to a new row. */
+  desktopMinWidthPx: 1280,
+} as const;
+
+// ───────────────────────────────────────
 // WIDTH - PANEL_DETAILS_TABLE (S003 Press)
 // ───────────────────────────────────────
 export const W_PANEL_DETAILS = {

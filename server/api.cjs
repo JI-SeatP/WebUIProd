@@ -3871,6 +3871,679 @@ app.post(
   })
 );
 
+// ─── GET /GetEmpList.cfm ─────────────────────────────────────────────────────
+app.get(
+  "/GetEmpList.cfm",
+  handler(async (req, res) => {
+    const pool = await getPool();
+    const result = await pool.request().query(`
+      SELECT
+        E.EMNOIDENT AS EMP_NUM,
+        E.EMNOM     AS EMP_NOM
+      FROM EMPLOYE AS E WITH (NOLOCK)
+      WHERE E.EMACTIF = 1
+      ORDER BY E.EMNOM
+    `);
+    res.json({
+      success: true,
+      data: result.recordset,
+      message: `Retrieved ${result.recordset.length} employees`,
+    });
+  })
+);
+
+// ─── PQTT helpers ────────────────────────────────────────────────────────────
+function nullableInt(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
+function bindNullableInt(request, name, value) {
+  request.input(name, sql.Int, nullableInt(value));
+}
+
+// ─── POST /PQTT_StartRun.cfm ─────────────────────────────────────────────────
+app.post(
+  "/PQTT_StartRun.cfm",
+  handler(async (req, res) => {
+    const body = req.body || {};
+    const TRANSAC = nullableInt(body.TRANSAC);
+    const OPSEQ   = nullableInt(body.OPSEQ);
+    const OPCODE  = String(body.OPCODE ?? "").substring(0, 20);
+    const INSEQ   = nullableInt(body.INSEQ);
+    const MASEQ   = nullableInt(body.MASEQ);
+    const NOPSEQ  = nullableInt(body.NOPSEQ);
+    const TJSEQ   = nullableInt(body.TJSEQ);
+    const NISEQ   = nullableInt(body.NISEQ);
+    const EMP_NUM = String(body.EMP_NUM ?? "").trim().substring(0, 5);
+
+    if (!TRANSAC || !MASEQ || !EMP_NUM) {
+      return res.json({
+        success: false,
+        data: "",
+        error: "Missing required fields (TRANSAC, MASEQ, EMP_NUM).",
+      });
+    }
+
+    const pool = await getPoolExt();
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+
+    try {
+      // ─── Step 1: look for a resumable open PRSEQ ─────────────────────
+      // A run is "resumable" when it's open (PR_End IS NULL), matches the
+      // full operation key, AND was last touched by the SAME operator. If
+      // found, we keep using it instead of opening a fresh PRSEQ — that's
+      // how the timer survives a page refresh or HMR remount.
+      const resumeReq = new sql.Request(tx);
+      resumeReq.input("TRANSAC", sql.Int, TRANSAC);
+      resumeReq.input("NOPSEQ", sql.Int, NOPSEQ ?? 0);
+      resumeReq.input("OPSEQ", sql.Int, OPSEQ ?? 0);
+      resumeReq.input("MASEQ", sql.Int, MASEQ);
+      bindNullableInt(resumeReq, "INSEQ", INSEQ);
+      bindNullableInt(resumeReq, "NISEQ", NISEQ);
+      resumeReq.input("EMP_NUM", sql.VarChar(5), EMP_NUM);
+
+      const resumable = await resumeReq.query(`
+        SELECT TOP 1
+          PRSEQ, PR_Start, PR_LastUpdate, TotalGood, TotalDef,
+          DATEDIFF(SECOND, '00:00:00', PR_TotalTime) AS PR_TotalSeconds
+        FROM dbo.WUI_ProductionRuns
+        WHERE PR_End IS NULL
+          AND TRANSAC = @TRANSAC
+          AND NOPSEQ  = @NOPSEQ
+          AND OPSEQ   = @OPSEQ
+          AND MASEQ   = @MASEQ
+          AND ((INSEQ = @INSEQ) OR (INSEQ IS NULL AND @INSEQ IS NULL))
+          AND ((NISEQ = @NISEQ) OR (NISEQ IS NULL AND @NISEQ IS NULL))
+          AND EMP_NUM = @EMP_NUM
+          -- 5-minute freshness window: only resume runs that have been
+          -- touched (start, finish-piece, or heartbeat) very recently.
+          AND COALESCE(PR_LastUpdate, PR_Start) >= DATEADD(MINUTE, -5, SYSDATETIME())
+        ORDER BY COALESCE(PR_LastUpdate, PR_Start) DESC
+      `);
+
+      // ─── Step 2: defensive close — orphans NOT matching the resume ──
+      // Any other open PRSEQ on the same operation key (different operator,
+      // duplicates, etc.) gets closed with PR_End = PR_LastUpdate.
+      const resumePRSEQ = resumable.recordset[0]?.PRSEQ ?? null;
+      const orphanReq = new sql.Request(tx);
+      orphanReq.input("TRANSAC", sql.Int, TRANSAC);
+      orphanReq.input("NOPSEQ", sql.Int, NOPSEQ ?? 0);
+      orphanReq.input("OPSEQ", sql.Int, OPSEQ ?? 0);
+      orphanReq.input("MASEQ", sql.Int, MASEQ);
+      bindNullableInt(orphanReq, "INSEQ", INSEQ);
+      bindNullableInt(orphanReq, "NISEQ", NISEQ);
+      if (resumePRSEQ != null) orphanReq.input("ResumePRSEQ", sql.Int, resumePRSEQ);
+
+      const orphans = await orphanReq.query(`
+        SELECT PRSEQ, COALESCE(PR_LastUpdate, PR_Start) AS ClosingStamp
+        FROM dbo.WUI_ProductionRuns
+        WHERE PR_End IS NULL
+          AND TRANSAC = @TRANSAC
+          AND NOPSEQ  = @NOPSEQ
+          AND OPSEQ   = @OPSEQ
+          AND MASEQ   = @MASEQ
+          AND ((INSEQ = @INSEQ) OR (INSEQ IS NULL AND @INSEQ IS NULL))
+          AND ((NISEQ = @NISEQ) OR (NISEQ IS NULL AND @NISEQ IS NULL))
+          ${resumePRSEQ != null ? "AND PRSEQ <> @ResumePRSEQ" : ""}
+      `);
+
+      for (const orphan of orphans.recordset) {
+        const closeDetReq = new sql.Request(tx);
+        closeDetReq.input("PRSEQ", sql.Int, orphan.PRSEQ);
+        closeDetReq.input("Stamp", sql.DateTime, orphan.ClosingStamp);
+        await closeDetReq.query(`
+          UPDATE dbo.WUI_ProductionRunDetails
+          SET PR_DetEnd = @Stamp, QtyGood = 0, QtyDef = 0
+          WHERE PRSEQ = @PRSEQ AND PR_DetEnd IS NULL
+        `);
+        const closeRunReq = new sql.Request(tx);
+        closeRunReq.input("PRSEQ", sql.Int, orphan.PRSEQ);
+        closeRunReq.input("Stamp", sql.DateTime, orphan.ClosingStamp);
+        await closeRunReq.query(`
+          UPDATE dbo.WUI_ProductionRuns
+          SET PR_End = @Stamp, PR_LastUpdate = @Stamp
+          WHERE PRSEQ = @PRSEQ AND PR_End IS NULL
+        `);
+      }
+
+      // ─── Step 3a: RESUME path ─────────────────────────────────────────
+      if (resumable.recordset.length > 0) {
+        const r = resumable.recordset[0];
+
+        // Pick the open detail row if there is one; else open a fresh one.
+        const detReq = new sql.Request(tx);
+        detReq.input("PRSEQ", sql.Int, r.PRSEQ);
+        const openDet = await detReq.query(`
+          SELECT TOP 1 PRDETSEQ, PR_DetStart,
+                 DATEDIFF(SECOND, PR_DetStart, SYSDATETIME()) AS PieceElapsedSec
+          FROM dbo.WUI_ProductionRunDetails
+          WHERE PRSEQ = @PRSEQ AND PR_DetEnd IS NULL
+          ORDER BY PRDETSEQ DESC
+        `);
+
+        let PRDETSEQ, PR_DetStart, pieceElapsedSec;
+        if (openDet.recordset.length > 0) {
+          PRDETSEQ        = openDet.recordset[0].PRDETSEQ;
+          PR_DetStart     = openDet.recordset[0].PR_DetStart;
+          pieceElapsedSec = openDet.recordset[0].PieceElapsedSec;
+        } else {
+          const insDetReq = new sql.Request(tx);
+          insDetReq.input("PRSEQ", sql.Int, r.PRSEQ);
+          const newDet = await insDetReq.query(`
+            INSERT INTO dbo.WUI_ProductionRunDetails (PRSEQ, PR_DetStart, QtyGood, QtyDef)
+            OUTPUT INSERTED.PRDETSEQ AS PRDETSEQ, INSERTED.PR_DetStart AS PR_DetStart
+            VALUES (@PRSEQ, SYSDATETIME(), 0, 0)
+          `);
+          PRDETSEQ        = newDet.recordset[0].PRDETSEQ;
+          PR_DetStart     = newDet.recordset[0].PR_DetStart;
+          pieceElapsedSec = 0;
+        }
+
+        // Touch PR_LastUpdate so subsequent stats queries see this PRSEQ as
+        // currently active. (No-op for PR_TotalTime — only Finish increments.)
+        const touchReq = new sql.Request(tx);
+        touchReq.input("PRSEQ", sql.Int, r.PRSEQ);
+        await touchReq.query(`
+          UPDATE dbo.WUI_ProductionRuns
+          SET PR_LastUpdate = SYSDATETIME()
+          WHERE PRSEQ = @PRSEQ
+        `);
+
+        await tx.commit();
+        return res.json({
+          success: true,
+          data: {
+            PRSEQ: r.PRSEQ,
+            PRDETSEQ,
+            PR_Start: r.PR_Start,
+            PR_DetStart,
+            resumed: true,
+            pieceElapsedSec: pieceElapsedSec ?? 0,
+            TotalGood: r.TotalGood ?? 0,
+            TotalDef:  r.TotalDef ?? 0,
+            PR_TotalSeconds: r.PR_TotalSeconds ?? 0,
+          },
+          message: "Production run resumed",
+        });
+      }
+
+      // ─── Step 3b: FRESH path (no resumable) ──────────────────────────
+      const insRunReq = new sql.Request(tx);
+      insRunReq.input("TRANSAC", sql.Int, TRANSAC);
+      insRunReq.input("OPSEQ", sql.Int, OPSEQ ?? 0);
+      insRunReq.input("OPCODE", sql.VarChar(20), OPCODE);
+      bindNullableInt(insRunReq, "INSEQ", INSEQ);
+      insRunReq.input("MASEQ", sql.Int, MASEQ);
+      insRunReq.input("NOPSEQ", sql.Int, NOPSEQ ?? 0);
+      bindNullableInt(insRunReq, "TJSEQ", TJSEQ);
+      bindNullableInt(insRunReq, "NISEQ", NISEQ);
+      insRunReq.input("EMP_NUM", sql.VarChar(5), EMP_NUM);
+
+      const newRun = await insRunReq.query(`
+        INSERT INTO dbo.WUI_ProductionRuns
+          (TRANSAC, OPSEQ, OPCODE, INSEQ, MASEQ, NOPSEQ, TJSEQ, NISEQ, EMP_NUM,
+           PR_Start, PR_LastUpdate, TotalGood, TotalDef, PR_TotalTime)
+        OUTPUT INSERTED.PRSEQ AS PRSEQ, INSERTED.PR_Start AS PR_Start
+        VALUES
+          (@TRANSAC, @OPSEQ, @OPCODE, @INSEQ, @MASEQ, @NOPSEQ, @TJSEQ, @NISEQ, @EMP_NUM,
+           SYSDATETIME(), SYSDATETIME(), 0, 0, '00:00:00')
+      `);
+      const newPRSEQ = newRun.recordset[0].PRSEQ;
+      const prStart  = newRun.recordset[0].PR_Start;
+
+      const insDetReq = new sql.Request(tx);
+      insDetReq.input("PRSEQ", sql.Int, newPRSEQ);
+      const newDet = await insDetReq.query(`
+        INSERT INTO dbo.WUI_ProductionRunDetails (PRSEQ, PR_DetStart, QtyGood, QtyDef)
+        OUTPUT INSERTED.PRDETSEQ AS PRDETSEQ, INSERTED.PR_DetStart AS PR_DetStart
+        VALUES (@PRSEQ, SYSDATETIME(), 0, 0)
+      `);
+      const newPRDETSEQ = newDet.recordset[0].PRDETSEQ;
+      const prDetStart  = newDet.recordset[0].PR_DetStart;
+
+      await tx.commit();
+
+      res.json({
+        success: true,
+        data: {
+          PRSEQ: newPRSEQ,
+          PRDETSEQ: newPRDETSEQ,
+          PR_Start: prStart,
+          PR_DetStart: prDetStart,
+          resumed: false,
+          pieceElapsedSec: 0,
+          TotalGood: 0,
+          TotalDef: 0,
+          PR_TotalSeconds: 0,
+        },
+        message: "Production run started",
+      });
+    } catch (err) {
+      await tx.rollback();
+      throw err;
+    }
+  })
+);
+
+// ─── POST /PQTT_FinishPiece.cfm ──────────────────────────────────────────────
+app.post(
+  "/PQTT_FinishPiece.cfm",
+  handler(async (req, res) => {
+    const body = req.body || {};
+    const PRSEQ        = nullableInt(body.PRSEQ);
+    const PRDETSEQ     = nullableInt(body.PRDETSEQ);
+    const kind         = String(body.kind ?? "").toUpperCase();
+    const pieceSeconds = nullableInt(body.pieceSeconds);
+    const shiftStart   = body.shiftStart;
+    const shiftEnd     = body.shiftEnd;
+
+    if (!PRSEQ || !PRDETSEQ || pieceSeconds === null || pieceSeconds < 0
+        || (kind !== "GOOD" && kind !== "DEF")) {
+      return res.json({ success: false, data: "", error: "Invalid input." });
+    }
+    const qtyGood = kind === "GOOD" ? 1 : 0;
+    const qtyDef  = kind === "GOOD" ? 0 : 1;
+
+    const pool = await getPoolExt();
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+
+    try {
+      // Step 1: close the supplied PRDETSEQ
+      const closeDetReq = new sql.Request(tx);
+      closeDetReq.input("PRDETSEQ", sql.Int, PRDETSEQ);
+      closeDetReq.input("PRSEQ", sql.Int, PRSEQ);
+      closeDetReq.input("QtyGood", sql.Int, qtyGood);
+      closeDetReq.input("QtyDef", sql.Int, qtyDef);
+      const closeRes = await closeDetReq.query(`
+        UPDATE dbo.WUI_ProductionRunDetails
+        SET PR_DetEnd = SYSDATETIME(), QtyGood = @QtyGood, QtyDef = @QtyDef
+        WHERE PRDETSEQ = @PRDETSEQ AND PRSEQ = @PRSEQ AND PR_DetEnd IS NULL
+      `);
+      if (closeRes.rowsAffected[0] === 0) {
+        await tx.rollback();
+        return res.json({
+          success: false,
+          data: "",
+          error: "PRDETSEQ not found or already closed.",
+        });
+      }
+
+      // Step 2: bump PRSEQ totals
+      const bumpReq = new sql.Request(tx);
+      bumpReq.input("PRSEQ", sql.Int, PRSEQ);
+      bumpReq.input("QtyGood", sql.Int, qtyGood);
+      bumpReq.input("QtyDef", sql.Int, qtyDef);
+      bumpReq.input("Seconds", sql.Int, pieceSeconds);
+      await bumpReq.query(`
+        UPDATE dbo.WUI_ProductionRuns
+        SET TotalGood     = TotalGood + @QtyGood,
+            TotalDef      = TotalDef  + @QtyDef,
+            PR_LastUpdate = SYSDATETIME(),
+            PR_TotalTime  = CAST(DATEADD(SECOND, @Seconds, CAST(PR_TotalTime AS DATETIME)) AS TIME(0))
+        WHERE PRSEQ = @PRSEQ
+      `);
+
+      // Step 3: open new PRDETSEQ
+      const insDetReq = new sql.Request(tx);
+      insDetReq.input("PRSEQ", sql.Int, PRSEQ);
+      const newDet = await insDetReq.query(`
+        INSERT INTO dbo.WUI_ProductionRunDetails (PRSEQ, PR_DetStart, QtyGood, QtyDef)
+        OUTPUT INSERTED.PRDETSEQ AS PRDETSEQ, INSERTED.PR_DetStart AS PR_DetStart
+        VALUES (@PRSEQ, SYSDATETIME(), 0, 0)
+      `);
+      const nextPRDETSEQ = newDet.recordset[0].PRDETSEQ;
+      const newDetStart  = newDet.recordset[0].PR_DetStart;
+
+      // Step 4: read back current PRSEQ + compute shift-scoped stats
+      const curReq = new sql.Request(tx);
+      curReq.input("PRSEQ", sql.Int, PRSEQ);
+      const cur = await curReq.query(`
+        SELECT TRANSAC, NOPSEQ, OPSEQ, MASEQ, INSEQ, NISEQ, EMP_NUM,
+               TotalGood, TotalDef,
+               DATEDIFF(SECOND, '00:00:00', PR_TotalTime) AS TotalSeconds
+        FROM dbo.WUI_ProductionRuns
+        WHERE PRSEQ = @PRSEQ
+      `);
+      const c = cur.recordset[0];
+
+      const statsReq = new sql.Request(tx);
+      statsReq.input("TRANSAC", sql.Int, c.TRANSAC);
+      statsReq.input("NOPSEQ", sql.Int, c.NOPSEQ);
+      statsReq.input("OPSEQ", sql.Int, c.OPSEQ);
+      statsReq.input("MASEQ", sql.Int, c.MASEQ);
+      bindNullableInt(statsReq, "INSEQ", c.INSEQ);
+      bindNullableInt(statsReq, "NISEQ", c.NISEQ);
+      statsReq.input("EMP_NUM", sql.VarChar(5), c.EMP_NUM);
+      // Bind shift bounds as VarChar so the mssql driver doesn't apply a
+      // UTC conversion that would mismatch SQL Server's SYSDATETIME() values
+      // (which are stored as naked server-local datetimes).
+      statsReq.input("ShiftStart", sql.VarChar(30), shiftStart);
+      statsReq.input("ShiftEnd", sql.VarChar(30), shiftEnd);
+      const stats = await statsReq.query(`
+        SELECT
+          ISNULL(SUM(TotalGood), 0) AS sumGood,
+          ISNULL(SUM(TotalDef),  0) AS sumDef,
+          ISNULL(SUM(DATEDIFF(SECOND, '00:00:00', PR_TotalTime)), 0) AS totalSeconds
+        FROM dbo.WUI_ProductionRuns
+        WHERE TRANSAC = @TRANSAC
+          AND NOPSEQ  = @NOPSEQ
+          AND OPSEQ   = @OPSEQ
+          AND MASEQ   = @MASEQ
+          AND ((INSEQ = @INSEQ) OR (INSEQ IS NULL AND @INSEQ IS NULL))
+          AND ((NISEQ = @NISEQ) OR (NISEQ IS NULL AND @NISEQ IS NULL))
+          AND EMP_NUM = @EMP_NUM
+          AND COALESCE(PR_LastUpdate, PR_Start) >= CAST(@ShiftStart AS DATETIME)
+          AND COALESCE(PR_LastUpdate, PR_Start) <  CAST(@ShiftEnd   AS DATETIME)
+      `);
+      const s = stats.recordset[0];
+
+      await tx.commit();
+
+      res.json({
+        success: true,
+        data: {
+          nextPRDETSEQ,
+          PR_DetStart: newDetStart,
+          TotalGood: c.TotalGood,
+          TotalDef: c.TotalDef,
+          TotalSeconds: c.TotalSeconds,
+          stats: {
+            sumGood: s.sumGood,
+            sumDef: s.sumDef,
+            totalSeconds: s.totalSeconds,
+          },
+        },
+        message: "Piece logged",
+      });
+    } catch (err) {
+      await tx.rollback();
+      throw err;
+    }
+  })
+);
+
+// ─── POST /PQTT_CloseRunsForKey.cfm ──────────────────────────────────────────
+// Closes ALL open PRSEQs (and their open detail rows) that match the supplied
+// operation key — regardless of operator. Fired by the client whenever the
+// operation status changes to anything other than PROD so we don't leave
+// runs open across status transitions.
+//
+// Idempotent: an open detail row gets PR_DetEnd = SYSDATETIME() and QtyGood=0,
+// QtyDef=0. The PRSEQ gets PR_End = SYSDATETIME(). Already-closed rows are
+// untouched (guarded by IS NULL).
+app.post(
+  "/PQTT_CloseRunsForKey.cfm",
+  handler(async (req, res) => {
+    const body = req.body || {};
+    const TRANSAC = nullableInt(body.TRANSAC);
+    const NOPSEQ  = nullableInt(body.NOPSEQ);
+    const OPSEQ   = nullableInt(body.OPSEQ);
+    const MASEQ   = nullableInt(body.MASEQ);
+    const INSEQ   = nullableInt(body.INSEQ);
+    const NISEQ   = nullableInt(body.NISEQ);
+
+    if (!TRANSAC || !MASEQ) {
+      return res.json({
+        success: false,
+        data: "",
+        error: "Missing required fields (TRANSAC, MASEQ).",
+      });
+    }
+
+    const pool = await getPoolExt();
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+    try {
+      const findReq = new sql.Request(tx);
+      findReq.input("TRANSAC", sql.Int, TRANSAC);
+      findReq.input("NOPSEQ", sql.Int, NOPSEQ ?? 0);
+      findReq.input("OPSEQ", sql.Int, OPSEQ ?? 0);
+      findReq.input("MASEQ", sql.Int, MASEQ);
+      bindNullableInt(findReq, "INSEQ", INSEQ);
+      bindNullableInt(findReq, "NISEQ", NISEQ);
+
+      const open = await findReq.query(`
+        SELECT PRSEQ
+        FROM dbo.WUI_ProductionRuns
+        WHERE PR_End IS NULL
+          AND TRANSAC = @TRANSAC
+          AND NOPSEQ  = @NOPSEQ
+          AND OPSEQ   = @OPSEQ
+          AND MASEQ   = @MASEQ
+          AND ((INSEQ = @INSEQ) OR (INSEQ IS NULL AND @INSEQ IS NULL))
+          AND ((NISEQ = @NISEQ) OR (NISEQ IS NULL AND @NISEQ IS NULL))
+      `);
+
+      let closedCount = 0;
+      for (const row of open.recordset) {
+        const closeDetReq = new sql.Request(tx);
+        closeDetReq.input("PRSEQ", sql.Int, row.PRSEQ);
+        await closeDetReq.query(`
+          UPDATE dbo.WUI_ProductionRunDetails
+          SET PR_DetEnd = SYSDATETIME(), QtyGood = 0, QtyDef = 0
+          WHERE PRSEQ = @PRSEQ AND PR_DetEnd IS NULL
+        `);
+        const closeRunReq = new sql.Request(tx);
+        closeRunReq.input("PRSEQ", sql.Int, row.PRSEQ);
+        const upd = await closeRunReq.query(`
+          UPDATE dbo.WUI_ProductionRuns
+          SET PR_End = SYSDATETIME(), PR_LastUpdate = SYSDATETIME()
+          WHERE PRSEQ = @PRSEQ AND PR_End IS NULL
+        `);
+        closedCount += upd.rowsAffected[0] || 0;
+      }
+
+      await tx.commit();
+      res.json({ success: true, data: { closedCount } });
+    } catch (err) {
+      await tx.rollback();
+      throw err;
+    }
+  })
+);
+
+// ─── POST /PQTT_Heartbeat.cfm ────────────────────────────────────────────────
+// Lightweight ping the PQTT toolbar fires periodically while mounted, so the
+// server can see this PRSEQ as "actively in use" via a recent PR_LastUpdate.
+// The 5-minute resume window in PQTT_StartRun relies on this — without it, a
+// long stretch with no FinishPiece clicks would let the PRSEQ go stale.
+app.post(
+  "/PQTT_Heartbeat.cfm",
+  handler(async (req, res) => {
+    const PRSEQ = nullableInt(req.body?.PRSEQ);
+    if (!PRSEQ) {
+      return res.json({ success: false, data: "", error: "PRSEQ required." });
+    }
+    const pool = await getPoolExt();
+    await pool
+      .request()
+      .input("PRSEQ", sql.Int, PRSEQ)
+      .query(`
+        UPDATE dbo.WUI_ProductionRuns
+        SET PR_LastUpdate = SYSDATETIME()
+        WHERE PRSEQ = @PRSEQ AND PR_End IS NULL
+      `);
+    res.json({ success: true, data: "" });
+  })
+);
+
+// ─── POST /PQTT_CloseRun.cfm ─────────────────────────────────────────────────
+app.post(
+  "/PQTT_CloseRun.cfm",
+  handler(async (req, res) => {
+    const body = req.body || {};
+    const PRSEQ    = nullableInt(body.PRSEQ);
+    const PRDETSEQ = nullableInt(body.PRDETSEQ);
+
+    if (!PRSEQ) {
+      return res.json({ success: false, data: "", error: "PRSEQ required." });
+    }
+
+    const pool = await getPoolExt();
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+
+    try {
+      if (PRDETSEQ) {
+        const r = new sql.Request(tx);
+        r.input("PRDETSEQ", sql.Int, PRDETSEQ);
+        r.input("PRSEQ", sql.Int, PRSEQ);
+        await r.query(`
+          UPDATE dbo.WUI_ProductionRunDetails
+          SET PR_DetEnd = SYSDATETIME(), QtyGood = 0, QtyDef = 0
+          WHERE PRDETSEQ = @PRDETSEQ AND PRSEQ = @PRSEQ AND PR_DetEnd IS NULL
+        `);
+      }
+
+      // Safety net: close any other open detail rows on this PRSEQ
+      const safetyReq = new sql.Request(tx);
+      safetyReq.input("PRSEQ", sql.Int, PRSEQ);
+      await safetyReq.query(`
+        UPDATE dbo.WUI_ProductionRunDetails
+        SET PR_DetEnd = SYSDATETIME(), QtyGood = 0, QtyDef = 0
+        WHERE PRSEQ = @PRSEQ AND PR_DetEnd IS NULL
+      `);
+
+      const closeRunReq = new sql.Request(tx);
+      closeRunReq.input("PRSEQ", sql.Int, PRSEQ);
+      await closeRunReq.query(`
+        UPDATE dbo.WUI_ProductionRuns
+        SET PR_End = SYSDATETIME(), PR_LastUpdate = SYSDATETIME()
+        WHERE PRSEQ = @PRSEQ AND PR_End IS NULL
+      `);
+
+      await tx.commit();
+      res.json({ success: true, data: "", message: "Production run closed" });
+    } catch (err) {
+      await tx.rollback();
+      throw err;
+    }
+  })
+);
+
+// ─── GET /PQTT_GetStats.cfm ──────────────────────────────────────────────────
+app.get(
+  "/PQTT_GetStats.cfm",
+  handler(async (req, res) => {
+    const TRANSAC    = nullableInt(req.query.TRANSAC);
+    const NOPSEQ     = nullableInt(req.query.NOPSEQ);
+    const OPSEQ      = nullableInt(req.query.OPSEQ);
+    const MASEQ      = nullableInt(req.query.MASEQ);
+    const INSEQ      = nullableInt(req.query.INSEQ);
+    const NISEQ      = nullableInt(req.query.NISEQ);
+    const EMP_NUM    = String(req.query.EMP_NUM ?? "").trim().substring(0, 5);
+    const shiftStart = req.query.shiftStart;
+    const shiftEnd   = req.query.shiftEnd;
+
+    if (!TRANSAC || !MASEQ || !EMP_NUM || !shiftStart || !shiftEnd) {
+      return res.json({
+        success: false,
+        data: "",
+        error: "Missing required query parameters.",
+      });
+    }
+
+    const pool = await getPoolExt();
+    const r = pool.request();
+    r.input("TRANSAC", sql.Int, TRANSAC);
+    r.input("NOPSEQ", sql.Int, NOPSEQ ?? 0);
+    r.input("OPSEQ", sql.Int, OPSEQ ?? 0);
+    r.input("MASEQ", sql.Int, MASEQ);
+    bindNullableInt(r, "INSEQ", INSEQ);
+    bindNullableInt(r, "NISEQ", NISEQ);
+    r.input("EMP_NUM", sql.VarChar(5), EMP_NUM);
+    // Bind shift bounds as VarChar; see comment in /PQTT_FinishPiece.cfm above.
+    r.input("ShiftStart", sql.VarChar(30), shiftStart);
+    r.input("ShiftEnd", sql.VarChar(30), shiftEnd);
+
+    const result = await r.query(`
+      SELECT
+        ISNULL(SUM(TotalGood), 0) AS sumGood,
+        ISNULL(SUM(TotalDef),  0) AS sumDef,
+        ISNULL(SUM(DATEDIFF(SECOND, '00:00:00', PR_TotalTime)), 0) AS totalSeconds
+      FROM dbo.WUI_ProductionRuns
+      WHERE TRANSAC = @TRANSAC
+        AND NOPSEQ  = @NOPSEQ
+        AND OPSEQ   = @OPSEQ
+        AND MASEQ   = @MASEQ
+        AND ((INSEQ = @INSEQ) OR (INSEQ IS NULL AND @INSEQ IS NULL))
+        AND ((NISEQ = @NISEQ) OR (NISEQ IS NULL AND @NISEQ IS NULL))
+        AND EMP_NUM = @EMP_NUM
+        AND COALESCE(PR_LastUpdate, PR_Start) >= CAST(@ShiftStart AS DATETIME)
+        AND COALESCE(PR_LastUpdate, PR_Start) <  CAST(@ShiftEnd   AS DATETIME)
+    `);
+
+    res.json({ success: true, data: result.recordset[0] });
+  })
+);
+
+// ─── GET /PQTT_OpTargets_Get.cfm ─────────────────────────────────────────────
+app.get(
+  "/PQTT_OpTargets_Get.cfm",
+  handler(async (req, res) => {
+    const MACODE  = String(req.query.MACODE ?? "").trim().substring(0, 50);
+    const TRANSAC = nullableInt(req.query.TRANSAC); // → TRSEQ
+    const INSEQ   = nullableInt(req.query.INSEQ);   // → INVENTAIRE
+    const OPSEQ   = nullableInt(req.query.OPSEQ);   // → OPCODE column
+    const NISEQ   = nullableInt(req.query.NISEQ);
+
+    if (!MACODE || !TRANSAC || !INSEQ || !OPSEQ) {
+      return res.json({
+        success: false,
+        data: "",
+        error: "Missing required parameters (MACODE, TRANSAC, INSEQ, OPSEQ).",
+      });
+    }
+
+    const pool = await getPoolExt();
+    const r = pool.request();
+    r.input("MACODE", sql.VarChar(50), MACODE);
+    r.input("TRANSAC", sql.Int, TRANSAC);
+    r.input("INSEQ", sql.Int, INSEQ);
+    r.input("OPSEQ", sql.Int, OPSEQ);
+    bindNullableInt(r, "NISEQ", NISEQ);
+
+    const result = await r.query(`
+      SELECT
+        MACHINE_CODE AS MACODE,
+        OPCODE       AS OPSEQ,
+        NISEQ,
+        TRSEQ        AS TRANSAC,
+        INVENTAIRE   AS INSEQ,
+        PT_LoadTime + PT_OpTime + PT_UnloadTime AS TargetTimePerPiece,
+        PT_Delay,
+        CASE
+          WHEN (PT_LoadTime + PT_OpTime + PT_UnloadTime + PT_Delay) > 0
+          THEN ROUND(3600.0 / (PT_LoadTime + PT_OpTime + PT_UnloadTime + PT_Delay), 2)
+          ELSE NULL
+        END AS TargetAvgPcsHour,
+        CASE
+          WHEN (PT_LoadTime + PT_OpTime + PT_UnloadTime) > 0
+          THEN ROUND(3600.0 / (PT_LoadTime + PT_OpTime + PT_UnloadTime), 2)
+          ELSE NULL
+        END AS TargetAvgPcsHour_Min
+      FROM dbo.WUI_WOPM_Targets
+      WHERE MACHINE_CODE = @MACODE
+        AND TRSEQ        = @TRANSAC
+        AND INVENTAIRE   = @INSEQ
+        AND OPCODE       = @OPSEQ
+        AND ((NISEQ = @NISEQ) OR (NISEQ IS NULL AND @NISEQ IS NULL))
+    `);
+
+    if (result.recordset.length === 1
+        && result.recordset[0].TargetTimePerPiece
+        && result.recordset[0].TargetTimePerPiece > 0) {
+      res.json({ success: true, data: result.recordset[0] });
+    } else {
+      res.json({ success: true, data: null, message: "No target row defined for this operation" });
+    }
+  })
+);
+
 // ─── Start server ────────────────────────────────────────────────────────────
 const PORT = 3001;
 app.listen(PORT, () => {
