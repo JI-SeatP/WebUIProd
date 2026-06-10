@@ -1,0 +1,250 @@
+{
+  "main": {
+    "id": "3d26554bac065ee9",
+    "type": "split",
+    "children": [
+      {
+        "id": "0b9e1f276871fd07",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "0f1d19d77d8b4ba7",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Skills to create.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Skills to create"
+            }
+          },
+          {
+            "id": "8a86a55ac733e73e",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "NEW FEATURES/PROD QUANTITY TARGET TOOL (PQTT)/SQL to delete PQTT test tables.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "SQL to delete PQTT test tables"
+            }
+          }
+        ],
+        "currentTab": 1
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "a3f80bb27e6c1bc3",
+    "type": "split",
+    "children": [
+      {
+        "id": "7e143aeabdc6e671",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "d43fc605232a4e40",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "d3b9713f9b8713c7",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "788226ceddc48132",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 313.50909423828125
+  },
+  "right": {
+    "id": "bde83791f210fb5f",
+    "type": "split",
+    "children": [
+      {
+        "id": "f386a15d459d901a",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "8a7b057c9e865da6",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Create Notes Module/View and Create Notes reference.png",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for View and Create Notes reference"
+            }
+          },
+          {
+            "id": "beb8e28084c930d3",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Create Notes Module/View and Create Notes reference.png",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from View and Create Notes reference"
+            }
+          },
+          {
+            "id": "332b43f4f64f375b",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "a8e7d6c7c0866ca5",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "f7d39ae7643c83bb",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Create Notes Module/View and Create Notes reference.png",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of View and Create Notes reference"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "8a86a55ac733e73e",
+  "lastOpenFiles": [
+    "NEW FEATURES/PROD QUANTITY TARGET TOOL (PQTT)/Production Quantity Target Toolbar (PQTT).md",
+    "NEW FEATURES/PROD QUANTITY TARGET TOOL (PQTT)/SQL to delete PQTT test tables.md",
+    "NEW FEATURES/PROD QUANTITY TARGET TOOL (PQTT)/Files/PQQT_Bar_Location.png",
+    "NEW FEATURES/PRODUCTION TARGETS/Production Targets.md",
+    "NEW FEATURES/PROD QUANTITY TARGET TOOL (PQTT)/Files/WUI_ProdRuns_Tables.png",
+    "Untitled.md",
+    "NEW FEATURES/PROD QUANTITY TARGET TOOL (PQTT)/Files/PQTT_reference_01.png",
+    "NEW FEATURES/PROD QUANTITY TARGET TOOL (PQTT)/Files/PQTT_FieldNames_02.png",
+    "NEW FEATURES/PROD QUANTITY TARGET TOOL (PQTT)/Files/PQQT element style details.png",
+    "Pasted image 20260430103545.png",
+    "PQTT_FieldNames_01.png",
+    "NEW FEATURES/PROD QUANTITY LOG/Files/PQTT_reference.png",
+    "vcut_questionnaire_audit/09_New rules for multiple containers.md",
+    "vcut_questionnaire_audit/08_sm_container_dropdown.md",
+    "Minor Fixes to Do/Minor Fixes to Do.md",
+    "Minor Fixes to Do/imgs/Setup Modal to change_current.png",
+    "Minor Fixes to Do/imgs/Setup modal to change_reference.png",
+    "Skills to create.md",
+    "Minor Fixes to Do/imgs",
+    "Minor Fixes to Do",
+    "Tmux.md",
+    "SOURCE_FEATURES/S004-Work Order Production Quantity Entry Questionnaire-Analysis.md",
+    "SOURCE_FEATURES/S006-HeaderMenu-Analysis.md",
+    "SOURCE_FEATURES/S009-PopupModals-Analysis.md",
+    "SOURCE_FEATURES/S002-WorkOrderList-Analysis.md",
+    "vcut_questionnaire_audit/04_database_interactions.md.tmp.30220.1774981735250",
+    "vcut_questionnaire_audit/07_porting_invariants.md.tmp.30220.1774981715742",
+    "S002_OK_Button_Click_Flow/appendices/open_questions.md",
+    "S002_OK_Button_Click_Flow/appendices/database_object_index.md",
+    "S002_OK_Button_Click_Flow/appendices/file_index.md",
+    "S002_OK_Button_Click_Flow/07_porting_invariants.md",
+    "S002_OK_Button_Click_Flow/06_edge_cases_and_failure_modes.md",
+    "S002_OK_Button_Click_Flow/05_outputs_and_side_effects.md",
+    "S002_OK_Button_Click_Flow/04_database_interactions.md",
+    "S002_OK_Button_Click_Flow/03_execution_paths.md",
+    "S002_OK_Button_Click_Flow/02_triggers_and_inputs.md",
+    "S002_OK_Button_Click_Flow/02_triggers_and_inputs.md.tmp.14872.1774974320928",
+    "S002_OK_Button_Click_Flow/01_state_model.md",
+    "S002_OK_Button_Click_Flow/00_scope_and_entrypoints.md",
+    "S002_OK_Button_Click_Flow/README.md",
+    "S002_OK_Button_Click_Flow/appendices",
+    "S002_OK_Button_Click_Flow",
+    "S002_Order_List_Buttons/appendices/open_questions.md",
+    "S002_Order_List_Buttons/appendices",
+    "S002_Order_List_Buttons",
+    "vcut_questionnaire_audit/02_triggers_and_inputs.md.tmp.30220.1774970164724"
+  ]
+}

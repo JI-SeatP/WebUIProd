@@ -113,12 +113,15 @@ export function QuestionnairePage() {
   // Calls ajouteSM.cfm — creates/updates SM and recalculates material output.
   // The backend reads TJQTEDEFECT directly from TEMPSPROD (already updated by addDefect/removeDefect),
   // so we only need to pass the current goodQty from the UI.
-  const handleGoodQtyOk = useCallback(async () => {
+  // overrideListeTjseq lets a caller (e.g. onItemAdded) pass the freshly-fetched
+  // list directly, bypassing stale closure state from React's async setState.
+  const handleGoodQtyOk = useCallback(async (overrideListeTjseq?: string) => {
     setSmLoading(true);
     try {
       const nopseq = (operation as unknown as Record<string, unknown>)?.NOPSEQ ?? 0;
       const fmc = operation?.FMCODE ?? "";
       const vcutOp = operation?.NO_INVENTAIRE === "VCUT" || operation?.PRODUIT_CODE === "VCUT" || fmc === "TableSaw";
+      const effectiveListeTjseq = overrideListeTjseq ?? vcutListeTjseq;
       const res = await apiPost<{
         smnotrans: string;
         smseq: number;
@@ -132,7 +135,7 @@ export function QuestionnairePage() {
         qteBonne: Number(goodQty) || 0,
         smnotrans,
         // VCUT-specific params for SM batch calculation
-        ...(vcutOp ? { isVcut: true, listeTjseq: vcutListeTjseq } : {}),
+        ...(vcutOp ? { isVcut: true, listeTjseq: effectiveListeTjseq } : {}),
       });
       if (res.success && res.data) {
         setSmnotrans(res.data.smnotrans || "");
@@ -424,6 +427,7 @@ export function QuestionnairePage() {
                   onItemAdded={async () => {
                     // Refresh produced items, marking new entries
                     const existingTrnos = new Set(vcutProducedItems.map(p => p.epfTrno));
+                    let freshListeTjseq: string | undefined;
                     try {
                       const res = await apiGet<{ producedItems: ProducedItem[]; listeTjseq?: string; listeEpfSeq?: string }>(
                         `getVcutComponents.cfm?transac=${operation.TRANSAC}&nopseq=${(operation as unknown as Record<string, unknown>).NOPSEQ}&copmachine=${copmachine}`
@@ -434,12 +438,16 @@ export function QuestionnairePage() {
                           isNew: !existingTrnos.has(p.epfTrno),
                         }));
                         setVcutProducedItems(items);
-                        if (res.data.listeTjseq) setVcutListeTjseq(res.data.listeTjseq);
+                        if (res.data.listeTjseq) {
+                          setVcutListeTjseq(res.data.listeTjseq);
+                          freshListeTjseq = res.data.listeTjseq;
+                        }
                         if (res.data.listeEpfSeq) setVcutListeEpfSeq(res.data.listeEpfSeq);
                       }
                     } catch { /* ignore */ }
-                    // Trigger SM recalc via existing ajouteSM flow (VCUT path)
-                    handleGoodQtyOk();
+                    // Pass the fresh list directly — setVcutListeTjseq above is async, so reading
+                    // vcutListeTjseq from handleGoodQtyOk's closure would still see the old value.
+                    handleGoodQtyOk(freshListeTjseq);
                   }}
                 />
 

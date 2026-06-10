@@ -1,7 +1,9 @@
-import { createContext, useContext, useReducer, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useReducer, type ReactNode } from "react";
 import type { Employee } from "@/types/employee";
 import type { Department } from "@/types/department";
 import type { Machine } from "@/types/machine";
+
+const STORAGE_KEY = "webui:session";
 
 export interface ActiveOperation {
   TRANSAC: number;
@@ -36,6 +38,18 @@ const initialState: SessionState = {
   activeOperation: null,
 };
 
+function loadInitialState(): SessionState {
+  if (typeof sessionStorage === "undefined") return initialState;
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return initialState;
+    const parsed = JSON.parse(raw) as Partial<SessionState>;
+    return { ...initialState, ...parsed };
+  } catch {
+    return initialState;
+  }
+}
+
 function sessionReducer(state: SessionState, action: SessionAction): SessionState {
   switch (action.type) {
     case "LOGIN":
@@ -45,6 +59,7 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         employee: action.payload.employee,
       };
     case "LOGOUT":
+      try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
       return { ...initialState };
     case "SET_DEPARTMENT":
       return { ...state, department: action.payload.department ?? null };
@@ -67,7 +82,14 @@ interface SessionContextValue {
 const SessionContext = createContext<SessionContextValue | null>(null);
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(sessionReducer, initialState);
+  const [state, dispatch] = useReducer(sessionReducer, undefined, loadInitialState);
+
+  useEffect(() => {
+    if (state.isAuthenticated) {
+      try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* ignore */ }
+    }
+  }, [state]);
+
   return (
     <SessionContext.Provider value={{ state, dispatch }}>
       {children}

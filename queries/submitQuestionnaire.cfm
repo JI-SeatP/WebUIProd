@@ -216,11 +216,16 @@
 		<!--- Completion threshold: QTE_FORCEE (I2), NOT DCQTE_A_FAB --->
 		<cfset LaQteTotale = Val(qOperation.QTE_FORCEE)>
 
-		<!--- Current total produced across batch --->
+		<!--- Current total produced — match old SW exactly (QuestionnaireSortie.cfc:1088-1096):
+		     SUM over all PROD rows for (TRANSAC, NOPSEQ), NOT MAX over the TJSEQ list.
+		     The TJSEQ-list + PROD filter form returned 0 once those rows had been flipped
+		     to COMP earlier in the same request, falsely tripping the threshold gate and
+		     setting TRSTATUTITEM=1 — making the order vanish from vEcransProduction. --->
 		<cfquery name="qTotalProd" datasource="#datasourcePrimary#">
-			SELECT MAX(ISNULL(TJQTEPROD, 0)) AS LeTJQTEPROD
+			SELECT ISNULL(SUM(TJQTEPROD), 0) AS LeTJQTEPROD
 			FROM TEMPSPROD
-			WHERE TJSEQ IN (<cfqueryparam cfsqltype="CF_SQL_INTEGER" list="true" value="#listeTjseq#">)
+			WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+			AND cNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
 			AND MODEPROD_MPCODE = 'PROD'
 		</cfquery>
 		<cfset LeTJQTEPROD = Val(qTotalProd.LeTJQTEPROD)>
@@ -231,6 +236,19 @@
 			<!--- ============================================================ --->
 			<!--- VCUT-COMPLETE block (QuestionnaireSortie.cfc:1186-1290) --->
 			<!--- ============================================================ --->
+
+			<!--- Resolve the COMP MODEPROD FK once — used by Steps 9c (TEMPSPROD bulk
+			     update) and 9d (INVENTAIRE_C=10525 hardcode scoping). --->
+			<cfquery name="qCompMp" datasource="#datasourcePrimary#">
+				SELECT TOP 1 MPSEQ, MPDESC_P, MPDESC_S FROM MODEPROD WHERE MPCODE = 'COMP'
+			</cfquery>
+			<cfset compMpseq = Val(qCompMp.MPSEQ)>
+			<cfset compDescP = "">
+			<cfset compDescS = "">
+			<cfif qCompMp.RecordCount GT 0>
+				<cfset compDescP = qCompMp.MPDESC_P>
+				<cfset compDescS = qCompMp.MPDESC_S>
+			</cfif>
 
 			<!--- Step 9a: Per-EPF — update cNOMENCOP with quantities (I9 step 1) --->
 			<cfif Len(listeEpfSeq) GT 0>
@@ -259,36 +277,45 @@
 								AND INVENTAIRE_P = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(qTpForEpf.INVENTAIRE_C)#">
 							</cfquery>
 
-							<!--- Step 9b: Update PL_RESULTAT PR_TERMINE (I9 step 2) --->
+							<!--- Step 9b: Update PL_RESULTAT PR_TERMINE for the current NOPSEQ only.
+							     Old SW (QuestionnaireSortie.cfc:1245-1248) writes a single-NOPSEQ
+							     filter, not a subquery across all cNOMENCOPs sharing INVENTAIRE_P
+							     — that broader form would mark sibling/downstream operations as
+							     terminated prematurely. --->
 							<cfquery datasource="#datasourcePrimary#">
 								UPDATE PL_RESULTAT SET PR_TERMINE = 1
-								WHERE CNOMENCOP IN (
-									SELECT NOPSEQ FROM cNOMENCOP
-									WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
-									AND INVENTAIRE_P = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(qTpForEpf.INVENTAIRE_C)#">
-								)
+								WHERE cNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
 							</cfquery>
 						</cfif>
 					</cfif>
 				</cfloop>
 			</cfif>
 
-			<!--- Step 9c: All ListeTJSEQ — set COMP, TJPROD_TERMINE (I9 step 3) --->
+			<!--- Step 9c: All ListeTJSEQ — set COMP + denormalized cols + TJPROD_TERMINE.
+			     Old SW (QuestionnaireSortie.cfc:1250-1264) updates MODEPROD (FK), MODEPROD_MPCODE,
+			     MODEPROD_MPDESC_P/S, TJFINDATE, TJPROD_TERMINE. The new SW was missing the FK and
+			     description columns. --->
 			<cfquery datasource="#datasourcePrimary#">
 				UPDATE TEMPSPROD
-				SET MODEPROD_MPCODE = 'COMP',
+				SET MODEPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#compMpseq#">,
+					MODEPROD_MPCODE = 'COMP',
+					MODEPROD_MPDESC_P = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="60" value="#compDescP#">,
+					MODEPROD_MPDESC_S = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="60" value="#compDescS#">,
 					TJFINDATE = GETDATE(),
 					TJPROD_TERMINE = 1
 				WHERE TJSEQ IN (<cfqueryparam cfsqltype="CF_SQL_INTEGER" list="true" value="#listeTjseq#">)
 			</cfquery>
 
-			<!--- Step 9d: Hardcode — INVENTAIRE_C = 10525 (I9 step 4, audit E1) --->
-			<!--- NOTE: This is a legacy hardcode for the VCUT parent material.
-			      May be environment-specific — see audit Q2. --->
+			<!--- Step 9d: Hardcode — INVENTAIRE_C = 10525 (legacy VCUT parent material).
+			     Old SW (QuestionnaireSortie.cfc:1267-1274) constrains this to the current
+			     (TRANSAC, NOPSEQ) and the COMP MODEPROD only — the new SW was missing those
+			     two filters, so it touched rows belonging to sibling operations as well. --->
 			<cfquery datasource="#datasourcePrimary#">
 				UPDATE TEMPSPROD SET TJQTEPROD = 1
-				WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
-				AND INVENTAIRE_C = 10525
+				WHERE INVENTAIRE_C = 10525
+				AND TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+				AND cNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
+				AND MODEPROD = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#compMpseq#">
 			</cfquery>
 
 			<!--- Step 9e: Close transaction (I9 step 5) --->

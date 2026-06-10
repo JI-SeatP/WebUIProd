@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useSession } from "@/context/SessionContext";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { OperationHeader } from "./components/OperationHeader";
@@ -29,7 +29,17 @@ export function OperationDetailsPage() {
   const { transac, copmachine, nopseq } = useParams<{ transac: string; copmachine: string; nopseq: string }>();
   const { state } = useSession();
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { operation, loading, error, refetch } = useOperation(transac!, copmachine!, nopseq ?? "0");
+
+  // If the lookup fails because the operation has been completed (Autofab flipped
+  // vEcransProduction.OPERATION to 'FINSH'), bounce back to the orders list rather
+  // than showing a hard error screen. Matches the post-COMP UX in the old software.
+  useEffect(() => {
+    if (!loading && (error || !operation) && error?.toLowerCase().includes("not found")) {
+      navigate("/orders", { replace: true });
+    }
+  }, [loading, error, operation, navigate]);
   const [localStatus, setLocalStatus] = useState<string | null>(null);
 
   // VCUT-specific data — fetched only when operation is VCUT

@@ -59,7 +59,17 @@ export function useQuestionnaireSubmit() {
         const res = await apiPost("submitQuestionnaire.cfm", payload as unknown as Record<string, unknown>);
         if (res.success) {
           toast.success(t("questionnaire.submitSuccess"));
-          navigate(`/orders/${payload.transac}/operation/${payload.copmachine ?? 0}/${payload.nopseq ?? 0}`);
+          // After COMP, the operation is gone from the worker's queue (Autofab flips
+          // vEcransProduction.OPERATION to 'FINSH' asynchronously). Going back to the
+          // operation detail screen would race that flip and often render a hard error.
+          // Send the worker to the orders list instead — same end-state as the old SW
+          // once Autofab catches up. STOP keeps the worker on the operation page so
+          // they can resume.
+          if (payload.type === "comp") {
+            navigate("/orders");
+          } else {
+            navigate(`/orders/${payload.transac}/operation/${payload.copmachine ?? 0}/${payload.nopseq ?? 0}`);
+          }
         } else {
           toast.error(res.error ?? t("questionnaire.submitError"));
         }

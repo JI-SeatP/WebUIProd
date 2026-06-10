@@ -17,10 +17,17 @@
 	<cfif isProduction>
 		<cfset datasourcePrimary = "AF_SEATPLY">
 		<cfset datasourceExt = "AF_SEATPLY_EXT">
+		<cfset dbPrimary = "AF_SEATPLY">
 	<cfelse>
 		<cfset datasourcePrimary = "TS_SEATPL">
 		<cfset datasourceExt = "TS_SEATPL_EXT">
+		<cfset dbPrimary = "TS_SEATPL">
 	</cfif>
+
+	<!--- Material warning: set when total available skid qty < QTE_CIBLE needed --->
+	<cfset materialWarning = "">
+	<!--- Container options for SKID dropdown — populated near end of request --->
+	<cfset containerOptions = []>
 
 	<!--- Include AutoFab SOAP utility --->
 	<cfinclude template="lib/autofabSoap.cfm">
@@ -240,6 +247,112 @@
 			</cfif>
 		</cfif>
 
+		<!--- 8. VCUT smart per-skid distribution (replaces old SW uniform-qty-per-row).
+		     For each SM material line, compute QTE_CIBLE via BOM ratio, then distribute
+		     across available skids ordered by CON_SEQ ASC (greedy first-fit). Writes one
+		     DET_TRANS row per consumed skid via Nba_Insert_Det_Trans_Avec_Contenant.
+		     If total skid availability < QTE_CIBLE, sets materialWarning. --->
+		<cfif Len(SmNoTransCible) GT 0 AND Len(listeTjseq) GT 0>
+			<!--- Get all SM material lines from DET_TRANS --->
+			<cfquery name="qDetLines" datasource="#datasourcePrimary#">
+				SELECT DT.DTRSEQ, DT.TRANSAC, DT.ENTREPOT, DT.CONTENANT, DT.DTRQTE,
+					T.INVENTAIRE AS T_INVENTAIRE, DT.TRANSAC_TRNO
+				FROM DET_TRANS DT
+				INNER JOIN TRANSAC T ON DT.TRANSAC = T.TRSEQ
+				WHERE DT.TRANSAC_TRNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(SmNoTransCible, 9)#">
+			</cfquery>
+
+			<cfloop query="qDetLines">
+				<cfset matInv = Val(qDetLines.T_INVENTAIRE)>
+				<cfset detTrseq = Val(qDetLines.TRANSAC)>
+				<cfset detEntrepot = Val(qDetLines.ENTREPOT)>
+
+				<!--- 8.1 Compute QTE_CIBLE via BOM ratio (calculeQteSMQS lines 1081-1115) --->
+				<cfquery name="qQteCible" datasource="#datasourcePrimary#">
+					SELECT SUM(
+						(ISNULL(TP.TJQTEPROD, 0) + ISNULL(TP.TJQTEDEFECT, 0))
+						* ISNULL(RATIO.NIQTE, 0)
+					) AS QTE_CIBLE
+					FROM TEMPSPROD TP
+					INNER JOIN cNOMENCOP COP ON COP.TRANSAC = TP.TRANSAC AND COP.INVENTAIRE_P = TP.INVENTAIRE_C
+					OUTER APPLY (
+						SELECT MAX(CN.NIQTE) AS NIQTE
+						FROM cNOMENCLATURE CN
+						WHERE CN.NISEQ_PERE = COP.CNOMENCLATURE
+							AND CN.INVENTAIRE_M = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#matInv#">
+					) RATIO
+					WHERE TP.TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+						AND TP.SMNOTRANS = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(SmNoTransCible, 9)#">
+						AND TP.TJSEQ IN (<cfqueryparam cfsqltype="CF_SQL_INTEGER" list="true" value="#listeTjseq#">)
+						AND TP.MODEPROD_MPCODE = 'PROD'
+				</cfquery>
+
+				<cfset qteCible = Val(qQteCible.QTE_CIBLE)>
+				<cfif qteCible LTE 0>
+					<!--- Skip when ratio not resolved — preserve existing DTRQTE --->
+					<cfcontinue>
+				</cfif>
+
+				<!--- 8.2 Fetch available skids ordered by CON_SEQ ASC (dropdown order) --->
+				<cfquery name="qSkids" datasource="#datasourceExt#">
+					SELECT v.CONTENANT_CON_NUMERO, c.CON_SEQ AS conSeq,
+						v.DTRQTE AS remainingQty, v.ENTREPOT
+					FROM VSP_BonTravail_VeneerReserve v
+					LEFT OUTER JOIN #dbPrimary#.dbo.CONTENANT c ON v.CONTENANT_CON_NUMERO = c.CON_NUMERO
+					WHERE v.TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+					ORDER BY c.CON_SEQ ASC
+				</cfquery>
+
+				<!--- 8.3 Greedy first-fit allocation across skids --->
+				<cfset remaining = qteCible>
+				<cfset totalAvailable = 0>
+				<cfset allocations = []>
+				<cfloop query="qSkids">
+					<cfset skidQty = Val(qSkids.remainingQty)>
+					<cfif Val(qSkids.conSeq) EQ 0 OR skidQty LTE 0>
+						<cfcontinue>
+					</cfif>
+					<cfset totalAvailable = totalAvailable + skidQty>
+					<cfif remaining LTE 0>
+						<cfcontinue>
+					</cfif>
+					<cfset take = Min(remaining, skidQty)>
+					<cfset alloc = StructNew()>
+					<cfset alloc["conSeq"] = Val(qSkids.conSeq)>
+					<cfset alloc["conNumero"] = qSkids.CONTENANT_CON_NUMERO>
+					<cfset alloc["qty"] = take>
+					<cfset skidEnt = Val(qSkids.ENTREPOT)>
+					<cfif skidEnt EQ 0>
+						<cfset skidEnt = detEntrepot>
+					</cfif>
+					<cfset alloc["entrepot"] = skidEnt>
+					<cfset ArrayAppend(allocations, alloc)>
+					<cfset remaining = remaining - take>
+				</cfloop>
+
+				<cfif remaining GT 0>
+					<cfset materialWarning = "Not enough material. Only " & totalAvailable & " of " & qteCible & " needed are available.">
+				</cfif>
+
+				<!--- 8.4 Write DET_TRANS rows — one per consumed skid --->
+				<cfloop array="#allocations#" index="alloc">
+					<cfstoredproc procedure="Nba_Insert_Det_Trans_Avec_Contenant" datasource="#datasourcePrimary#">
+						<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#detTrseq#">
+						<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#matInv#">
+						<cfprocparam type="in" cfsqltype="CF_SQL_VARCHAR" value="">
+						<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#alloc.entrepot#">
+						<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="#alloc.qty#">
+						<cfprocparam type="in" cfsqltype="CF_SQL_FLOAT" value="1">
+						<cfprocparam type="in" cfsqltype="CF_SQL_INTEGER" value="#alloc.conSeq#">
+						<cfprocparam type="in" cfsqltype="CF_SQL_VARCHAR" value="WebUI New">
+						<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="spSqlErreur">
+						<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="spError">
+						<cfprocparam type="out" cfsqltype="CF_SQL_INTEGER" variable="spDtrseq">
+					</cfstoredproc>
+				</cfloop>
+			</cfloop>
+		</cfif>
+
 	<cfelse>
 		<!--- ============================================================ --->
 		<!--- NON-VCUT SM PATH (standard) --->
@@ -307,22 +420,29 @@
 		</cfif>
 	</cfif>
 
-	<!--- Query material output rows for display --->
+	<!--- Query material output rows for display.
+	     Mirrors api.cjs Step 7 — includes CONTENANT/CONTENANT_CON_NUMERO so the
+	     SKID dropdown can show the currently-selected container per row. --->
 	<cfset materials = []>
 	<cfif Len(SmNoTransCible) GT 0>
 		<cfquery name="qMaterials" datasource="#datasourcePrimary#">
-			SELECT dt.DTRSEQ, dt.DTRQTE, dt.TRANSAC AS DT_TRSEQ,
-				i.INNOINV AS code, i.INDESC1 AS description_P, i.INDESC2 AS description_S,
-				u.UNDESC_P AS unit_P, u.UNDESC_S AS unit_S,
-				t.TRQTETRANSAC, t.TRQTEUNINV, t.ENTREPOT AS ent,
-				e.ENCODE AS warehouse, e.ENDESC_P AS warehouse_P, e.ENDESC_S AS warehouse_S
-			FROM DET_TRANS dt
-			INNER JOIN TRANSAC t ON dt.TRANSAC = t.TRSEQ
-			LEFT JOIN INVENTAIRE i ON dt.INVENTAIRE = i.INSEQ
-			LEFT JOIN UNITE u ON i.UNITE = u.UNSEQ
-			LEFT JOIN ENTREPOT e ON t.ENTREPOT = e.ENSEQ
-			WHERE t.TRNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(SmNoTransCible, 9)#">
-			ORDER BY dt.DTRSEQ
+			SELECT DT.DTRSEQ, DT.DTRQTE, DT.CONTENANT, DT.CONTENANT_CON_NUMERO,
+				DT.ENTREPOT_ENCODE, DT.ENTREPOT_ENDESC_P, DT.ENTREPOT_ENDESC_S,
+				T.INVENTAIRE_INNOINV AS code,
+				T.INVENTAIRE_INDESC1 AS description_P, T.INVENTAIRE_INDESC2 AS description_S,
+				T.UNITE_INV_UNDESC1 AS unit_P, T.UNITE_INV_UNDESC2 AS unit_S,
+				ABS(DETTRANS.DTRQTE_TRANSACTION) AS correctedQty
+			FROM DET_TRANS DT
+			INNER JOIN TRANSAC T ON DT.TRANSAC = T.TRSEQ
+			OUTER APPLY (
+				SELECT DT.DTRQTE_INV + ISNULL((
+					SELECT SUM(DTCOR.DTRQTE_INV) FROM DET_TRANS DTCOR
+					INNER JOIN TRANSAC TR ON TR.TRSEQ = DTCOR.TRANSAC
+					WHERE DTCOR.DTRSEQ_PERE = DT.DTRSEQ AND DTCOR.TRANSAC_TRNO_EQUATE = 14
+				), 0) AS DTRQTE_TRANSACTION
+			) DETTRANS
+			WHERE DT.TRANSAC_TRNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(SmNoTransCible, 9)#">
+			ORDER BY T.INVENTAIRE_INNOINV
 		</cfquery>
 
 		<cfloop query="qMaterials">
@@ -334,13 +454,71 @@
 			<cfset mat["unit_P"] = qMaterials.unit_P>
 			<cfset mat["unit_S"] = qMaterials.unit_S>
 			<cfset mat["originalQty"] = Val(qMaterials.DTRQTE)>
-			<cfset mat["correctedQty"] = Val(qMaterials.TRQTETRANSAC)>
-			<cfset mat["warehouse"] = qMaterials.warehouse>
-			<cfset mat["warehouse_P"] = qMaterials.warehouse_P>
-			<cfset mat["warehouse_S"] = qMaterials.warehouse_S>
-			<cfset mat["container"] = "">
+			<cfif Len(qMaterials.correctedQty)>
+				<cfset mat["correctedQty"] = Val(qMaterials.correctedQty)>
+			<cfelse>
+				<cfset mat["correctedQty"] = Val(qMaterials.DTRQTE)>
+			</cfif>
+			<cfset mat["warehouse"] = qMaterials.ENTREPOT_ENCODE>
+			<cfset mat["warehouse_P"] = qMaterials.ENTREPOT_ENDESC_P>
+			<cfset mat["warehouse_S"] = qMaterials.ENTREPOT_ENDESC_S>
+			<cfset mat["container"] = qMaterials.CONTENANT_CON_NUMERO>
+			<cfset mat["conSeq"] = Val(qMaterials.CONTENANT)>
 			<cfset ArrayAppend(materials, mat)>
 		</cfloop>
+	</cfif>
+
+	<!--- Container options for SKID dropdown (SortieMateriel.cfc:553-605).
+	     VCUT path: VSP_BonTravail_VeneerReserve on EXT datasource (with remainingQty for distribution).
+	     Fallback: DET_TRANS containers for the SM transaction. --->
+	<cfif Len(SmNoTransCible) GT 0>
+		<cftry>
+			<cfquery name="qVcutContainers" datasource="#datasourceExt#">
+				SELECT DISTINCT v.CONTENANT_CON_NUMERO AS conNumero, c.CON_SEQ AS conSeq,
+					v.DTRQTE AS remainingQty, v.ENTREPOT
+				FROM VSP_BonTravail_VeneerReserve v
+				LEFT OUTER JOIN #dbPrimary#.dbo.CONTENANT c ON v.CONTENANT_CON_NUMERO = c.CON_NUMERO
+				WHERE v.TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
+				ORDER BY c.CON_SEQ ASC
+			</cfquery>
+
+			<cfloop query="qVcutContainers">
+				<cfif Val(qVcutContainers.conSeq) NEQ 0>
+					<cfset opt = StructNew("ordered")>
+					<cfset opt["conSeq"] = Val(qVcutContainers.conSeq)>
+					<cfset opt["conNumero"] = qVcutContainers.conNumero>
+					<cfset opt["remainingQty"] = Val(qVcutContainers.remainingQty)>
+					<cfset opt["entrepot"] = Val(qVcutContainers.ENTREPOT)>
+					<cfset ArrayAppend(containerOptions, opt)>
+				</cfif>
+			</cfloop>
+
+			<cfcatch type="any">
+				<!--- If EXT view fails, fall through to DET_TRANS fallback below --->
+			</cfcatch>
+		</cftry>
+
+		<!--- Fallback when no VCUT container options resolved --->
+		<cfif ArrayLen(containerOptions) EQ 0>
+			<cftry>
+				<cfquery name="qFallbackContainers" datasource="#datasourcePrimary#">
+					SELECT DISTINCT DT.CONTENANT AS conSeq, DT.CONTENANT_CON_NUMERO AS conNumero,
+						DT.DTRQTE AS remainingQty, DT.ENTREPOT
+					FROM DET_TRANS DT
+					WHERE DT.TRANSAC_TRNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(SmNoTransCible, 9)#">
+						AND DT.CONTENANT IS NOT NULL AND DT.CONTENANT <> 0
+				</cfquery>
+				<cfloop query="qFallbackContainers">
+					<cfset opt = StructNew("ordered")>
+					<cfset opt["conSeq"] = Val(qFallbackContainers.conSeq)>
+					<cfset opt["conNumero"] = qFallbackContainers.conNumero>
+					<cfset opt["remainingQty"] = Val(qFallbackContainers.remainingQty)>
+					<cfset opt["entrepot"] = Val(qFallbackContainers.ENTREPOT)>
+					<cfset ArrayAppend(containerOptions, opt)>
+				</cfloop>
+				<cfcatch type="any"></cfcatch>
+			</cftry>
+		</cfif>
 	</cfif>
 
 	<!--- Build response --->
@@ -348,6 +526,12 @@
 	<cfset data["smnotrans"] = SmNoTransCible>
 	<cfset data["smseq"] = smseqResult>
 	<cfset data["materials"] = materials>
+	<cfset data["containerOptions"] = containerOptions>
+	<cfif Len(materialWarning) GT 0>
+		<cfset data["materialWarning"] = materialWarning>
+	<cfelse>
+		<cfset data["materialWarning"] = "">
+	</cfif>
 
 	<cfset response["success"] = true>
 	<cfset response["data"] = data>
