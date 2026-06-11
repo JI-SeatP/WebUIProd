@@ -183,11 +183,16 @@ export function QuestionnairePage() {
             return prev;
           });
         }
+      } else {
+        toast.error(res.error || t("questionnaire.smError"), { duration: 6000 });
       }
+    } catch (err) {
+      console.error("[GoodQtyOk] ajouteSM failed:", err);
+      toast.error(t("questionnaire.smError"), { duration: 6000 });
     } finally {
       setSmLoading(false);
     }
-  }, [transac, copmachine, operation, goodQty, smnotrans, vcutListeTjseq, state.employee]);
+  }, [transac, copmachine, operation, goodQty, smnotrans, vcutListeTjseq, state.employee, t]);
 
   // Write-as-you-go: container dropdown change → updates DET_TRANS, refreshes materials
   // Exact replica of SortieMateriel.cfc:1467-1512 (CorrigeDetailSM)

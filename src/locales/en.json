@@ -183,6 +183,7 @@
     "employeeRequired": "Employee code is required",
     "causeRequired": "Stop cause is required",
     "smRequired": "Press OK on the good quantity first to create the material output before confirming",
+    "smError": "Material output could not be created — the AutoFab service may be unavailable. Try again or contact IT.",
     "addProduct": "Add Product",
     "confirmQuantities": "Confirm Quantities",
     "materialOutputHint": "Enter a quantity and press OK to see material output",
