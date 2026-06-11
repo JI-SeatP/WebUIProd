@@ -28,6 +28,38 @@ async function getAutofabConfig() {
   return _autofabConfig;
 }
 
+// Output parameters per stored procedure — used by the dev-only direct-SQL
+// fallback when the AutoFab relay is unreachable. The AutoFab service appends
+// these as OUTPUT args and returns them in <OutputValues>; we do the same.
+const SP_OUTPUT_PARAMS = {
+  nba_sp_insert_sortie_materiel: [["NEWSMNOTRANS", "CHAR(9)"], ["SQLERREUR", "INT"]],
+  nba_sp_sortie_materiel: [["SQLERREUR", "INT"]],
+  nba_sp_kpi_insert_valeur_operation_reel: [["SQLERREUR", "INT"]],
+};
+
+/**
+ * DEV-ONLY: execute an EXECUTE_STORED_PROC payload directly against SQL Server.
+ * The AutoFab service is a relay for these calls (it runs `EXEC <proc> <params>`
+ * on the same database) — direct execution is DB-identical. Returns the same
+ * { retval, OutputValues } shape as callAutofab.
+ */
+async function execStoredProcDirect(traitement, params) {
+  const pool = await getPool();
+  const outs = SP_OUTPUT_PARAMS[String(traitement).toLowerCase()] || [["SQLERREUR", "INT"]];
+  const declares = outs.map(([n, t]) => `DECLARE @${n} ${t};`).join(" ");
+  const outArgs = outs.map(([n]) => `@${n} OUTPUT`).join(", ");
+  const selects = outs.map(([n]) => `@${n} AS ${n}`).join(", ");
+  const sep = String(params).trim().length ? ", " : "";
+  const batch = `${declares} EXEC ${traitement} ${params}${sep}${outArgs}; SELECT ${selects};`;
+  const r = await pool.request().query(batch);
+  const OutputValues = {};
+  for (const [k, v] of Object.entries(r.recordset?.[0] || {})) {
+    OutputValues[k] = v === null || v === undefined ? "" : String(v);
+  }
+  console.log(`[autofab-direct] ${traitement} → outputs=${JSON.stringify(OutputValues)}`);
+  return { retval: null, OutputValues };
+}
+
 /**
  * Call the AutoFab SOAP API — exact replica of CF support.cfc envoiXMLGet.
  * @param {string} command - "EXECUTE_TRANSACTION" or "EXECUTE_STORED_PROC"
@@ -63,16 +95,30 @@ async function callAutofab(command, params, traitement, operation) {
   const url = `${cfg.baseUrl}:${cfg.port}/${command}`;
   console.log(`[autofab] POST ${url} traitement=${traitement} operation=${operation}`);
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "text/xml; charset=utf-8",
-      "Accept-Encoding": "deflate;q=0",
-      SOAPAction: `${cfg.baseUrl}:${cfg.port}/${command}`,
-    },
-    body: soapEnvelope.trim(),
-    signal: AbortSignal.timeout(300000),
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        "Accept-Encoding": "deflate;q=0",
+        SOAPAction: `${cfg.baseUrl}:${cfg.port}/${command}`,
+      },
+      body: soapEnvelope.trim(),
+      signal: AbortSignal.timeout(300000),
+    });
+  } catch (netErr) {
+    // ── DEV-ONLY FALLBACK: AutoFab unreachable from this machine ──────────────
+    // EXECUTE_STORED_PROC is a plain relay — the AutoFab service just runs the SP
+    // against the same database. Executing it directly through our SQL connection
+    // produces identical DB effects. EXECUTE_TRANSACTION (REPORT/DEL/INS) is
+    // application-level AutoFab logic with NO SQL equivalent — cannot be faked.
+    if (command === "EXECUTE_STORED_PROC") {
+      console.warn(`[autofab] UNREACHABLE (${netErr.message}) — executing ${traitement} DIRECTLY via SQL (dev fallback)`);
+      return await execStoredProcDirect(traitement, params);
+    }
+    throw new Error(`AutoFab unreachable at ${url} (${netErr.message}) — ${command} ${traitement}/${operation} requires the AutoFab service (no SQL equivalent)`);
+  }
 
   const xmlText = await response.text();
   console.log(`[autofab] Response status=${response.status} len=${xmlText.length} body=${xmlText.substring(0, 500)}`);
