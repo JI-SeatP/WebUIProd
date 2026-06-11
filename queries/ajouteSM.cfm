@@ -204,7 +204,8 @@
 		<!--- 4. Branch: no existing SM — create via Nba_Sp_Insert_Sortie_Materiel --->
 		<cfif Len(SmNoTransCible) EQ 0>
 			<!--- InsertSortieMateriel (SortieMateriel.cfc:2284) --->
-			<cfset insertSmParams = "#TRITEM#,'#Left(CONOTRANS, 9)#','#dateStr#','#timeStr#',#TotalQteVCUT#,'#Left(empName, 50)#','','Ecran de production pour SM',0,'0'">
+			<!--- HEURE is 5-char HH:nn (old SM:2281 TimeFormat 'HH:nn') --->
+			<cfset insertSmParams = "#TRITEM#,'#Left(CONOTRANS, 9)#','#dateStr#','#Left(timeStr, 5)#',#TotalQteVCUT#,'#Left(empName, 50)#','','Ecran de production pour SM',0,'0'">
 			<cfset insertSmResult = autofabExecuteStoredProc(datasourcePrimary, "Nba_Sp_Insert_Sortie_Materiel", insertSmParams, "0")>
 
 			<!--- Extract NEWSMNOTRANS --->
@@ -481,22 +482,11 @@
 				<cfif Len(SmNoTransCible) GT 0>
 					<cfset smCreatedNow = true>
 
-					<!--- Create-path NIQTE gate (old :2318-2328): component with NIQTE=0
-					      (or missing BOM row) → detail SP gets TotalQte=0 --->
-					<cfset spTotalQte = TotalQte>
-					<cfif InventaireC NEQ 0>
-						<cfquery name="qNiqteGate" datasource="#datasourcePrimary#">
-							SELECT NIQTE
-							FROM cNOMENCLATURE
-							WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
-							AND INVENTAIRE_P = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#InventaireC#">
-						</cfquery>
-						<cfif Val(qNiqteGate.NIQTE) EQ 0>
-							<cfset spTotalQte = 0>
-						</cfif>
-					</cfif>
-
-					<cfset sortieSmParams = "'#Left(SmNoTransCible, 9)#',#TRITEM#,'#Left(CONOTRANS, 9)#',#spTotalQte#,#operationSeq#,'#Left(empName, 50)#','#Left(nistrNiveau, 500)#','',#TRNORELACHE#">
+					<!--- NOTE: the old create-path NIQTE gate (InsertSortieMateriel :2318-2328)
+					      only fires when arguments.Inventaire <> 0, and ajouteSM always passes
+					      the default "0" (signature SM:1514-1527) => it NEVER fires on this
+					      path. Not replicated (FIX-2, audit 08 B9). --->
+					<cfset sortieSmParams = "'#Left(SmNoTransCible, 9)#',#TRITEM#,'#Left(CONOTRANS, 9)#',#TotalQte#,#operationSeq#,'#Left(empName, 50)#','#Left(nistrNiveau, 500)#','',#TRNORELACHE#">
 					<cfset sortieSmResult = autofabExecuteStoredProc(datasourcePrimary, "Nba_Sp_Sortie_Materiel", sortieSmParams, "0")>
 
 					<!--- Robust post-create update (old :2387-2399): qtys re-written +
@@ -532,12 +522,18 @@
 				</cfif>
 			</cfif>
 
-			<!--- DET_TRANS recalc — ONLY when the SM pre-existed (old Mode='Mod',
-			      calculeQteSMQS :1262-1350). On fresh creation the SP output is
-			      authoritative and the loop is skipped (old Mode='Ajoute', sp_js:1752).
+			<!--- DET_TRANS recalc — ONLY when the session already touched an SM
+			      (old Mode='Mod': sp_js.cfm:1752 computes Mode from the session
+			      ListeSMSEQ hidden input, and the server function no-ops unless
+			      Mode='Mod', SortieMateriel.cfc:846-848). First SM-touch of a session
+			      (created OR adopted) never recalcs (FIX-3).
 			      NO direct SORTIEMATERIEL/TRANSAC header writes — that block is masked
 			      out in the old software (:1974-2250). --->
-			<cfif Len(SmNoTransCible) GT 0 AND NOT smCreatedNow>
+			<cfset sessionSmTouched = false>
+			<cfloop list="#listeSmseq#" index="ceSessionSm">
+				<cfif Val(ceSessionSm) GT 0><cfset sessionSmTouched = true></cfif>
+			</cfloop>
+			<cfif Len(SmNoTransCible) GT 0 AND sessionSmTouched>
 				<cfquery name="qDetLinesStd" datasource="#datasourcePrimary#">
 					SELECT DT.DTRSEQ, DT.TRANSAC, DT.ENTREPOT, DT.CONTENANT, DT.DTRQTE,
 						T.INVENTAIRE AS T_INVENTAIRE, DT.TRANSAC_TRNO

@@ -118,15 +118,33 @@ old's broad clears (Sites 1/3 in `03_execution_paths.md §SMNOTRANS-clears`).
 
 ## Required fixes (priority order)
 
-1. **FIX-3** recalc gating by session list (B14) — the last source of DET_TRANS drift
-2. **FIX-9** auto STOP→COMP flip (F15) — affects order status lifecycle
-3. **FIX-6** TJNOTE/CNOMENCOP/INVENTAIRE_C on stop row (F5)
-4. **FIX-8** legacy NOPQTERESTE formula (F14) — *flag to user: replicates a probable legacy bug; exactness mandate says yes*
-5. **FIX-1/10/11/12** lockstep + small parity gaps
-6. **FIX-2** neutralize NIQTE gate (B9)
-7. **FIX-4** verifieStatutSortie-equivalent OK gating (B16/F16) — scope decision with user
-8. **FIX-7** KPI 22-param InsertEnCours port (F11)
-9. **FIX-5** finished-products (EPF) flow (D1) — feature implementation, fully specified in 03
+1. ✅ **FIX-3** recalc gating by session list (B14) — DONE: FE sends session `listeSmseq`; both stacks gate the recalc on it
+2. ✅ **FIX-9** auto STOP→COMP flip (F15) — DONE: exact replica (PROD-only sum, FMCODE-family target via VSP_BonTravail_Entete, COMP FK+MPCODE+MPDESC+TJFINDATE flip on stopTjseq+latest row, before totals)
+3. ✅ **FIX-6** TJNOTE/CNOMENCOP/INVENTAIRE_C on stop row (F5) — DONE (TJNOTE = effective constant; old JS Note logic is inverted, sp_js:1966-1967); PROD-row update reduced to qtys-only per old (c)
+4. ⏸ **FIX-8** legacy NOPQTERESTE formula (F14) — awaiting user decision (explained separately)
+5. ✅ **FIX-1** (CFM HH:nn), ✅ **FIX-10** (changeStatus.cfm nopseq filter), ✅ **FIX-11** (api.cjs SMSEQ TRSEQ fallback), ✅ **FIX-12** (verified consistent — DDSEQ casing identical in both stacks + FE binding; no change)
+6. ✅ **FIX-2** NIQTE gate removed (B9 — never fires in old: Inventaire always "0")
+7. ⏸ **FIX-4** OK-button gating — decision-table extraction COMPLETE (see addendum below); awaiting user scope decision
+8. ⏳ **FIX-7** KPI 22-param InsertEnCours port (F11) — contract fully specified (QS:1902); pending
+9. ⏳ **FIX-5** finished-products (EPF) flow (D1) — pending feature implementation
+
+## FIX-4 addendum — verifieStatutSortie effective behavior (Direct, full decision table extracted)
+
+The dedicated research pass proved the old gating engine is **largely self-defeating**:
+- **Block D (QS:2500-2517) runs unconditionally last** and overwrites `LaClasse/Etat/Message` of all
+  earlier branches: Total>0 ⇒ enabled, no message; Total=0 ⇒ `ouvrirModaleZero` button.
+- Therefore the "SM required" (B2) and "SM qty mismatch" (B3a) **disabled states never reach the
+  client** when any quantity was entered — the old software does NOT actually block submit on a
+  missing SM.
+- **Block C (no-EPF/no-SM ops) is unreachable** — `trouveOPERATIONPARTRANSAC..ENTREPF` double-dot
+  typo (QS:2475) throws at runtime.
+- `trouveDernierStatut` here uses TJNOTE **exact equality** (QS:2315) — would miss new-stack rows.
+- Real surviving effects: (1) Total=0 + SM on the row ⇒ **SM/DEL + TEMPSPROD clear at gating time**
+  (no DET_TRANS guard here, unlike display-time); (2) zero-total submits route through
+  `ouvrirModaleZero`.
+⇒ The new stack's `smRequired` gate is STRICTER than old effective behavior. Decision needed:
+  (a) exact-effective parity — drop smRequired, keep zero-qty modal + move SM/DEL to qty-change time;
+  (b) keep the stricter gate as a deliberate improvement (documents the old gate as intended-but-broken).
 
 ## Unresolved (see appendices/open_questions.md)
 

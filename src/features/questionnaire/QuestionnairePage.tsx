@@ -164,6 +164,10 @@ export function QuestionnairePage() {
         smnotrans,
         // Old software passes session.InfoClient.NOMEMPLOYE (left 50) to the SPs
         employeeName: state.employee?.EMNOM ?? "",
+        // Session-scoped SM list — replicates old ListeSMSEQ hidden input. The old JS
+        // computes Mode='Ajoute' (no DET_TRANS recalc) when this is empty, 'Mod' when
+        // non-empty (sp_js.cfm:1752) — i.e. recalc only from the 2nd SM-touch onward.
+        listeSmseq: vcutListeSmseq,
         // VCUT-specific params for SM batch calculation
         ...(vcutOp ? { isVcut: true, listeTjseq: effectiveListeTjseq } : {}),
       });
@@ -192,7 +196,7 @@ export function QuestionnairePage() {
     } finally {
       setSmLoading(false);
     }
-  }, [transac, copmachine, operation, goodQty, smnotrans, vcutListeTjseq, state.employee, t]);
+  }, [transac, copmachine, operation, goodQty, smnotrans, vcutListeTjseq, vcutListeSmseq, state.employee, t]);
 
   // Write-as-you-go: container dropdown change → updates DET_TRANS, refreshes materials
   // Exact replica of SortieMateriel.cfc:1467-1512 (CorrigeDetailSM)

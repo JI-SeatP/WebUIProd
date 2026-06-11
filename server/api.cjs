@@ -1918,16 +1918,25 @@ app.post(
         const emp = empResult.recordset[0];
         employeeSeq = emp.EMSEQ;
 
-        // Update employee on the STOP/COMP row first (old software line 700-706)
+        // Update employee on the STOP/COMP row first (old :700-706), then the
+        // changeTEMPSPROD (a) write on the same row (old :1670-1679, FIX-6):
+        // employee + TJNOTE + CNOMENCOP + INVENTAIRE_C. TJNOTE: the old JS Note
+        // logic is INVERTED (sp_js.cfm:1966-1967 — empty input ⇒ constant, typed
+        // input ⇒ ''); the questionnaire has no Note input ⇒ the constant always
+        // arrives. Replicate the effective value, not the bug mechanism.
         if (stopTjseq) {
           await pool.request()
             .input("tjseq", sql.Int, stopTjseq)
             .input("employe", sql.Int, emp.EMSEQ)
             .input("emno", sql.VarChar(20), String(emp.EMNO))
             .input("emnom", sql.VarChar(100), emp.EMNOM)
+            .input("tjnote", sql.VarChar(500), "Ecran de production pour Temps prod")
+            .input("nopseq", sql.Int, nopseq)
+            .input("inventaireC", sql.Int, tp.INVENTAIRE_C || 0)
             .query(`
               UPDATE TEMPSPROD
-              SET EMPLOYE = @employe, EMPLOYE_EMNO = @emno, EMPLOYE_EMNOM = @emnom
+              SET EMPLOYE = @employe, EMPLOYE_EMNO = @emno, EMPLOYE_EMNOM = @emnom,
+                  TJNOTE = @tjnote, CNOMENCOP = @nopseq, INVENTAIRE_C = @inventaireC
               WHERE TJSEQ = @tjseq
             `);
         }
@@ -1979,17 +1988,15 @@ app.post(
     // VCUT: skipped — each component has its own TEMPSPROD row with quantities set by addVcutQty
     // (old software QuestionnaireSortie.cfc:708 — gated by PRODUIT_CODE NEQ "VCUT")
     if (!frontendIsVcut) {
-      // Also update CNOMENCOP, INVENTAIRE_C on the PROD row
+      // Old changeTEMPSPROD (c) writes ONLY the quantities on the PROD row
+      // (QS:1695-1701); CNOMENCOP/INVENTAIRE_C go on the STOP row (FIX-6, STEP 2).
       await pool.request()
         .input("tjseq", sql.Int, tjseq)
         .input("qteBonne", sql.Float, qteBonne)
         .input("qteDefect", sql.Float, qteDefect)
-        .input("nopseq", sql.Int, nopseq)
-        .input("inventaireC", sql.Int, tp.INVENTAIRE_C || 0)
         .query(`
           UPDATE TEMPSPROD SET
-            TJQTEPROD = @qteBonne, TJQTEDEFECT = @qteDefect,
-            CNOMENCOP = @nopseq, INVENTAIRE_C = @inventaireC
+            TJQTEPROD = @qteBonne, TJQTEDEFECT = @qteDefect
           WHERE TJSEQ = @tjseq
         `);
 
@@ -2761,7 +2768,99 @@ app.post(
         console.warn("[submitQuestionnaire] VCUT completion check error:", err.message);
       }
     } else {
-      // ── Non-VCUT: generic cNOMENCOP update (aggregate SUM)
+      // ── Auto STOP→COMP flip (old QS:1086-1169 — runs BEFORE the cNOMENCOP totals;
+      // exact replica, FIX-9). Sums PROD rows only; target per FMCODE family;
+      // flips rows to COMP with FK + MPCODE + descriptions + TJFINDATE.
+      if (isStop) {
+        try {
+          const sumResult = await pool.request()
+            .input("transac", sql.Int, transac)
+            .input("nopseq", sql.Int, nopseq)
+            .query(`
+              SELECT SUM(TJQTEPROD) AS TotalPROD, SUM(TJQTEDEFECT) AS TotalDEFECT
+              FROM TEMPSPROD
+              WHERE TRANSAC = @transac AND cNomencOp = @nopseq AND MODEPROD_MPCODE = 'PROD'
+            `);
+          const leTjqteProd = sumResult.recordset[0]?.TotalPROD || 0;
+
+          // Target qty per machine family (old QS:1098-1124): PRESS/VENPR/FLATP use
+          // DCQTE_A_PRESSER when > 0 else DCQTE_A_FAB; all others max(0, DCQTE_A_FAB).
+          const poolExtFlip = await getPoolExt();
+          const opResult = await poolExtFlip.request()
+            .input("transac", sql.Int, transac)
+            .input("nopseq", sql.Int, nopseq)
+            .query(`
+              SELECT TOP 1 v.FMCODE, VBE.DCQTE_A_FAB, VBE.DCQTE_A_PRESSER
+              FROM vEcransProduction v
+              LEFT OUTER JOIN dbo.VSP_BonTravail_Entete AS VBE ON VBE.TRANSAC = v.TRANSAC
+              WHERE v.TRANSAC = @transac AND v.NOPSEQ = @nopseq AND v.OPERATION <> 'FINSH'
+            `);
+          const opRow = opResult.recordset[0] || {};
+          const fmcode = String(opRow.FMCODE || "");
+          const dcAFab = Math.ceil(Number(opRow.DCQTE_A_FAB) || 0);
+          const dcAPresser = Math.ceil(Number(opRow.DCQTE_A_PRESSER) || 0);
+          let laQuantiteAFab;
+          if (/PRESS|VENPR|FLATP/i.test(fmcode)) {
+            laQuantiteAFab = dcAPresser <= 0 ? dcAFab : dcAPresser;
+          } else {
+            laQuantiteAFab = dcAFab < 0 ? 0 : dcAFab;
+          }
+
+          if ((laQuantiteAFab - leTjqteProd) <= 0) {
+            const compMp = await pool.request()
+              .query(`SELECT MPSEQ, MPDESC_P, MPDESC_S FROM MODEPROD WHERE MPCODE = 'COMP'`);
+            const mp = compMp.recordset[0] || {};
+
+            // trouveCeTJSEQ: latest row of the operation (old QS:1137-1146)
+            const ceTjReq = pool.request()
+              .input("transac", sql.Int, transac)
+              .input("nopseq", sql.Int, nopseq);
+            let ceCopWhere = "";
+            if (copmachine && Number(copmachine) > 0) {
+              ceTjReq.input("copmachine", sql.Int, Number(copmachine));
+              ceCopWhere = "AND cNOMENCOP_MACHINE = @copmachine";
+            }
+            const ceTjResult = await ceTjReq.query(`
+              SELECT TOP 1 TJSEQ FROM TEMPSPROD
+              WHERE TRANSAC = @transac ${ceCopWhere} AND cNOMENCOP = @nopseq
+              ORDER BY TJSEQ DESC
+            `);
+            const ceTjseq = ceTjResult.recordset[0]?.TJSEQ || 0;
+
+            await pool.request()
+              .input("nopseq", sql.Int, nopseq)
+              .query(`UPDATE PL_RESULTAT SET PR_TERMINE = 1 WHERE cNOMENCOP = @nopseq`);
+
+            // Old ListeTJSEQ defaults to arguments.TJSEQ (the STOP row) and the
+            // latest row is appended (QS:613-615, :1154) — dedupe and flip each.
+            const flipList = [...new Set([stopTjseq, ceTjseq].filter(n => Number(n) > 0))];
+            for (const flipTj of flipList) {
+              await pool.request()
+                .input("tjseq", sql.Int, flipTj)
+                .input("mpseq", sql.Int, mp.MPSEQ || 0)
+                .input("descP", sql.VarChar(50), String(mp.MPDESC_P || "").substring(0, 50))
+                .input("descS", sql.VarChar(50), String(mp.MPDESC_S || "").substring(0, 50))
+                .query(`
+                  UPDATE TEMPSPROD
+                  SET MODEPROD = @mpseq,
+                      MODEPROD_MPCODE = 'COMP',
+                      MODEPROD_MPDESC_P = @descP,
+                      MODEPROD_MPDESC_S = @descS,
+                      TJFINDATE = GETDATE(),
+                      TJPROD_TERMINE = 1
+                  WHERE TJSEQ = @tjseq
+                `);
+            }
+            console.log(`[submitQuestionnaire] Auto STOP→COMP flip: target=${laQuantiteAFab} produced=${leTjqteProd} flipped=[${flipList.join(",")}]`);
+          }
+        } catch (err) {
+          console.warn("[submitQuestionnaire] Auto-COMP flip skipped:", err.message);
+        }
+      }
+
+      // ── Non-VCUT: generic cNOMENCOP update (aggregate SUM) — runs AFTER the flip
+      // (old order: flip QS:1130-1169, totals QS:1171-1184). NOPQTERESTE formula is
+      // the CORRECTED one pending the FIX-8 decision (legacy sets RESTE=ΣTJQTEPROD).
       try {
         await pool.request()
           .input("transac", sql.Int, transac)
@@ -2778,41 +2877,11 @@ app.post(
         console.warn("[submitQuestionnaire] cNOMENCOP quantity update skipped:", err.message);
       }
 
-      // ── STEP 9: Mark operation as complete in PL_RESULTAT if COMP (non-VCUT)
+      // ── Mark operation as complete in PL_RESULTAT if COMP (non-VCUT)
       if (isComp) {
         await pool.request()
           .input("nopseq", sql.Int, nopseq)
           .query(`UPDATE PL_RESULTAT SET PR_TERMINE = 1 WHERE cNOMENCOP = @nopseq`);
-      }
-
-      // ── STEP 10: Auto-complete if STOP but total qty meets target (line 1130)
-      // VCUT excluded — I5: no auto-STOP→COMP for VCUT
-      if (isStop && !frontendIsVcut) {
-        const totalResult = await pool.request()
-          .input("transac", sql.Int, transac)
-          .input("nopseq", sql.Int, nopseq)
-          .query(`
-            SELECT ISNULL(SUM(TJQTEPROD), 0) AS TotalPROD
-            FROM TEMPSPROD
-            WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE IN ('Prod','STOP','COMP')
-          `);
-        const totalProd = totalResult.recordset[0]?.TotalPROD || 0;
-
-        const poolExt = await getPoolExt();
-        const targetResult = await poolExt.request()
-          .input("transac", sql.Int, transac)
-          .input("nopseq2", sql.Int, nopseq)
-          .query(`SELECT TOP 1 v.QTE_A_FAB FROM vEcransProduction v WHERE v.TRANSAC = @transac AND v.NOPSEQ = @nopseq2`);
-        const targetQty = targetResult.recordset[0]?.QTE_A_FAB || 0;
-
-        if (targetQty > 0 && totalProd >= targetQty) {
-          await pool.request()
-            .input("tjseq", sql.Int, tjseq)
-            .query(`UPDATE TEMPSPROD SET TJPROD_TERMINE = 1 WHERE TJSEQ = @tjseq`);
-          await pool.request()
-            .input("nopseq", sql.Int, nopseq)
-            .query(`UPDATE PL_RESULTAT SET PR_TERMINE = 1 WHERE cNOMENCOP = @nopseq`);
-        }
       }
     }
 
@@ -2832,13 +2901,18 @@ app.post(
 app.post(
   "/ajouteSM.cfm",
   handler(async (req, res) => {
-    const { transac, copmachine, nopseq, tjseq, qteBonne, qteDefect, smnotrans: frontSmnotrans, listeTjseq, isVcut, employeeName } = req.body;
+    const { transac, copmachine, nopseq, tjseq, qteBonne, qteDefect, smnotrans: frontSmnotrans, listeTjseq, listeSmseq, isVcut, employeeName } = req.body;
     if (!transac || !nopseq) return res.json({ success: false, error: "transac and nopseq required" });
 
     const pool = await getPool();
     const goodQty = Number(qteBonne) || 0;
     // Old software passes session.InfoClient.NOMEMPLOYE (left 50) to all SPs
     const userName = String(employeeName || "WebUI New").substring(0, 50);
+    // Session-scoped ListeSMSEQ (old hidden input, empty at every questionnaire open).
+    // Old JS: Mode = 'Ajoute' iff this is empty (sp_js.cfm:1752) and server
+    // calculeQteSMQS is a NO-OP unless Mode='Mod' (SortieMateriel.cfc:846-848)
+    // ⇒ the DET_TRANS recalc runs only from the SECOND SM-touch of the session.
+    const sessionSmTouched = String(listeSmseq || "").split(",").some(s => parseInt(s, 10) > 0);
 
     // Find the PROD TEMPSPROD row for this operation
     // For VCUT: may need to search by any CNOMENCOP since addVcutQty updates it to the component's nopseq
@@ -3083,22 +3157,14 @@ app.post(
     }
 
     if (smnotrans) {
-      // Create-path NIQTE gate (old InsertSortieMateriel :2318-2328): when the
-      // component inventory has no BOM ratio row (or NIQTE=0), the detail SP is
-      // called with TotalQte=0.
-      let spTotalQte = totalQte;
-      if (smCreatedNow && !isVcut && (prodRow.INVENTAIRE_C || 0) !== 0) {
-        const niqteGate = await pool.request()
-          .input("transac", sql.Int, transac)
-          .input("invC", sql.Int, prodRow.INVENTAIRE_C)
-          .query(`SELECT NIQTE FROM cNOMENCLATURE WHERE TRANSAC = @transac AND INVENTAIRE_P = @invC`);
-        const gateNiqte = niqteGate.recordset[0]?.NIQTE ?? 0;
-        if (!gateNiqte) spTotalQte = 0;
-      }
+      // NOTE: the old create-path NIQTE gate (InsertSortieMateriel :2318-2328) only
+      // fires when arguments.Inventaire ≠ 0, and ajouteSM always passes the default
+      // "0" (signature SM:1514-1527) ⇒ the gate NEVER fires on this path. Do not
+      // replicate it (FIX-2, audit 08 §B9).
 
       // Step 3b: Call Nba_Sp_Sortie_Materiel (SortieMateriel.cfc:2334-2344)
       // Use AutoFab SOAP API — exact same params as old software
-      const smParams = `'${smnotrans.substring(0, 9)}',${tritem},'${conotrans}',${spTotalQte},${effectiveOperation},'${userName}','${nistrNiveau}','',${trnorelache}`;
+      const smParams = `'${smnotrans.substring(0, 9)}',${tritem},'${conotrans}',${totalQte},${effectiveOperation},'${userName}','${nistrNiveau}','',${trnorelache}`;
       console.log(`[ajouteSM] Nba_Sp_Sortie_Materiel params: ${smParams}`);
       const smResult = await callAutofab("EXECUTE_STORED_PROC", smParams, "Nba_Sp_Sortie_Materiel", "0");
       console.log(`[ajouteSM] Nba_Sp_Sortie_Materiel → err=${smResult.OutputValues?.SQLERREUR}`);
@@ -3158,11 +3224,17 @@ app.post(
           .query(`UPDATE TRANSAC SET TRQTETRANSAC = @total, TRQTEUNINV = @total WHERE TRNO = @smno`);
       }
 
-      // Get SMSEQ
+      // Get SMSEQ — with the legacy TRSEQ fallback (old SM:1815-1833 / CFM parity, FIX-11)
       const smseqResult = await pool.request()
         .input("smno", sql.VarChar(9), smnotrans)
         .query(`SELECT TOP 1 SMSEQ FROM SORTIEMATERIEL WHERE LEFT(SMNOTRANS,9) = @smno`);
       smseq = smseqResult.recordset[0]?.SMSEQ || null;
+      if (!smseq) {
+        const trseqFallback = await pool.request()
+          .input("smno", sql.VarChar(9), smnotrans)
+          .query(`SELECT TOP 1 TRSEQ FROM TRANSAC WHERE TRNO = @smno`);
+        smseq = trseqFallback.recordset[0]?.TRSEQ || null;
+      }
 
       // Step 6: Recalculate DET_TRANS quantities with smart container distribution
       // Get all SM material lines
@@ -3275,10 +3347,11 @@ app.post(
             console.log(`[ajouteSM] VCUT: wrote DET_TRANS for container ${alloc.conSeq} (${alloc.conNumero}) qty=${alloc.qty}`);
           }
         }
-      } else if (!smCreatedNow) {
-        // ── Non-VCUT recalculation: ONLY when the SM pre-existed (old Mode='Mod',
-        // calculeQteSMQS :1262-1350). On fresh creation the SP output is authoritative
-        // and the loop is skipped (old Mode='Ajoute', sp_js.cfm:1752).
+      } else if (sessionSmTouched) {
+        // ── Non-VCUT recalculation: ONLY when the session already touched an SM
+        // (old Mode='Mod' — sp_js.cfm:1752 computes Mode from the session ListeSMSEQ,
+        // and the server function no-ops unless Mode='Mod', SortieMateriel.cfc:846-848).
+        // First SM-touch of a session (created OR adopted) never recalcs (FIX-3).
         const invC = prodRow.INVENTAIRE_C || 0;
         for (const dt of detResult.recordset) {
           const ratioResult = await pool.request()

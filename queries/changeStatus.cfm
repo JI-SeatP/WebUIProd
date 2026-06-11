@@ -26,6 +26,7 @@
 	<cfset requestBody = DeserializeJSON(GetHttpRequestData().content)>
 	<cfset transac = Val(requestBody.transac ?: 0)>
 	<cfset copmachine = Val(requestBody.copmachine ?: 0)>
+	<cfset nopseqArg = Val(requestBody.nopseq ?: 0)>
 	<cfset newStatus = requestBody.newStatus ?: "">
 	<cfset employeeCode = Val(requestBody.employeeCode ?: 0)>
 
@@ -79,6 +80,9 @@
 		WHERE v.TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#">
 		<cfif copmachine NEQ 0>
 			AND v.COPMACHINE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#copmachine#">
+		</cfif>
+		<cfif nopseqArg NEQ 0>
+			AND v.NOPSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseqArg#">
 		</cfif>
 		AND v.OPERATION <> 'FINSH'
 	</cfquery>
