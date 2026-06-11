@@ -3038,6 +3038,20 @@ app.post(
       }
     }
 
+    // NEVER reuse a POSTED SM. Once submit posts the SM (SM/REPORT → TRPOSTER=1)
+    // its lines are immutable accounting records — Nba_Sp_Sortie_Materiel ADDS new
+    // lines instead of updating, duplicating the material rows. The old software
+    // never modifies a posted SM: a new session always gets a fresh one.
+    if (smnotrans) {
+      const postedCheck = await pool.request()
+        .input("smno", sql.VarChar(9), smnotrans)
+        .query(`SELECT TOP 1 TRSEQ FROM TRANSAC WHERE TRNO = @smno AND ISNULL(TRPOSTER, 0) = 1`);
+      if (postedCheck.recordset.length) {
+        console.log(`[ajouteSM] SM ${smnotrans} is POSTED — forcing creation of a fresh SM`);
+        smnotrans = "";
+      }
+    }
+
     // ConstruitDonneesLocales values (queried in the gate above)
     const smData = smDataResult.recordset[0];
     const tritem = smData.TRITEM || 0;

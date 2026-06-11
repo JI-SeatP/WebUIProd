@@ -454,6 +454,21 @@
 				</cfif>
 			</cfif>
 
+			<!--- NEVER reuse a POSTED SM. Once submit posts the SM (SM/REPORT ->
+			      TRPOSTER=1) its lines are immutable - Nba_Sp_Sortie_Materiel ADDS
+			      new lines instead of updating, duplicating the material rows.
+			      A new session always gets a fresh SM. --->
+			<cfif Len(SmNoTransCible) GT 0>
+				<cfquery name="qPostedCheck" datasource="#datasourcePrimary#">
+					SELECT TOP 1 TRSEQ FROM TRANSAC
+					WHERE TRNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="9" value="#Left(SmNoTransCible, 9)#">
+					AND ISNULL(TRPOSTER, 0) = 1
+				</cfquery>
+				<cfif qPostedCheck.RecordCount GT 0>
+					<cfset SmNoTransCible = "">
+				</cfif>
+			</cfif>
+
 			<cfset smCreatedNow = false>
 			<cfif Len(SmNoTransCible) EQ 0>
 				<!--- Create new SM — InsertSortieMateriel (old :2284) with TotalQte --->
