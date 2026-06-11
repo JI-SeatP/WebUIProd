@@ -28,6 +28,22 @@ async function getAutofabConfig() {
   return _autofabConfig;
 }
 
+// Quick TCP connect probe — detects the silently-dropping firewall in ~1.5s
+// instead of letting fetch hang ~10s per call.
+const net = require("net");
+let _autofabDownUntil = 0;
+function probeTcp(host, port, timeoutMs) {
+  return new Promise((resolve) => {
+    const s = new net.Socket();
+    const done = (ok) => { s.destroy(); resolve(ok); };
+    s.setTimeout(timeoutMs);
+    s.once("connect", () => done(true));
+    s.once("timeout", () => done(false));
+    s.once("error", () => done(false));
+    s.connect(port, host);
+  });
+}
+
 // Output parameters per stored procedure — used by the dev-only direct-SQL
 // fallback when the AutoFab relay is unreachable. The AutoFab service appends
 // these as OUTPUT args and returns them in <OutputValues>; we do the same.
@@ -93,6 +109,33 @@ async function callAutofab(command, params, traitement, operation) {
     </soap:Envelope>`;
 
   const url = `${cfg.baseUrl}:${cfg.port}/${command}`;
+
+  // ── DEV-ONLY FALLBACK: AutoFab unreachable from this machine ────────────────
+  // The firewall silently DROPS packets to the port (no refusal), so a plain
+  // fetch hangs ~10s per call before failing. Probe the port with a short TCP
+  // connect first and cache the down-state for 30s so the fallback is instant.
+  // EXECUTE_STORED_PROC is a plain relay — the AutoFab service just runs the SP
+  // against the same database; direct SQL execution is DB-identical.
+  // EXECUTE_TRANSACTION (REPORT/DEL/INS) is application-level AutoFab logic with
+  // NO SQL equivalent — cannot be faked.
+  const handleUnreachable = async (reason) => {
+    if (command === "EXECUTE_STORED_PROC") {
+      console.warn(`[autofab] UNREACHABLE (${reason}) — executing ${traitement} DIRECTLY via SQL (dev fallback)`);
+      return await execStoredProcDirect(traitement, params);
+    }
+    throw new Error(`AutoFab unreachable at ${url} (${reason}) — ${command} ${traitement}/${operation} requires the AutoFab service (no SQL equivalent)`);
+  };
+
+  const host = cfg.baseUrl.replace(/^https?:\/\//, "");
+  if (Date.now() < _autofabDownUntil) {
+    return await handleUnreachable("cached down-state");
+  }
+  const reachable = await probeTcp(host, cfg.port, 1500);
+  if (!reachable) {
+    _autofabDownUntil = Date.now() + 30000;
+    return await handleUnreachable("port probe failed");
+  }
+
   console.log(`[autofab] POST ${url} traitement=${traitement} operation=${operation}`);
 
   let response;
@@ -108,16 +151,8 @@ async function callAutofab(command, params, traitement, operation) {
       signal: AbortSignal.timeout(300000),
     });
   } catch (netErr) {
-    // ── DEV-ONLY FALLBACK: AutoFab unreachable from this machine ──────────────
-    // EXECUTE_STORED_PROC is a plain relay — the AutoFab service just runs the SP
-    // against the same database. Executing it directly through our SQL connection
-    // produces identical DB effects. EXECUTE_TRANSACTION (REPORT/DEL/INS) is
-    // application-level AutoFab logic with NO SQL equivalent — cannot be faked.
-    if (command === "EXECUTE_STORED_PROC") {
-      console.warn(`[autofab] UNREACHABLE (${netErr.message}) — executing ${traitement} DIRECTLY via SQL (dev fallback)`);
-      return await execStoredProcDirect(traitement, params);
-    }
-    throw new Error(`AutoFab unreachable at ${url} (${netErr.message}) — ${command} ${traitement}/${operation} requires the AutoFab service (no SQL equivalent)`);
+    _autofabDownUntil = Date.now() + 30000;
+    return await handleUnreachable(netErr.message);
   }
 
   const xmlText = await response.text();
