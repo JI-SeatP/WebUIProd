@@ -920,14 +920,17 @@
 		</cfif>
 
 		<!--- Non-VCUT: aggregate cNOMENCOP totals — AFTER the flip (old order:
-		      flip QS:1130-1169, totals QS:1171-1184). NOPQTERESTE formula is the
-		      CORRECTED one pending the FIX-8 decision (legacy sets RESTE=SUM(TJQTEPROD)). --->
+		      flip QS:1130-1169, totals QS:1171-1184). FIX-8 (user decision): replicate
+		      the LEGACY formula exactly — NOPQTERESTE = SUM(TJQTEPROD) (QS:1171-1184).
+		      Business-correct formula (post-migration improvement candidate, per user):
+		      NOPQTERESTE = NOPQTEAFAIRE - SUM(TJQTEPROD) — scrap does NOT reduce the
+		      pending qty. --->
 		<cftry>
 			<cfquery datasource="#datasourcePrimary#">
 				UPDATE CNOMENCOP SET
 					NOPQTETERMINE = (SELECT ISNULL(SUM(TJQTEPROD), 0) FROM TEMPSPROD WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#"> AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#"> AND MODEPROD_MPCODE = 'Prod'),
 					NOPQTESCRAP = (SELECT ISNULL(SUM(TJQTEDEFECT), 0) FROM TEMPSPROD WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#"> AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#"> AND MODEPROD_MPCODE = 'Prod'),
-					NOPQTERESTE = NOPQTEAFAIRE - (SELECT ISNULL(SUM(TJQTEPROD), 0) + ISNULL(SUM(TJQTEDEFECT), 0) FROM TEMPSPROD WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#"> AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#"> AND MODEPROD_MPCODE = 'Prod')
+					NOPQTERESTE = (SELECT ISNULL(SUM(TJQTEPROD), 0) FROM TEMPSPROD WHERE TRANSAC = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#transac#"> AND CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#"> AND MODEPROD_MPCODE = 'Prod')
 				WHERE NOPSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">
 			</cfquery>
 			<cfcatch type="any"></cfcatch>

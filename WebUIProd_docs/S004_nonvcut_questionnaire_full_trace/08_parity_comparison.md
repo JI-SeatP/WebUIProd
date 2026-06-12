@@ -121,10 +121,15 @@ old's broad clears (Sites 1/3 in `03_execution_paths.md §SMNOTRANS-clears`).
 1. ✅ **FIX-3** recalc gating by session list (B14) — DONE: FE sends session `listeSmseq`; both stacks gate the recalc on it
 2. ✅ **FIX-9** auto STOP→COMP flip (F15) — DONE: exact replica (PROD-only sum, FMCODE-family target via VSP_BonTravail_Entete, COMP FK+MPCODE+MPDESC+TJFINDATE flip on stopTjseq+latest row, before totals)
 3. ✅ **FIX-6** TJNOTE/CNOMENCOP/INVENTAIRE_C on stop row (F5) — DONE (TJNOTE = effective constant; old JS Note logic is inverted, sp_js:1966-1967); PROD-row update reduced to qtys-only per old (c)
-4. ⏸ **FIX-8** legacy NOPQTERESTE formula (F14) — awaiting user decision (explained separately)
+4. ✅ **FIX-8** legacy NOPQTERESTE formula (F14) — DONE per user decision: replicate legacy
+   `NOPQTERESTE = ΣTJQTEPROD` exactly. User-corrected business formula for the post-migration
+   improvement: `NOPQTEAFAIRE − ΣTJQTEPROD` (scrap does NOT reduce the pending qty to do).
 5. ✅ **FIX-1** (CFM HH:nn), ✅ **FIX-10** (changeStatus.cfm nopseq filter), ✅ **FIX-11** (api.cjs SMSEQ TRSEQ fallback), ✅ **FIX-12** (verified consistent — DDSEQ casing identical in both stacks + FE binding; no change)
 6. ✅ **FIX-2** NIQTE gate removed (B9 — never fires in old: Inventaire always "0")
-7. ⏸ **FIX-4** OK-button gating — decision-table extraction COMPLETE (see addendum below); awaiting user scope decision
+7. ✅ **FIX-4** OK-button gating — RESOLVED per user decision: **Option B** — keep the new stack's
+   stricter `smRequired` gate as a DELIBERATE DEVIATION. The old gate is intended-but-broken
+   (Block D override erases the disabled states; Block C unreachable). Zero-qty SM/DEL stays at
+   submit time (same writes as old, different timing — documented). No code change.
 8. ⏳ **FIX-7** KPI 22-param InsertEnCours port (F11) — contract fully specified (QS:1902); pending
 9. ⏳ **FIX-5** finished-products (EPF) flow (D1) — pending feature implementation
 
@@ -142,9 +147,9 @@ The dedicated research pass proved the old gating engine is **largely self-defea
 - Real surviving effects: (1) Total=0 + SM on the row ⇒ **SM/DEL + TEMPSPROD clear at gating time**
   (no DET_TRANS guard here, unlike display-time); (2) zero-total submits route through
   `ouvrirModaleZero`.
-⇒ The new stack's `smRequired` gate is STRICTER than old effective behavior. Decision needed:
-  (a) exact-effective parity — drop smRequired, keep zero-qty modal + move SM/DEL to qty-change time;
-  (b) keep the stricter gate as a deliberate improvement (documents the old gate as intended-but-broken).
+⇒ The new stack's `smRequired` gate is STRICTER than old effective behavior.
+**DECISION (user): Option B** — keep the stricter gate as a deliberate improvement; the old gate is
+documented as intended-but-broken. No code change.
 
 ## Unresolved (see appendices/open_questions.md)
 

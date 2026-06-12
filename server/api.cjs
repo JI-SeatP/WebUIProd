@@ -2859,8 +2859,10 @@ app.post(
       }
 
       // ── Non-VCUT: generic cNOMENCOP update (aggregate SUM) — runs AFTER the flip
-      // (old order: flip QS:1130-1169, totals QS:1171-1184). NOPQTERESTE formula is
-      // the CORRECTED one pending the FIX-8 decision (legacy sets RESTE=ΣTJQTEPROD).
+      // (old order: flip QS:1130-1169, totals QS:1171-1184). FIX-8 (user decision):
+      // replicate the LEGACY formula exactly — NOPQTERESTE = ΣTJQTEPROD (QS:1171-1184).
+      // Business-correct formula (post-migration improvement candidate, per user):
+      // NOPQTERESTE = NOPQTEAFAIRE − ΣTJQTEPROD — scrap does NOT reduce the pending qty.
       try {
         await pool.request()
           .input("transac", sql.Int, transac)
@@ -2869,10 +2871,10 @@ app.post(
             UPDATE CNOMENCOP SET
               NOPQTETERMINE = (SELECT ISNULL(SUM(TJQTEPROD), 0) FROM TEMPSPROD WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'Prod'),
               NOPQTESCRAP = (SELECT ISNULL(SUM(TJQTEDEFECT), 0) FROM TEMPSPROD WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'Prod'),
-              NOPQTERESTE = NOPQTEAFAIRE - (SELECT ISNULL(SUM(TJQTEPROD), 0) + ISNULL(SUM(TJQTEDEFECT), 0) FROM TEMPSPROD WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'Prod')
+              NOPQTERESTE = (SELECT ISNULL(SUM(TJQTEPROD), 0) FROM TEMPSPROD WHERE TRANSAC = @transac AND CNOMENCOP = @nopseq AND MODEPROD_MPCODE = 'Prod')
             WHERE NOPSEQ = @nopseq
           `);
-        console.log(`[submitQuestionnaire] cNOMENCOP quantities updated for NOPSEQ=${nopseq}`);
+        console.log(`[submitQuestionnaire] cNOMENCOP quantities updated for NOPSEQ=${nopseq} (legacy RESTE formula)`);
       } catch (err) {
         console.warn("[submitQuestionnaire] cNOMENCOP quantity update skipped:", err.message);
       }
