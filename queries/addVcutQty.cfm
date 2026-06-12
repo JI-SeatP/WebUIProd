@@ -92,7 +92,8 @@
 
 	<cfset LeTJSEQEPF = 0>
 	<cfset LaQteAjoutee = qty>
-	<cfset tjNote = "Ecran de production pour Temps prod: Insertion">
+	<!--- " New" suffix: marks rows written by the new screens (user mandate) --->
+	<cfset tjNote = "Ecran de production pour Temps prod: Insertion New">
 	<cfset Machine_Seq = Val(qOperation.MACHINE)>
 	<cfset dbNopseq = Val(trouveNOPSEQ.NOPSEQ)>
 

@@ -165,14 +165,16 @@
 		<!--- STOP/COMP row gets employee + changeTEMPSPROD (a) writes (old :1670-1679,
 		      FIX-6): TJNOTE + CNOMENCOP + INVENTAIRE_C. TJNOTE: the old JS Note logic
 		      is inverted (sp_js:1966-1967) and the questionnaire has no Note input,
-		      so the constant always arrives — replicate the effective value. --->
+		      so the constant always arrives. DELIBERATE DEVIATION (user mandate):
+		      keep the " New" suffix so every row written by the new screens stays
+		      distinguishable from old-screen activity. --->
 		<cfif stopTjseq GT 0>
 			<cfquery datasource="#datasourcePrimary#">
 				UPDATE TEMPSPROD
 				SET EMPLOYE = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#employeeSeq#">,
 					EMPLOYE_EMNO = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" value="#qEmployee.EMNO#">,
 					EMPLOYE_EMNOM = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" value="#qEmployee.EMNOM#">,
-					TJNOTE = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="500" value="Ecran de production pour Temps prod">,
+					TJNOTE = <cfqueryparam cfsqltype="CF_SQL_VARCHAR" maxlength="500" value="Ecran de production pour Temps prod New">,
 					CNOMENCOP = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#nopseq#">,
 					INVENTAIRE_C = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#Val(qPrevRow.INVENTAIRE_C)#">
 				WHERE TJSEQ = <cfqueryparam cfsqltype="CF_SQL_INTEGER" value="#stopTjseq#">

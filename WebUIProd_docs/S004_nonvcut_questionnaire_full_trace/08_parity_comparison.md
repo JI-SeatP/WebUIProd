@@ -120,7 +120,12 @@ old's broad clears (Sites 1/3 in `03_execution_paths.md §SMNOTRANS-clears`).
 
 1. ✅ **FIX-3** recalc gating by session list (B14) — DONE: FE sends session `listeSmseq`; both stacks gate the recalc on it
 2. ✅ **FIX-9** auto STOP→COMP flip (F15) — DONE: exact replica (PROD-only sum, FMCODE-family target via VSP_BonTravail_Entete, COMP FK+MPCODE+MPDESC+TJFINDATE flip on stopTjseq+latest row, before totals)
-3. ✅ **FIX-6** TJNOTE/CNOMENCOP/INVENTAIRE_C on stop row (F5) — DONE (TJNOTE = effective constant; old JS Note logic is inverted, sp_js:1966-1967); PROD-row update reduced to qtys-only per old (c)
+3. ✅ **FIX-6** TJNOTE/CNOMENCOP/INVENTAIRE_C on stop row (F5) — DONE (old JS Note logic is inverted,
+   sp_js:1966-1967, so the constant is the effective value); PROD-row update reduced to qtys-only per
+   old (c). DELIBERATE DEVIATION (user mandate): all TJNOTE values written by the new screens carry
+   the **" New" suffix** ('Ecran de production pour Temps prod New', '...: Insertion New') so
+   new-screen activity stays distinguishable from old-screen activity in TEMPSPROD. Old's exact
+   constants lack the suffix; every row-targeting filter uses LIKE '...Temps prod%' and matches both.
 4. ✅ **FIX-8** legacy NOPQTERESTE formula (F14) — DONE per user decision: replicate legacy
    `NOPQTERESTE = ΣTJQTEPROD` exactly. User-corrected business formula for the post-migration
    improvement: `NOPQTEAFAIRE − ΣTJQTEPROD` (scrap does NOT reduce the pending qty to do).

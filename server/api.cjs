@@ -1923,14 +1923,16 @@ app.post(
         // employee + TJNOTE + CNOMENCOP + INVENTAIRE_C. TJNOTE: the old JS Note
         // logic is INVERTED (sp_js.cfm:1966-1967 — empty input ⇒ constant, typed
         // input ⇒ ''); the questionnaire has no Note input ⇒ the constant always
-        // arrives. Replicate the effective value, not the bug mechanism.
+        // arrives. DELIBERATE DEVIATION (user mandate): keep the " New" suffix so
+        // every row written by the new screens stays distinguishable from old-screen
+        // activity. Row-targeting LIKE '...Temps prod%' filters match either form.
         if (stopTjseq) {
           await pool.request()
             .input("tjseq", sql.Int, stopTjseq)
             .input("employe", sql.Int, emp.EMSEQ)
             .input("emno", sql.VarChar(20), String(emp.EMNO))
             .input("emnom", sql.VarChar(100), emp.EMNOM)
-            .input("tjnote", sql.VarChar(500), "Ecran de production pour Temps prod")
+            .input("tjnote", sql.VarChar(500), "Ecran de production pour Temps prod New")
             .input("nopseq", sql.Int, nopseq)
             .input("inventaireC", sql.Int, tp.INVENTAIRE_C || 0)
             .query(`
@@ -5938,7 +5940,7 @@ app.post(
       insertReq.input("StrDateF", sql.Char(10), dateStr);
       insertReq.input("StrHeureF", sql.Char(8), timeStr);
       insertReq.input("MODEPROD", sql.Int, mpseq);
-      insertReq.input("TjNote", sql.VarChar(7500), "Ecran de production pour Temps prod: Insertion");
+      insertReq.input("TjNote", sql.VarChar(7500), "Ecran de production pour Temps prod: Insertion New");
       insertReq.input("LOT_FAB", sql.Int, 0);
       insertReq.input("SMNOTRANS", sql.Char(9), "");
       insertReq.input("CNOMENCOP_MACHINE", sql.Int, copmachine || 0);
